@@ -470,8 +470,12 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
 });
 
 // SPA fallback — ПОСЛЕ всех /api маршрутов
-app.get('*', (req, res, next) => {
+// SPA fallback (совместимо с Express 5)
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api')) return next();
+  // статика (css/js) уже отдаётся express.static
+  if (req.path.includes('.')) return next();
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
