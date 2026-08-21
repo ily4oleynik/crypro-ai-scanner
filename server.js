@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -17,6 +18,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'crypto-ai-scanner-secret-key-chang
 
 app.use(cors());
 app.use(express.json());
+
+// Раздача frontend из корня репозитория (index.html, app.js, style.css)
+app.use(express.static(__dirname));
 
 const tgLinkCodes = new Map();
 
@@ -463,6 +467,12 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, error: 'Ошибка AI' });
   }
+});
+
+// SPA fallback — ПОСЛЕ всех /api маршрутов
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 async function start() {
