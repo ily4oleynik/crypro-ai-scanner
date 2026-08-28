@@ -1,4 +1,6 @@
 // frontend/app.js
+const API_BASE = window.API_BASE || 'http://localhost:3000';
+
 let currentPlan = 'free';
 let user = null;
 let token = localStorage.getItem('token') || null;
@@ -32,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nav-history')?.addEventListener('click', e => { e.preventDefault(); showPage('history'); loadHistory(); });
   document.getElementById('nav-alerts')?.addEventListener('click', e => { e.preventDefault(); showPage('alerts'); loadAlerts(); });
   document.getElementById('nav-compare')?.addEventListener('click', e => { e.preventDefault(); showPage('compare'); });
+  document.getElementById('nav-account')?.addEventListener('click', e => { e.preventDefault(); showPage('account'); });
 
   document.querySelectorAll('.plan-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -42,16 +45,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.getElementById('auth-btn')?.addEventListener('click', () => { if (user) logout(); else openAuthModal(); });
+  document.getElementById('auth-btn')?.addEventListener('click', () => {
+    if (user) logout();
+    else openAuthModal();
+  });
   document.getElementById('modal-close')?.addEventListener('click', closeAuthModal);
   document.getElementById('auth-form')?.addEventListener('submit', handleAuth);
+  document.getElementById('acc-logout')?.addEventListener('click', () => logout());
+
   document.querySelectorAll('.auth-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       const mode = tab.dataset.mode;
-      document.getElementById('auth-title').textContent = mode === 'login' ? 'Login' : 'Register';
-      document.getElementById('auth-submit').textContent = mode === 'login' ? 'Login' : 'Create Account';
+      const title = document.getElementById('auth-title');
+      const submit = document.getElementById('auth-submit');
+      if (typeof t === 'function') {
+        if (title) title.textContent = mode === 'login' ? t('auth.login') : t('auth.register');
+        if (submit) submit.textContent = mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister');
+      } else {
+        if (title) title.textContent = mode === 'login' ? 'Login' : 'Register';
+        if (submit) submit.textContent = mode === 'login' ? 'Login' : 'Create Account';
+      }
     });
   });
 
@@ -66,11 +81,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('bybit-form')?.addEventListener('submit', connectBybit);
 
   document.getElementById('scan-button')?.addEventListener('click', startScan);
-  document.getElementById('token-input')?.addEventListener('keypress', e => { if (e.key === 'Enter') startScan(); });
+  document.getElementById('token-input')?.addEventListener('keypress', e => {
+    if (e.key === 'Enter') startScan();
+  });
 
   document.getElementById('toggle-chat')?.addEventListener('click', toggleChat);
   document.getElementById('chat-send')?.addEventListener('click', sendChatMessage);
-  document.getElementById('chat-input')?.addEventListener('keypress', e => { if (e.key === 'Enter') sendChatMessage(); });
+  document.getElementById('chat-input')?.addEventListener('keypress', e => {
+    if (e.key === 'Enter') sendChatMessage();
+  });
 
   document.getElementById('alert-create')?.addEventListener('click', createAlert);
   document.getElementById('cmp-btn')?.addEventListener('click', runCompare);
@@ -96,28 +115,36 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory();
   });
 
+  if (typeof setLanguage === 'function') {
+    setLanguage(localStorage.getItem('lang') || 'ru');
+  }
+
   loadNews();
   updateAuthUI();
   refreshUsage();
   loadHomeWidgets();
 });
 
-function openAuthModal() { document.getElementById('auth-modal').style.display = 'flex'; }
-function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
+function openAuthModal() {
+  document.getElementById('auth-modal').style.display = 'flex';
+}
+function closeAuthModal() {
+  document.getElementById('auth-modal').style.display = 'none';
+}
 
 async function handleAuth(e) {
   e.preventDefault();
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
-  const isLogin = document.querySelector('.auth-tab.active').dataset.mode === 'login';
+  const isLogin = document.querySelector('.auth-tab.active')?.dataset?.mode !== 'register';
   try {
-    const res = await fetch('http://localhost:3000/api/auth/' + (isLogin ? 'login' : 'register'), {
+    const res = await fetch(API_BASE + '/api/auth/' + (isLogin ? 'login' : 'register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
-    if (!data.success) return alert(data.error || 'Ошибка');
+    if (!data.success) return alert(data.error || 'Error');
     token = data.token;
     user = data.user;
     currentPlan = data.user.plan;
@@ -126,9 +153,10 @@ async function handleAuth(e) {
     updateAuthUI();
     refreshUsage();
     loadHomeWidgets();
-    alert('Успешно! Тариф: ' + data.user.plan.toUpperCase());
+    refreshAccountPage();
+    alert('OK · ' + (data.user.plan || '').toUpperCase());
   } catch (err) {
-    alert('Ошибка соединения');
+    alert(typeof t === 'function' ? t('scanner.connectionError') : 'Connection error');
   }
 }
 
@@ -138,48 +166,51 @@ function logout() {
   currentPlan = 'free';
   localStorage.removeItem('token');
   updateAuthUI();
-  document.getElementById('portfolio-section').style.display = 'none';
+  const portfolio = document.getElementById('portfolio-section');
+  if (portfolio) portfolio.style.display = 'none';
   const ex = document.getElementById('connected-exchanges');
-  if (ex) ex.innerHTML = '<p style="color:#777;">Nothing connected</p>';
+  if (ex) ex.innerHTML = '<p class="muted">' + (typeof t === 'function' ? t('home.nothingConnected') : 'Nothing connected') + '</p>';
   const chat = document.getElementById('ai-chat-section');
   if (chat) chat.style.display = 'none';
   refreshUsage();
   loadHomeWidgets();
+  refreshAccountPage();
 }
 
 function updateAuthUI() {
   const authBtn = document.getElementById('auth-btn');
   const planLabel = document.getElementById('user-plan');
-  const walletBtn = document.getElementById('connect-wallet');
   if (!authBtn) return;
   if (user) {
-    authBtn.textContent = 'Logout';
-    if (planLabel) { planLabel.textContent = user.plan.toUpperCase(); planLabel.style.display = 'inline-block'; }
-    if (walletBtn) walletBtn.style.display = 'inline-block';
+    authBtn.textContent = typeof t === 'function' ? t('nav.logout') : 'Logout';
+    if (planLabel) {
+      planLabel.textContent = (user.plan || 'free').toUpperCase();
+      planLabel.style.display = 'inline-block';
+    }
     document.querySelectorAll('.plan-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.plan === user.plan);
     });
+    currentPlan = user.plan || 'free';
   } else {
-    authBtn.textContent = 'Login';
+    authBtn.textContent = typeof t === 'function' ? t('nav.login') : 'Login';
     if (planLabel) planLabel.style.display = 'none';
-    if (walletBtn) walletBtn.style.display = 'none';
   }
 }
 
 function showPage(page) {
-  ['home', 'scanner', 'watchlist', 'history', 'alerts', 'compare'].forEach(p => {
+  ['home', 'scanner', 'watchlist', 'history', 'alerts', 'compare', 'account'].forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.style.display = p === page ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-  const nav = document.getElementById('nav-' + page);
-  if (nav) nav.classList.add('active');
+  document.getElementById('nav-' + page)?.classList.add('active');
   if (page === 'home') loadHomeWidgets();
+  if (page === 'account') refreshAccountPage();
 }
 
 async function refreshUsage() {
   try {
-    const res = await fetch('http://localhost:3000/api/usage', {
+    const res = await fetch(API_BASE + '/api/usage', {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
@@ -193,6 +224,31 @@ async function refreshUsage() {
   } catch (e) {}
 }
 
+async function refreshAccountPage() {
+  const emailEl = document.getElementById('acc-email');
+  const planEl = document.getElementById('acc-plan');
+  const scansEl = document.getElementById('acc-scans');
+  if (!user) {
+    if (emailEl) emailEl.textContent = '—';
+    if (planEl) planEl.textContent = 'FREE';
+    if (scansEl) scansEl.textContent = '—';
+    return;
+  }
+  if (emailEl) emailEl.textContent = user.email || '—';
+  if (planEl) planEl.textContent = (user.plan || 'free').toUpperCase();
+  try {
+    const res = await fetch(API_BASE + '/api/usage', {
+      headers: token ? { Authorization: 'Bearer ' + token } : {}
+    });
+    const data = await res.json();
+    if (data.success && data.usage && scansEl) {
+      const lim = data.usage.limit === 999999 ? '∞' : data.usage.limit;
+      scansEl.textContent = data.usage.used + ' / ' + lim;
+    }
+  } catch (e) {}
+  if (typeof refreshTelegramStatus === 'function') refreshTelegramStatus();
+}
+
 async function loadHomeWidgets() {
   loadHomeWatchlist();
   loadHomeHistory();
@@ -202,25 +258,24 @@ async function loadHomeWatchlist() {
   const box = document.getElementById('home-watchlist');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML = '<div class="empty-state">Войдите и добавьте токены из Scanner</div>';
+    box.innerHTML = '<div class="empty-state">' + (typeof t === 'function' ? t('home.watchlistEmpty') : 'Login and add tokens') + '</div>';
     return;
   }
   try {
-    const res = await fetch('http://localhost:3000/api/watchlist', {
+    const res = await fetch(API_BASE + '/api/watchlist', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
     if (!data.watchlist?.length) {
-      box.innerHTML = '<div class="empty-state">Watchlist пуст. Отсканируйте токен и нажмите + Watchlist</div>';
+      box.innerHTML = '<div class="empty-state">' + (typeof t === 'function' ? t('home.watchlistEmpty') : 'Watchlist empty') + '</div>';
       return;
     }
-    box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(t =>
-      '<button class="home-chip" onclick="rescan(\'' + t.address + '\')"><strong>' +
-      (t.symbol || 'TOKEN') + '</strong> <span style="color:#666;font-size:0.75rem;">' +
-      t.address.slice(0, 6) + '…</span></button>'
+    box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
+      '<button class="home-chip" onclick="rescan(\'' + item.address + '\')"><strong>' +
+      (item.symbol || 'TOKEN') + '</strong></button>'
     ).join('') + '</div>';
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Не удалось загрузить</div>';
+    box.innerHTML = '<div class="empty-state">Error</div>';
   }
 }
 
@@ -228,36 +283,38 @@ async function loadHomeHistory() {
   const box = document.getElementById('home-history');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML = '<div class="empty-state">Войдите, чтобы видеть недавние сканы</div>';
+    box.innerHTML = '<div class="empty-state">' + (typeof t === 'function' ? t('home.historyEmpty') : 'No scans') + '</div>';
     return;
   }
   try {
-    const res = await fetch('http://localhost:3000/api/history', {
+    const res = await fetch(API_BASE + '/api/history', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
     if (!data.history?.length) {
-      box.innerHTML = '<div class="empty-state">Пока нет сканов — нажмите Try example: LINK</div>';
+      box.innerHTML = '<div class="empty-state">' + (typeof t === 'function' ? t('home.historyEmpty') : 'No scans') + '</div>';
       return;
     }
     box.innerHTML = data.history.slice(0, 5).map(h =>
       '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
-      '</strong><small>Risk ' + h.riskScore + ' · ' + new Date(h.scannedAt).toLocaleString('ru-RU') +
+      '</strong><small>Risk ' + h.riskScore + ' · ' + new Date(h.scannedAt).toLocaleString() +
       '</small></div><div class="list-actions"><button class="btn-sm" onclick="rescan(\'' + h.address +
-      '\')">Open</button></div></div>'
+      '\')">' + (typeof t === 'function' ? t('common.open') || 'Open' : 'Open') + '</button></div></div>'
     ).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Не удалось загрузить</div>';
+    box.innerHTML = '<div class="empty-state">Error</div>';
   }
 }
-// ====================== WALLET ======================
+
+// WALLET
 async function connectWallet() {
   if (typeof window.ethereum === 'undefined') return alert('Install MetaMask');
   try {
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    document.getElementById('connect-wallet').textContent =
-      accounts[0].slice(0, 6) + '...' + accounts[0].slice(-4);
-    document.getElementById('portfolio-section').style.display = 'block';
+    const btn = document.getElementById('connect-wallet');
+    if (btn) btn.textContent = accounts[0].slice(0, 6) + '...' + accounts[0].slice(-4);
+    const section = document.getElementById('portfolio-section');
+    if (section) section.style.display = 'block';
     analyzePortfolio(accounts[0]);
   } catch (e) {
     alert('Wallet connection failed');
@@ -266,38 +323,29 @@ async function connectWallet() {
 
 async function analyzePortfolio(address) {
   const content = document.getElementById('portfolio-content');
-  content.innerHTML = '<div class="loading">Analyzing portfolio...</div>';
+  if (!content) return;
+  content.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch('http://localhost:3000/api/portfolio/' + address, {
+    const res = await fetch(API_BASE + '/api/portfolio/' + address, {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
     if (data.locked) {
-      content.innerHTML =
-        '<div class="locked-message glass"><h3>Portfolio available on Premium+</h3>' +
-        '<button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>';
+      content.innerHTML = '<div class="locked-message"><p>Portfolio — Premium+</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>';
       return;
     }
-    const riskClass = (data.riskLevel || 'medium').toLowerCase();
     content.innerHTML =
-      '<div class="portfolio-summary">' +
-      '<div class="portfolio-stat glass"><div class="label">Value</div><div class="value">$' + data.totalValue.toLocaleString() + '</div></div>' +
-      '<div class="portfolio-stat glass"><div class="label">Risk</div><div class="value risk-' + riskClass + '">' + data.portfolioRisk + '/100</div></div>' +
-      '<div class="portfolio-stat glass"><div class="label">Tokens</div><div class="value">' + data.tokenCount + '</div></div>' +
-      '<div class="portfolio-stat glass"><div class="label">High Risk</div><div class="value risk-high">' + data.highRiskCount + '</div></div></div>' +
-      '<div class="glass" style="margin-top:1.5rem;padding:1.3rem;"><h3 style="margin-bottom:1rem;">Holdings</h3>' +
-      '<div class="token-table-header"><span>Token</span><span>Value</span><span>Risk</span></div>' +
-      data.tokens.map(t =>
-        '<div class="token-row"><div class="token-info"><strong>' + t.symbol + '</strong><small>' + t.name +
-        '</small></div><div>$' + t.value.toLocaleString() + '</div><div class="risk-' + t.riskLevel.toLowerCase() +
-        '">' + t.riskLevel + '</div></div>'
-      ).join('') + '</div>';
+      '<div class="metrics-grid">' +
+      '<div class="metric-card glass"><div class="metric-label">Value</div><div class="metric-value">$' + data.totalValue.toLocaleString() + '</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value">' + data.portfolioRisk + '/100</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Tokens</div><div class="metric-value">' + data.tokenCount + '</div></div>' +
+      '</div>';
   } catch (e) {
     content.innerHTML = '<div class="error-card">Portfolio error</div>';
   }
 }
 
-// ====================== BYBIT ======================
+// BYBIT
 async function connectBybit(e) {
   e.preventDefault();
   const apiKey = document.getElementById('bybit-api-key').value.trim();
@@ -306,7 +354,7 @@ async function connectBybit(e) {
   submitBtn.textContent = 'Connecting...';
   submitBtn.disabled = true;
   try {
-    const res = await fetch('http://localhost:3000/api/exchanges/bybit', {
+    const res = await fetch(API_BASE + '/api/exchanges/bybit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ apiKey, apiSecret, limit: 15 })
@@ -327,110 +375,55 @@ async function connectBybit(e) {
   }
 }
 
-function renderBybitData(data, append) {
+function renderBybitData(data) {
   const container = document.getElementById('connected-exchanges');
+  if (!container) return;
   const balancesHtml = (data.balances || []).map(b =>
-    '<span style="margin-right:1.2rem;">' + b.coin + ': <strong>' + b.equity + '</strong></span>'
+    '<span style="margin-right:1rem;">' + b.coin + ': <strong>' + b.equity + '</strong></span>'
   ).join('') || 'No assets';
-
-  let tradesHtml = '';
-  if (data.trades && data.trades.length) {
-    const rows = data.trades.map(t =>
-      '<div class="trade-row"><span>' + t.time + '</span><span>' + t.symbol +
-      '</span><span class="' + (t.side === 'Buy' ? 'side-buy' : 'side-sell') + '">' + t.side +
-      '</span><span>' + t.price + '</span><span>' + t.qty + '</span><span>$' + Number(t.value).toFixed(2) + '</span></div>'
-    ).join('');
-    if (append) {
-      const existing = container.querySelector('.trades-body');
-      if (existing) existing.insertAdjacentHTML('beforeend', rows);
-    } else {
-      tradesHtml =
-        '<div style="margin-top:1.8rem;"><h3 style="margin-bottom:1rem;font-size:1.05rem;">Trades</h3>' +
-        '<div class="trades-table"><div class="trades-header">' +
-        '<span>Time</span><span>Pair</span><span>Side</span><span>Price</span><span>Qty</span><span>Value</span></div>' +
-        '<div class="trades-body">' + rows + '</div></div>' +
-        (data.hasMore ? '<button id="load-more-trades" class="connect-btn" style="margin-top:1.2rem;">Load more</button>' : '') +
-        '</div>';
-    }
-  } else if (!append) {
-    tradesHtml = '<p style="margin-top:1.5rem;color:#777;">No trades</p>';
-  }
-
-  if (!append) {
-    container.innerHTML =
-      '<div class="exchange-card glass" style="padding:1.4rem;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<strong style="font-size:1.15rem;">Bybit</strong><span style="color:#00ffc8;">Connected</span></div>' +
-      '<div style="margin-top:1rem;color:#aaa;">Total Equity: <strong style="color:#fff;font-size:1.25rem;">$' +
-      Number(data.totalEquityUsd).toLocaleString() + '</strong></div>' +
-      '<div style="margin-top:0.8rem;font-size:0.95rem;color:#bbb;line-height:1.7;">' + balancesHtml + '</div>' +
-      tradesHtml + '</div>';
-  }
-  const loadMoreBtn = document.getElementById('load-more-trades');
-  if (loadMoreBtn) loadMoreBtn.onclick = loadMoreTrades;
+  container.innerHTML =
+    '<div><strong>Bybit</strong> · $' + Number(data.totalEquityUsd).toLocaleString() + '</div>' +
+    '<div class="muted" style="margin-top:0.5rem;">' + balancesHtml + '</div>';
 }
 
-async function loadMoreTrades() {
-  if (!bybitApiKey || !bybitApiSecret || !bybitNextCursor) return;
-  const btn = document.getElementById('load-more-trades');
-  btn.textContent = 'Loading...';
-  btn.disabled = true;
-  try {
-    const res = await fetch('http://localhost:3000/api/exchanges/bybit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ apiKey: bybitApiKey, apiSecret: bybitApiSecret, cursor: bybitNextCursor, limit: 15 })
-    });
-    const data = await res.json();
-    if (!data.success) return alert(data.error || 'Error');
-    bybitNextCursor = data.nextCursor;
-    renderBybitData(data, true);
-    if (!data.hasMore) btn.remove();
-    else { btn.textContent = 'Load more'; btn.disabled = false; }
-  } catch (e) {
-    alert('Load failed');
-    btn.textContent = 'Load more';
-    btn.disabled = false;
-  }
-}
-
-// ====================== NEWS ======================
+// NEWS
 async function loadNews() {
   const grid = document.getElementById('news-grid');
   if (!grid) return;
-  grid.innerHTML = '<div class="loading" style="grid-column:1/-1">Loading news...</div>';
+  grid.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch('http://localhost:3000/api/news');
+    const res = await fetch(API_BASE + '/api/news');
     const data = await res.json();
     if (!data.success || !data.news?.length) {
-      grid.innerHTML = '<div class="error-card">Failed to load news</div>';
+      grid.innerHTML = '<div class="error-card">No news</div>';
       return;
     }
     grid.innerHTML = data.news.map(item =>
-      '<a href="' + (item.url || '#') + '" target="_blank" class="news-card glass" style="text-decoration:none;color:inherit;">' +
-      '<h3 class="news-title">' + item.title + '</h3><div class="news-meta">' + item.source + ' · ' + item.time + '</div></a>'
+      '<a href="' + (item.url || '#') + '" target="_blank" class="news-card glass">' +
+      '<h3 class="news-title">' + item.title + '</h3>' +
+      '<div class="news-meta">' + item.source + ' · ' + item.time + '</div></a>'
     ).join('');
   } catch (e) {
     grid.innerHTML = '<div class="error-card">News error</div>';
   }
 }
 
-// ====================== SCANNER ======================
+// SCANNER
 async function startScan() {
   const address = document.getElementById('token-input').value.trim();
-  if (!address) return alert('Enter contract address');
+  if (!address) return alert(typeof t === 'function' ? t('scanner.enterAddress') : 'Enter address');
   const results = document.getElementById('results');
-  results.innerHTML = '<div class="loading">Analyzing token...</div>';
+  results.innerHTML = '<div class="loading">' + (typeof t === 'function' ? t('scanner.loading') : 'Loading...') + '</div>';
   const chatSec = document.getElementById('ai-chat-section');
   if (chatSec) chatSec.style.display = 'none';
   chatHistory = [];
   try {
-    const res = await fetch('http://localhost:3000/api/scan/' + address + '?plan=' + currentPlan, {
+    const res = await fetch(API_BASE + '/api/scan/' + address + '?plan=' + currentPlan, {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
-    if (res.status === 429 || (data.error && String(data.error).indexOf('Лимит') !== -1)) {
-      results.innerHTML = '<div class="error-card">' + (data.error || 'Scan limit reached') + '</div>';
+    if (res.status === 429 || (data.error && String(data.error).includes('Лимит'))) {
+      results.innerHTML = '<div class="error-card">' + (data.error || 'Limit reached') + '</div>';
       refreshUsage();
       return;
     }
@@ -441,17 +434,17 @@ async function startScan() {
         el.textContent = 'Scans: ' + data.usage.used + '/' + lim;
       }
     }
-    lastScannedToken = { address: address, symbol: data.token?.symbol, name: data.token?.name };
+    lastScannedToken = { address, symbol: data.token?.symbol, name: data.token?.name };
     renderTokenPage(data);
     refreshUsage();
   } catch (e) {
-    results.innerHTML = '<div class="error-card">Connection error</div>';
+    results.innerHTML = '<div class="error-card">' + (typeof t === 'function' ? t('scanner.connectionError') : 'Error') + '</div>';
   }
 }
 
 function safe(v, fb) {
   if (fb === undefined) fb = '—';
-  if (v === null || v === undefined || Number.isNaN(v) || typeof v === 'object') return fb;
+  if (v === null || v === undefined || Number.isNaN(v)) return fb;
   return v;
 }
 
@@ -501,7 +494,6 @@ function initCandleChart(currentPrice) {
     height: 400,
     layout: { background: { color: '#141825' }, textColor: '#888' },
     grid: { vertLines: { color: '#1e2438' }, horzLines: { color: '#1e2438' } },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     rightPriceScale: { borderColor: '#1e2438' },
     timeScale: { borderColor: '#1e2438', timeVisible: true }
   });
@@ -511,7 +503,8 @@ function initCandleChart(currentPrice) {
     wickUpColor: '#00ffc8', wickDownColor: '#ff4d6a'
   });
   volumeSeries = candleChart.addHistogramSeries({
-    priceFormat: { type: 'volume' }, priceScaleId: 'volume',
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
     scaleMargins: { top: 0.75, bottom: 0 }
   });
   candleChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
@@ -519,7 +512,7 @@ function initCandleChart(currentPrice) {
   candleSeries.setData(data.candles);
   volumeSeries.setData(data.volumes);
   candleChart.timeScale().fitContent();
-  window.addEventListener('resize', function () {
+  window.addEventListener('resize', () => {
     if (candleChart && container) candleChart.applyOptions({ width: container.clientWidth });
   });
 }
@@ -533,72 +526,73 @@ function updateCandleData(currentPrice) {
 }
 
 function renderTokenPage(data) {
-  const t = data.token || {};
+  const tok = data.token || {};
   const r = data.risk || {};
   const ai = data.ai || {};
   const isPrem = data.plan === 'Premium' || data.plan === 'Pro';
   const isPro = data.plan === 'Pro';
   const addr = lastScannedToken?.address || '';
   const adv = data.advanced || {};
-  const whale = typeof adv.whaleConcentration === 'object' ? (adv.whaleConcentration?.percent || '—') : (adv.whaleConcentration || '—');
-  const buySell = typeof adv.buySellRatio === 'object' ? (adv.buySellRatio?.value || '—') : (adv.buySellRatio || '—');
-  const volatility = typeof adv.volatility === 'object' ? (adv.volatility?.value || '—') : (adv.volatility || '—');
-  const holders = typeof adv.holderCount === 'object' ? (adv.holderCount?.value || '—') : (adv.holderCount || '—');
 
   document.getElementById('results').innerHTML =
-    '<div class="token-header glass"><div class="token-left"><div class="token-icon">' + (t.symbol || 'TK').slice(0, 2) +
-    '</div><div><h1 class="token-title">' + safe(t.symbol) + ' <span class="token-name">' + safe(t.name) +
-    '</span></h1><div class="token-price">$' + safe(t.price) + '</div></div></div><div class="token-right">' +
+    '<div class="token-header glass">' +
+    '<div class="token-left"><div class="token-icon">' + (tok.symbol || 'TK').slice(0, 2) + '</div>' +
+    '<div><h1 class="token-title">' + safe(tok.symbol) + ' <span class="token-name">' + safe(tok.name) + '</span></h1>' +
+    '<div class="token-price">$' + safe(tok.price) + '</div></div></div>' +
+    '<div class="token-right">' +
     '<div class="risk-pill risk-' + (r.riskLevel || 'medium').toLowerCase() + '">Risk ' + safe(r.riskScore) + '/100</div>' +
-    '<div class="plan-label">' + safe(data.plan) + '</div>' +
-    '<button class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (t.symbol || '') + '\',\'' + (t.name || '') + '\')">+ Watchlist</button>' +
+    '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
+    '<button class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
     '</div></div>' +
     '<div class="metrics-grid">' +
-    '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(t.marketCap || t.fdv) + '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">FDV</div><div class="metric-value">' + formatNum(t.fdv) + '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">Volume 24h</div><div class="metric-value">' + formatNum(t.volume24h) + '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">' + formatNum(t.liquidity) + '</div></div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">FDV</div><div class="metric-value">' + formatNum(tok.fdv) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">Volume 24h</div><div class="metric-value">' + formatNum(tok.volume24h) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">' + formatNum(tok.liquidity) + '</div></div>' +
+    '</div>' +
     '<div class="tabs">' +
     '<button class="tab active" data-tab="overview">Overview</button>' +
     '<button class="tab" data-tab="security">Security</button>' +
-    '<button class="tab" data-tab="ai">AI Analysis</button>' +
-    '<button class="tab" data-tab="links">Links</button></div><div class="tab-content">' +
+    '<button class="tab" data-tab="ai">AI</button>' +
+    '<button class="tab" data-tab="links">Links</button></div>' +
+    '<div class="tab-content">' +
     '<div class="tab-pane active" id="overview">' +
     (isPrem
       ? '<div class="chart-wrapper glass"><div class="timeframe-switcher">' +
-        '<button class="tf-btn active" data-tf="1H">1H</button><button class="tf-btn" data-tf="4H">4H</button>' +
-        '<button class="tf-btn" data-tf="1D">1D</button><button class="tf-btn" data-tf="1W">1W</button></div>' +
+        '<button class="tf-btn active" data-tf="1H">1H</button>' +
+        '<button class="tf-btn" data-tf="4H">4H</button>' +
+        '<button class="tf-btn" data-tf="1D">1D</button>' +
+        '<button class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><h3>Chart available on Premium</h3><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
+      : '<div class="locked-message glass"><p>Chart — Premium</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
-        '<div class="metric-card glass"><div class="metric-label">Whale Concentration</div><div class="metric-value">' + whale + '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Buy / Sell Ratio</div><div class="metric-value">' + buySell + '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Volatility</div><div class="metric-value">' + volatility + '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">' + holders + '</div></div></div>'
-      : isPrem
-      ? '<div class="locked-message glass" style="margin-top:1rem;"><h3>Advanced Metrics — Pro only</h3><button class="upgrade-btn" onclick="openAuthModal()">Upgrade to Pro</button></div>'
+        '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Buy/Sell</div><div class="metric-value">' + safe(adv.buySellRatio) + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Volatility</div><div class="metric-value">' + safe(adv.volatility) + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">' + safe(adv.holderCount) + '</div></div></div>'
       : '') +
-    '</div><div class="tab-pane" id="security">' +
+    '</div>' +
+    '<div class="tab-pane" id="security">' +
     (isPrem
-      ? '<div class="info-grid">' +
-        '<div class="info-card glass"><h3>Contract</h3><p>' + (data.security?.contractVerified ? '✅ Verified' : '⚠️ Not verified') + '</p></div>' +
-        '<div class="info-card glass"><h3>Liquidity Lock</h3><p>' + (data.security?.liquidityLock ? '✅ Locked' : '⚠️ Unlocked') + '</p></div>' +
-        '<div class="info-card glass"><h3>Scam Probability</h3><p>' + safe(data.security?.scamProbability) + '%</p></div>' +
-        '<div class="info-card glass"><h3>Risk Level</h3><p class="risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</p></div></div>'
-      : '<div class="locked-message glass"><h3>Security — Premium</h3><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
-    '</div><div class="tab-pane" id="ai"><div class="ai-card glass">' +
-    '<h3>AI Verdict: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
-    '<p style="line-height:1.65;margin:1rem 0;">' + safe(ai.text) + '</p>' +
-    '<div class="ai-meta">Confidence: ' + safe(ai.confidence) + '%</div></div></div>' +
+      ? '<div class="metrics-grid">' +
+        '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
+      : '<div class="locked-message glass"><p>Security — Premium</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
+    '</div>' +
+    '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
+    '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
+    '<p style="margin:1rem 0;line-height:1.65;">' + safe(ai.text) + '</p>' +
+    '<div class="muted">Confidence: ' + safe(ai.confidence) + '%</div></div></div>' +
     '<div class="tab-pane" id="links">' +
     (isPrem && data.projectLinks
-      ? '<div class="links-grid">' +
-        (data.projectLinks.website ? '<a class="link-card glass" href="' + data.projectLinks.website + '" target="_blank">🌐 Website</a>' : '') +
-        (data.projectLinks.twitter ? '<a class="link-card glass" href="' + data.projectLinks.twitter + '" target="_blank">🐦 Twitter</a>' : '') +
-        (data.projectLinks.telegram ? '<a class="link-card glass" href="' + data.projectLinks.telegram + '" target="_blank">✈️ Telegram</a>' : '') +
+      ? '<div class="home-chip-row">' +
+        (data.projectLinks.website ? '<a class="home-chip" href="' + data.projectLinks.website + '" target="_blank">Website</a>' : '') +
+        (data.projectLinks.twitter ? '<a class="home-chip" href="' + data.projectLinks.twitter + '" target="_blank">Twitter</a>' : '') +
+        (data.projectLinks.telegram ? '<a class="home-chip" href="' + data.projectLinks.telegram + '" target="_blank">Telegram</a>' : '') +
         '</div>'
-      : '<div class="locked-message glass"><h3>Links — Premium</h3><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
+      : '<div class="locked-message glass"><p>Links — Premium</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
     '</div></div>';
 
   document.querySelectorAll('.tab').forEach(tab => {
@@ -606,19 +600,19 @@ function renderTokenPage(data) {
       document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
       tab.classList.add('active');
-      document.getElementById(tab.dataset.tab).classList.add('active');
+      document.getElementById(tab.dataset.tab)?.classList.add('active');
     });
   });
 
   if (isPrem) {
     setTimeout(() => {
-      initCandleChart(Number(t.price) || 1);
+      initCandleChart(Number(tok.price) || 1);
       document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           currentTimeframe = btn.dataset.tf;
-          updateCandleData(Number(t.price) || 1);
+          updateCandleData(Number(tok.price) || 1);
         });
       });
     }, 100);
@@ -642,12 +636,13 @@ function initAIChat(data) {
 function toggleChat() {
   const windowEl = document.getElementById('chat-window');
   const btn = document.getElementById('toggle-chat');
-  if (windowEl.style.display === 'none') {
+  if (!windowEl) return;
+  if (windowEl.style.display === 'none' || !windowEl.style.display) {
     windowEl.style.display = 'flex';
-    btn.textContent = 'Hide chat';
+    if (btn) btn.textContent = 'Hide';
   } else {
     windowEl.style.display = 'none';
-    btn.textContent = 'Open chat';
+    if (btn) btn.textContent = 'Open chat';
   }
 }
 
@@ -658,21 +653,27 @@ async function sendChatMessage() {
   addChatMessage('user', text);
   input.value = '';
   chatHistory.push({ role: 'user', content: text });
-  const loadingId = addChatMessage('ai', 'Thinking...');
+  const loadingId = addChatMessage('ai', '...');
   try {
-    const res = await fetch('http://localhost:3000/api/ai/chat', {
+    const res = await fetch(API_BASE + '/api/ai/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: token ? 'Bearer ' + token : '' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? 'Bearer ' + token : ''
+      },
       body: JSON.stringify({ messages: chatHistory, context: currentTokenContext })
     });
     const data = await res.json();
     removeChatMessage(loadingId);
-    if (!data.success) { addChatMessage('ai', data.error || 'Chat is Pro only'); return; }
+    if (!data.success) {
+      addChatMessage('ai', data.error || 'Pro only');
+      return;
+    }
     addChatMessage('ai', data.reply);
     chatHistory.push({ role: 'assistant', content: data.reply });
   } catch (err) {
     removeChatMessage(loadingId);
-    addChatMessage('ai', 'AI connection failed');
+    addChatMessage('ai', 'AI error');
   }
 }
 
@@ -689,28 +690,33 @@ function addChatMessage(role, text) {
 }
 
 function removeChatMessage(id) {
-  const el = document.getElementById(id);
-  if (el) el.remove();
+  document.getElementById(id)?.remove();
 }
 
-// ====================== HISTORY / WATCHLIST ======================
+// HISTORY / WATCHLIST
 async function loadHistory() {
   const box = document.getElementById('history-content');
-  if (!user) { box.innerHTML = '<div class="empty-state">Login to see history</div>'; return; }
+  if (!box) return;
+  if (!user) {
+    box.innerHTML = '<div class="empty-state">Login</div>';
+    return;
+  }
   try {
-    const res = await fetch('http://localhost:3000/api/history', {
+    const res = await fetch(API_BASE + '/api/history', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
-    if (!data.history?.length) { box.innerHTML = '<div class="empty-state">No scans yet</div>'; return; }
+    if (!data.history?.length) {
+      box.innerHTML = '<div class="empty-state">Empty</div>';
+      return;
+    }
     box.innerHTML = data.history.map(h =>
       '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
-      '</strong><small>' + (h.address || '').slice(0, 12) + '... · Risk ' + h.riskScore + ' · ' +
-      new Date(h.scannedAt).toLocaleString('ru-RU') + '</small></div><div class="list-actions">' +
-      '<button class="btn-sm" onclick="rescan(\'' + h.address + '\')">Scan</button></div></div>'
+      '</strong><small>' + (h.address || '').slice(0, 12) + '... · Risk ' + h.riskScore +
+      '</small></div><div class="list-actions"><button class="btn-sm" onclick="rescan(\'' + h.address + '\')">Scan</button></div></div>'
     ).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Failed to load</div>';
+    box.innerHTML = '<div class="empty-state">Error</div>';
   }
 }
 
@@ -722,21 +728,28 @@ function rescan(address) {
 
 async function loadWatchlist() {
   const box = document.getElementById('watchlist-content');
-  if (!user) { box.innerHTML = '<div class="empty-state">Login to use watchlist</div>'; return; }
+  if (!box) return;
+  if (!user) {
+    box.innerHTML = '<div class="empty-state">Login</div>';
+    return;
+  }
   try {
-    const res = await fetch('http://localhost:3000/api/watchlist', {
+    const res = await fetch(API_BASE + '/api/watchlist', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
-    if (!data.watchlist?.length) { box.innerHTML = '<div class="empty-state">Watchlist is empty</div>'; return; }
-    box.innerHTML = data.watchlist.map(t =>
-      '<div class="list-row"><div class="list-info"><strong>' + t.symbol +
-      '</strong><small>' + t.address + '</small></div><div class="list-actions">' +
-      '<button class="btn-sm" onclick="rescan(\'' + t.address + '\')">Scan</button>' +
-      '<button class="btn-sm danger" onclick="removeWatch(\'' + t.address + '\')">Remove</button></div></div>'
+    if (!data.watchlist?.length) {
+      box.innerHTML = '<div class="empty-state">Empty</div>';
+      return;
+    }
+    box.innerHTML = data.watchlist.map(item =>
+      '<div class="list-row"><div class="list-info"><strong>' + item.symbol +
+      '</strong><small>' + item.address + '</small></div><div class="list-actions">' +
+      '<button class="btn-sm" onclick="rescan(\'' + item.address + '\')">Scan</button>' +
+      '<button class="btn-sm danger" onclick="removeWatch(\'' + item.address + '\')">Remove</button></div></div>'
     ).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Failed to load</div>';
+    box.innerHTML = '<div class="empty-state">Error</div>';
   }
 }
 
@@ -744,7 +757,7 @@ async function addWatch(address, symbol, name) {
   if (!user) return openAuthModal();
   if (!address) return;
   try {
-    const res = await fetch('http://localhost:3000/api/watchlist', {
+    const res = await fetch(API_BASE + '/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ address, symbol, name })
@@ -754,12 +767,12 @@ async function addWatch(address, symbol, name) {
     alert('Added to watchlist');
     loadHomeWatchlist();
   } catch (e) {
-    alert('Failed to add');
+    alert('Failed');
   }
 }
 
 async function removeWatch(address) {
-  await fetch('http://localhost:3000/api/watchlist/' + address, {
+  await fetch(API_BASE + '/api/watchlist/' + address, {
     method: 'DELETE',
     headers: { Authorization: 'Bearer ' + token }
   });
@@ -767,29 +780,32 @@ async function removeWatch(address) {
   loadHomeWatchlist();
 }
 
-// ====================== ALERTS + TELEGRAM ======================
+// ALERTS + TELEGRAM
 async function loadAlerts() {
   const box = document.getElementById('alerts-content');
-  if (!user) { box.innerHTML = '<div class="empty-state">Login to manage alerts</div>'; return; }
+  if (!box) return;
+  if (!user) {
+    box.innerHTML = '<div class="empty-state">Login</div>';
+    return;
+  }
   try {
-    const res = await fetch('http://localhost:3000/api/alerts', {
+    const res = await fetch(API_BASE + '/api/alerts', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
     if (!data.alerts?.length) {
-      box.innerHTML = '<div class="empty-state">No alerts yet</div>';
+      box.innerHTML = '<div class="empty-state">' + (typeof t === 'function' ? t('alerts.empty') : 'No alerts') + '</div>';
     } else {
       box.innerHTML = data.alerts.map(a =>
-        '<div class="list-row"><div class="list-info"><strong>' + a.symbol + ' · ' + a.type.replace('_', ' ') +
-        '</strong><small>' + a.address.slice(0, 12) + '... · value: ' + a.value +
+        '<div class="list-row"><div class="list-info"><strong>' + a.symbol + ' · ' + a.type +
+        '</strong><small>' + a.address.slice(0, 12) + '... · ' + a.value +
         '</small></div><div class="list-actions">' +
         '<button class="btn-sm danger" onclick="removeAlertItem(\'' + a.id + '\')">Delete</button></div></div>'
       ).join('');
     }
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Failed to load</div>';
+    box.innerHTML = '<div class="empty-state">Error</div>';
   }
-  refreshTelegramStatus();
 }
 
 async function createAlert() {
@@ -799,7 +815,7 @@ async function createAlert() {
   const type = document.getElementById('alert-type').value;
   const value = document.getElementById('alert-value').value;
   if (!address || value === '') return alert('Fill address and value');
-  const res = await fetch('http://localhost:3000/api/alerts', {
+  const res = await fetch(API_BASE + '/api/alerts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
     body: JSON.stringify({ type, address, symbol, value })
@@ -812,7 +828,7 @@ async function createAlert() {
 }
 
 async function removeAlertItem(id) {
-  await fetch('http://localhost:3000/api/alerts/' + id, {
+  await fetch(API_BASE + '/api/alerts/' + id, {
     method: 'DELETE',
     headers: { Authorization: 'Bearer ' + token }
   });
@@ -822,7 +838,7 @@ async function removeAlertItem(id) {
 async function refreshTelegramStatus() {
   if (!token) return;
   try {
-    const res = await fetch('http://localhost:3000/api/telegram/status', {
+    const res = await fetch(API_BASE + '/api/telegram/status', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -830,14 +846,14 @@ async function refreshTelegramStatus() {
     const btn = document.getElementById('tg-connect-btn');
     if (!st || !btn) return;
     if (data.linked) {
-      st.textContent = 'Подключено ✓';
+      st.textContent = typeof t === 'function' ? t('alerts.linked') : 'Connected ✓';
       st.style.color = '#00ffc8';
-      btn.textContent = 'Disconnect';
+      btn.textContent = typeof t === 'function' ? t('alerts.disconnectTg') : 'Disconnect';
       btn.onclick = disconnectTelegram;
     } else {
-      st.textContent = 'Не подключено';
+      st.textContent = typeof t === 'function' ? t('alerts.notLinked') : 'Not connected';
       st.style.color = '#888';
-      btn.textContent = 'Connect Telegram';
+      btn.textContent = typeof t === 'function' ? t('alerts.connectTg') : 'Connect Telegram';
       btn.onclick = connectTelegram;
     }
   } catch (e) {}
@@ -846,44 +862,50 @@ async function refreshTelegramStatus() {
 async function connectTelegram() {
   if (!user) return openAuthModal();
   try {
-    const res = await fetch('http://localhost:3000/api/telegram/link', {
+    const res = await fetch(API_BASE + '/api/telegram/link', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
     if (!data.success) return alert(data.error || 'Error');
-    document.getElementById('tg-link-area').style.display = 'block';
-    document.getElementById('tg-deep-link').href = data.deepLink;
-    document.getElementById('tg-code').textContent = data.code;
+    const area = document.getElementById('tg-link-area');
+    if (area) area.style.display = 'block';
+    const link = document.getElementById('tg-deep-link');
+    if (link) link.href = data.deepLink;
+    const code = document.getElementById('tg-code');
+    if (code) code.textContent = data.code;
   } catch (e) {
-    alert('Не удалось создать ссылку');
+    alert('Telegram link failed');
   }
 }
 
 async function disconnectTelegram() {
   try {
-    await fetch('http://localhost:3000/api/telegram/link', {
+    await fetch(API_BASE + '/api/telegram/link', {
       method: 'DELETE',
       headers: { Authorization: 'Bearer ' + token }
     });
-    document.getElementById('tg-link-area').style.display = 'none';
+    const area = document.getElementById('tg-link-area');
+    if (area) area.style.display = 'none';
     refreshTelegramStatus();
   } catch (e) {
-    alert('Ошибка отключения');
+    alert('Error');
   }
 }
 
-// ====================== COMPARE ======================
+// COMPARE
 async function runCompare() {
   const a1 = document.getElementById('cmp-1').value.trim();
   const a2 = document.getElementById('cmp-2').value.trim();
   const a3 = document.getElementById('cmp-3').value.trim();
   const addresses = [a1, a2, a3].filter(Boolean);
-  if (addresses.length < 2) return alert('Enter at least 2 addresses');
+  if (addresses.length < 2) {
+    return alert(typeof t === 'function' ? t('compare.need2') : 'Need 2 addresses');
+  }
   const box = document.getElementById('compare-content');
-  box.innerHTML = '<div class="loading">Comparing...</div>';
+  box.innerHTML = '<div class="loading">...</div>';
   try {
-    const res = await fetch('http://localhost:3000/api/compare', {
+    const res = await fetch(API_BASE + '/api/compare', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -896,13 +918,13 @@ async function runCompare() {
       box.innerHTML = '<div class="error-card">' + data.error + '</div>';
       return;
     }
-    box.innerHTML = '<div class="compare-grid">' + data.tokens.map(t =>
-      '<div class="compare-card glass"><h3>' + t.symbol + '</h3>' +
-      '<div class="compare-metric"><span>Price</span><span>$' + Number(t.price).toFixed(6) + '</span></div>' +
-      '<div class="compare-metric"><span>Liquidity</span><span>' + formatNum(t.liquidity) + '</span></div>' +
-      '<div class="compare-metric"><span>Volume 24h</span><span>' + formatNum(t.volume24h) + '</span></div>' +
-      '<div class="compare-metric"><span>FDV</span><span>' + formatNum(t.fdv) + '</span></div>' +
-      '<button class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' + t.address + '\')">Full scan</button></div>'
+    box.innerHTML = '<div class="compare-grid">' + data.tokens.map(tok =>
+      '<div class="compare-card glass"><h3>' + tok.symbol + '</h3>' +
+      '<div class="compare-metric"><span>Price</span><span>$' + Number(tok.price).toFixed(6) + '</span></div>' +
+      '<div class="compare-metric"><span>Liquidity</span><span>' + formatNum(tok.liquidity) + '</span></div>' +
+      '<div class="compare-metric"><span>Volume</span><span>' + formatNum(tok.volume24h) + '</span></div>' +
+      '<div class="compare-metric"><span>FDV</span><span>' + formatNum(tok.fdv) + '</span></div>' +
+      '<button class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' + tok.address + '\')">Scan</button></div>'
     ).join('') + '</div>';
   } catch (e) {
     box.innerHTML = '<div class="error-card">Compare failed</div>';
