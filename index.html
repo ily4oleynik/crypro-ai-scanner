@@ -49,7 +49,7 @@
         <div class="steps-row">
           <div class="step-item"><span>1</span><span data-i18n="home.step1">Paste contract address</span></div>
           <div class="step-item"><span>2</span><span data-i18n="home.step2">Get risk + AI verdict</span></div>
-          <div class="step-item"><span>3</span><span data-i18n="home.step3">Track via Watchlist & Telegram</span></div>
+          <div class="step-item"><span>3</span><span data-i18n="home.step3">Track via Watchlist &amp; Telegram</span></div>
         </div>
       </section>
 
@@ -136,8 +136,8 @@
           <input type="text" id="alert-address" data-i18n-placeholder="alerts.address" placeholder="Token address 0x..." />
           <input type="text" id="alert-symbol" data-i18n-placeholder="alerts.symbol" placeholder="Symbol (e.g. LINK)" />
           <select id="alert-type">
-            <option value="price_above" data-i18n="alerts.priceAbove">Price above</option>
-            <option value="price_below" data-i18n="alerts.priceBelow">Price below</option>
+            <option value="price_above">Price above</option>
+            <option value="price_below">Price below</option>
           </select>
           <input type="number" id="alert-value" data-i18n-placeholder="alerts.value" placeholder="Value" step="any" />
           <button id="alert-create" class="upgrade-btn" data-i18n="alerts.createBtn">Create</button>
@@ -174,6 +174,7 @@
           <div class="account-row"><span data-i18n="account.scans">Scans today</span><strong id="acc-scans">—</strong></div>
           <button id="acc-logout" class="connect-btn full" data-i18n="nav.logout">Logout</button>
         </div>
+
         <div class="account-card glass">
           <h3 data-i18n="account.wallet">Wallet</h3>
           <p class="muted" data-i18n="account.walletHint">Connect wallet to view portfolio</p>
@@ -182,6 +183,7 @@
             <div id="portfolio-content"></div>
           </div>
         </div>
+
         <div class="account-card glass">
           <h3 data-i18n="alerts.telegram">Telegram</h3>
           <p id="tg-status" class="muted" data-i18n="alerts.notLinked">Not connected</p>
@@ -191,9 +193,12 @@
             <p class="muted small">Code: <span id="tg-code"></span></p>
           </div>
         </div>
+
         <div class="account-card glass">
           <h3 data-i18n="home.exchanges">Exchanges</h3>
-          <div id="connected-exchanges"><p class="muted" data-i18n="home.nothingConnected">Nothing connected</p></div>
+          <div id="connected-exchanges">
+            <p class="muted" data-i18n="home.nothingConnected">Nothing connected</p>
+          </div>
           <button id="connect-bybit-btn" class="connect-btn full" data-i18n="home.connectBybit">+ Connect Bybit</button>
         </div>
       </div>
@@ -203,10 +208,10 @@
   <!-- AUTH MODAL -->
   <div id="auth-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
-      <button id="modal-close" class="modal-close">&times;</button>
+      <button id="modal-close" class="modal-close" type="button">&times;</button>
       <div class="auth-tabs">
-        <button class="auth-tab active" data-mode="login" data-i18n="auth.login">Login</button>
-        <button class="auth-tab" data-mode="register" data-i18n="auth.register">Register</button>
+        <button type="button" class="auth-tab active" data-mode="login" data-i18n="auth.login">Login</button>
+        <button type="button" class="auth-tab" data-mode="register" data-i18n="auth.register">Register</button>
       </div>
       <h2 id="auth-title" data-i18n="auth.login">Login</h2>
       <form id="auth-form">
@@ -221,7 +226,7 @@
   <!-- BYBIT MODAL -->
   <div id="bybit-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
-      <button id="bybit-modal-close" class="modal-close">&times;</button>
+      <button id="bybit-modal-close" class="modal-close" type="button">&times;</button>
       <h2>Connect Bybit</h2>
       <p class="muted">Use Read-Only API keys</p>
       <form id="bybit-form">
