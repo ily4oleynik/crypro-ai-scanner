@@ -5,12 +5,21 @@ const cors = require('cors');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+
 const aiService = require('./services/ai.js');
 const { initDb } = require('./db');
 const store = require('./store');
 const { startAlertWorker } = require('./alertWorker');
 const { startTelegramPolling } = require('./tgPoll');
 const { startDigestWorker, runDailyDigest } = require('./digestWorker');
+const { getChannelUrl } = require('./telegram');
+
+let newsService = null;
+try {
+  newsService = require('./news');
+} catch (e) {
+  console.warn('[News] news.js not found — using fallback');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,8 +27,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'crypto-ai-scanner-secret-key-chang
 
 app.use(cors());
 app.use(express.json());
-
-// Раздача frontend из корня репозитория (index.html, app.js, style.css)
 app.use(express.static(__dirname));
 
 const tgLinkCodes = new Map();
@@ -122,8 +129,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
       marketCap: pair.fdv || 0,
       isVerified: !!pair.info?.imageUrl,
       website: pair.info?.websites?.[0]?.url || null,
-      twitter: pair.info?.socials?.find(s => s.type === 'twitter')?.url || null,
-      telegram: pair.info?.socials?.find(s => s.type === 'telegram')?.url || null
+      twitter: pair.info?.socials?.find((s) => s.type === 'twitter')?.url || null,
+      telegram: pair.info?.socials?.find((s) => s.type === 'telegram')?.url || null
     };
 
     let riskScore = 58;
@@ -309,13 +316,19 @@ app.post('/api/telegram/link', authMiddleware, async (req, res) => {
     success: true,
     code,
     deepLink: `https://t.me/${botUsername}?start=${code}`,
-    expiresIn: 600
+    expiresIn: 600,
+    channelUrl: getChannelUrl() || null
   });
 });
 
 app.get('/api/telegram/status', authMiddleware, async (req, res) => {
   const chatId = await store.getTelegramChatId(req.user);
-  res.json({ success: true, linked: !!chatId, chatId: chatId || null });
+  res.json({
+    success: true,
+    linked: !!chatId,
+    chatId: chatId || null,
+    channelUrl: getChannelUrl() || null
+  });
 });
 
 app.delete('/api/telegram/link', authMiddleware, async (req, res) => {
@@ -331,24 +344,53 @@ app.post('/api/telegram/digest-test', authMiddleware, async (req, res) => {
   }
 });
 
+// ===== NEWS (multi-source) =====
 app.get('/api/news', async (req, res) => {
   try {
-    const response = await axios.get(
-      'https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&kind=news&limit=10'
-    );
-    const news = (response.data.results || []).map(item => ({
-      title: item.title,
-      source: item.source?.title || 'CryptoPanic',
-      url: item.url,
-      time: new Date(item.published_at).toLocaleString('ru-RU', {
-        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-      })
-    }));
+    const source = (req.query.source || 'all').toLowerCase();
+    let news = [];
+
+    if (newsService && typeof newsService.fetchNews === 'function') {
+      news = await newsService.fetchNews(30);
+    } else {
+      const response = await axios.get(
+        'https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&kind=news&limit=15'
+      );
+      news = (response.data.results || []).map((item) => ({
+        title: item.title,
+        source: item.source?.title || 'CryptoPanic',
+        url: item.url,
+        time: new Date(item.published_at).toLocaleString('ru-RU', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        platform: 'cryptopanic'
+      }));
+    }
+
+    if (source !== 'all') {
+      news = news.filter(
+        (n) =>
+          (n.platform && n.platform === source) ||
+          (n.source && n.source.toLowerCase().includes(source))
+      );
+    }
+
     res.json({ success: true, news });
   } catch (e) {
     res.json({
       success: true,
-      news: [{ title: 'Bitcoin consolidates above key support', source: 'CoinDesk', time: '2h ago', url: '#' }]
+      news: [
+        {
+          title: 'Bitcoin consolidates above key support',
+          source: 'System',
+          url: '#',
+          time: '',
+          platform: 'system'
+        }
+      ]
     });
   }
 });
@@ -366,7 +408,7 @@ app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
     { symbol: 'PEPE', name: 'Pepe', value: 480, riskLevel: 'HIGH', riskScore: 78 }
   ];
   const totalValue = tokens.reduce((s, t) => s + t.value, 0);
-  const highRiskCount = tokens.filter(t => t.riskLevel === 'HIGH').length;
+  const highRiskCount = tokens.filter((t) => t.riskLevel === 'HIGH').length;
   const avgRisk = Math.round(tokens.reduce((s, t) => s + t.riskScore, 0) / tokens.length);
   res.json({
     success: true,
@@ -416,8 +458,8 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
     });
     const coins = balanceRes.data?.result?.list?.[0]?.coin || [];
     const balances = coins
-      .filter(c => parseFloat(c.equity) > 0)
-      .map(c => ({
+      .filter((c) => parseFloat(c.equity) > 0)
+      .map((c) => ({
         coin: c.coin,
         equity: parseFloat(c.equity).toFixed(6),
         available: parseFloat(c.availableToWithdraw || c.walletBalance || 0).toFixed(6)
@@ -425,7 +467,7 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
     const totalEquity = coins.reduce((sum, c) => sum + parseFloat(c.usdValue || 0), 0);
     const rawTrades = tradesRes.data?.result?.list || [];
     const nextCursor = tradesRes.data?.result?.nextPageCursor || null;
-    const trades = rawTrades.map(t => ({
+    const trades = rawTrades.map((t) => ({
       symbol: t.symbol,
       side: t.side,
       price: parseFloat(t.execPrice),
@@ -469,12 +511,10 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   }
 });
 
-// SPA fallback — ПОСЛЕ всех /api маршрутов
-// SPA fallback (совместимо с Express 5)
+// SPA fallback (Express 5 safe)
 app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api')) return next();
-  // статика (css/js) уже отдаётся express.static
   if (req.path.includes('.')) return next();
   res.sendFile(path.join(__dirname, 'index.html'));
 });
