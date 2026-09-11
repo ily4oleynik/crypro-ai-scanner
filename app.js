@@ -1,4 +1,3 @@
-// frontend/app.js
 const API_BASE = window.API_BASE || 'http://localhost:3000';
 
 let currentPlan = 'free';
@@ -14,6 +13,7 @@ let bybitApiKey = null;
 let bybitApiSecret = null;
 let bybitNextCursor = null;
 let lastScannedToken = null;
+let pendingPlan = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (token) {
@@ -36,12 +36,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nav-compare')?.addEventListener('click', e => { e.preventDefault(); showPage('compare'); });
   document.getElementById('nav-account')?.addEventListener('click', e => { e.preventDefault(); showPage('account'); });
 
+  // Тарифы: Free сразу, Premium/Pro → Pricing (не регистрация)
   document.querySelectorAll('.plan-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!user) return openAuthModal();
-      document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentPlan = btn.dataset.plan;
+      const plan = btn.dataset.plan;
+      if (plan === 'free') {
+        currentPlan = 'free';
+        document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        return;
+      }
+      openPricing(plan);
     });
   });
 
@@ -52,6 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('modal-close')?.addEventListener('click', closeAuthModal);
   document.getElementById('auth-form')?.addEventListener('submit', handleAuth);
   document.getElementById('acc-logout')?.addEventListener('click', () => logout());
+
+  document.getElementById('pricing-close')?.addEventListener('click', closePricing);
+  document.querySelectorAll('.pricing-pick').forEach(btn => {
+    btn.addEventListener('click', () => selectPlan(btn.dataset.plan));
+  });
 
   document.querySelectorAll('.auth-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -72,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('connect-wallet')?.addEventListener('click', connectWallet);
   document.getElementById('connect-bybit-btn')?.addEventListener('click', () => {
-    if (!user) return openAuthModal();
+    if (!user) return openAuthModal('Войдите, чтобы подключить Bybit');
     document.getElementById('bybit-modal').style.display = 'flex';
   });
   document.getElementById('bybit-modal-close')?.addEventListener('click', () => {
@@ -125,11 +135,85 @@ document.addEventListener('DOMContentLoaded', () => {
   loadHomeWidgets();
 });
 
-function openAuthModal() {
-  document.getElementById('auth-modal').style.display = 'flex';
+// ===== PRICING / UPGRADE =====
+function openPricing(highlightPlan) {
+  pendingPlan = highlightPlan || null;
+  const modal = document.getElementById('pricing-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  document.querySelectorAll('.price-card').forEach(card => {
+    card.classList.toggle('featured', !!highlightPlan && card.dataset.plan === highlightPlan);
+  });
 }
+
+function closePricing() {
+  const modal = document.getElementById('pricing-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function selectPlan(plan) {
+  pendingPlan = plan;
+
+  if (plan === 'free') {
+    currentPlan = 'free';
+    document.querySelectorAll('.plan-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.plan === 'free');
+    });
+    closePricing();
+    return;
+  }
+
+  if (!user) {
+    closePricing();
+    openAuthModal('Войдите или создайте аккаунт, чтобы активировать ' + plan.toUpperCase());
+    return;
+  }
+
+  await activatePlanDemo(plan);
+}
+
+async function activatePlanDemo(plan) {
+  currentPlan = plan;
+  if (user) user.plan = plan;
+
+  document.querySelectorAll('.plan-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.plan === plan);
+  });
+  updateAuthUI();
+  closePricing();
+  refreshAccountPage();
+
+  alert(
+    plan.toUpperCase() + ' активирован в демо-режиме.\n\n' +
+    'Сканы и AI идут по правилам тарифа ' + plan + '.\n' +
+    'Реальная оплата (Stripe) — следующий этап.'
+  );
+}
+
+// ===== AUTH =====
+function openAuthModal(hintText) {
+  const modal = document.getElementById('auth-modal');
+  const hint = document.getElementById('auth-hint');
+  if (hint) {
+    if (hintText) {
+      hint.textContent = hintText;
+      hint.style.display = 'block';
+    } else {
+      hint.textContent = '';
+      hint.style.display = 'none';
+    }
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
 function closeAuthModal() {
-  document.getElementById('auth-modal').style.display = 'none';
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.style.display = 'none';
+  const hint = document.getElementById('auth-hint');
+  if (hint) {
+    hint.textContent = '';
+    hint.style.display = 'none';
+  }
 }
 
 async function handleAuth(e) {
@@ -147,14 +231,21 @@ async function handleAuth(e) {
     if (!data.success) return alert(data.error || 'Error');
     token = data.token;
     user = data.user;
-    currentPlan = data.user.plan;
+    currentPlan = data.user.plan || 'free';
     localStorage.setItem('token', token);
     closeAuthModal();
     updateAuthUI();
     refreshUsage();
     loadHomeWidgets();
     refreshAccountPage();
-    alert('OK · ' + (data.user.plan || '').toUpperCase());
+
+    if (pendingPlan && pendingPlan !== 'free') {
+      const planToActivate = pendingPlan;
+      pendingPlan = null;
+      await activatePlanDemo(planToActivate);
+    } else {
+      alert('OK · ' + (data.user.plan || 'free').toUpperCase());
+    }
   } catch (err) {
     alert(typeof t === 'function' ? t('scanner.connectionError') : 'Connection error');
   }
@@ -164,8 +255,12 @@ function logout() {
   token = null;
   user = null;
   currentPlan = 'free';
+  pendingPlan = null;
   localStorage.removeItem('token');
   updateAuthUI();
+  document.querySelectorAll('.plan-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.plan === 'free');
+  });
   const portfolio = document.getElementById('portfolio-section');
   if (portfolio) portfolio.style.display = 'none';
   const ex = document.getElementById('connected-exchanges');
@@ -184,13 +279,13 @@ function updateAuthUI() {
   if (user) {
     authBtn.textContent = typeof t === 'function' ? t('nav.logout') : 'Logout';
     if (planLabel) {
-      planLabel.textContent = (user.plan || 'free').toUpperCase();
+      planLabel.textContent = (user.plan || currentPlan || 'free').toUpperCase();
       planLabel.style.display = 'inline-block';
     }
     document.querySelectorAll('.plan-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.plan === user.plan);
+      btn.classList.toggle('active', btn.dataset.plan === (user.plan || currentPlan));
     });
-    currentPlan = user.plan || 'free';
+    currentPlan = user.plan || currentPlan || 'free';
   } else {
     authBtn.textContent = typeof t === 'function' ? t('nav.login') : 'Login';
     if (planLabel) planLabel.style.display = 'none';
@@ -235,7 +330,7 @@ async function refreshAccountPage() {
     return;
   }
   if (emailEl) emailEl.textContent = user.email || '—';
-  if (planEl) planEl.textContent = (user.plan || 'free').toUpperCase();
+  if (planEl) planEl.textContent = (user.plan || currentPlan || 'free').toUpperCase();
   try {
     const res = await fetch(API_BASE + '/api/usage', {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
@@ -271,7 +366,7 @@ async function loadHomeWatchlist() {
       return;
     }
     box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
-      '<button class="home-chip" onclick="rescan(\'' + item.address + '\')"><strong>' +
+      '<button type="button" class="home-chip" onclick="rescan(\'' + item.address + '\')"><strong>' +
       (item.symbol || 'TOKEN') + '</strong></button>'
     ).join('') + '</div>';
   } catch (e) {
@@ -298,15 +393,14 @@ async function loadHomeHistory() {
     box.innerHTML = data.history.slice(0, 5).map(h =>
       '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
       '</strong><small>Risk ' + h.riskScore + ' · ' + new Date(h.scannedAt).toLocaleString() +
-      '</small></div><div class="list-actions"><button class="btn-sm" onclick="rescan(\'' + h.address +
-      '\')">' + (typeof t === 'function' ? t('common.open') || 'Open' : 'Open') + '</button></div></div>'
+      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address +
+      '\')">Open</button></div></div>'
     ).join('');
   } catch (e) {
     box.innerHTML = '<div class="empty-state">Error</div>';
   }
 }
 
-// WALLET
 async function connectWallet() {
   if (typeof window.ethereum === 'undefined') return alert('Install MetaMask');
   try {
@@ -331,7 +425,7 @@ async function analyzePortfolio(address) {
     });
     const data = await res.json();
     if (data.locked) {
-      content.innerHTML = '<div class="locked-message"><p>Portfolio — Premium+</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>';
+      content.innerHTML = '<div class="locked-message"><p>Portfolio — Premium+</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>';
       return;
     }
     content.innerHTML =
@@ -345,7 +439,6 @@ async function analyzePortfolio(address) {
   }
 }
 
-// BYBIT
 async function connectBybit(e) {
   e.preventDefault();
   const apiKey = document.getElementById('bybit-api-key').value.trim();
@@ -386,7 +479,6 @@ function renderBybitData(data) {
     '<div class="muted" style="margin-top:0.5rem;">' + balancesHtml + '</div>';
 }
 
-// NEWS
 async function loadNews() {
   const grid = document.getElementById('news-grid');
   if (!grid) return;
@@ -408,7 +500,6 @@ async function loadNews() {
   }
 }
 
-// SCANNER
 async function startScan() {
   const address = document.getElementById('token-input').value.trim();
   if (!address) return alert(typeof t === 'function' ? t('scanner.enterAddress') : 'Enter address');
@@ -423,7 +514,9 @@ async function startScan() {
     });
     const data = await res.json();
     if (res.status === 429 || (data.error && String(data.error).includes('Лимит'))) {
-      results.innerHTML = '<div class="error-card">' + (data.error || 'Limit reached') + '</div>';
+      results.innerHTML =
+        '<div class="error-card">' + (data.error || 'Limit reached') +
+        '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Upgrade</button></div></div>';
       refreshUsage();
       return;
     }
@@ -542,7 +635,7 @@ function renderTokenPage(data) {
     '<div class="token-right">' +
     '<div class="risk-pill risk-' + (r.riskLevel || 'medium').toLowerCase() + '">Risk ' + safe(r.riskScore) + '/100</div>' +
     '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
-    '<button class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
+    '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
     '</div></div>' +
     '<div class="metrics-grid">' +
     '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
@@ -551,27 +644,29 @@ function renderTokenPage(data) {
     '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">' + formatNum(tok.liquidity) + '</div></div>' +
     '</div>' +
     '<div class="tabs">' +
-    '<button class="tab active" data-tab="overview">Overview</button>' +
-    '<button class="tab" data-tab="security">Security</button>' +
-    '<button class="tab" data-tab="ai">AI</button>' +
-    '<button class="tab" data-tab="links">Links</button></div>' +
+    '<button type="button" class="tab active" data-tab="overview">Overview</button>' +
+    '<button type="button" class="tab" data-tab="security">Security</button>' +
+    '<button type="button" class="tab" data-tab="ai">AI</button>' +
+    '<button type="button" class="tab" data-tab="links">Links</button></div>' +
     '<div class="tab-content">' +
     '<div class="tab-pane active" id="overview">' +
     (isPrem
       ? '<div class="chart-wrapper glass"><div class="timeframe-switcher">' +
-        '<button class="tf-btn active" data-tf="1H">1H</button>' +
-        '<button class="tf-btn" data-tf="4H">4H</button>' +
-        '<button class="tf-btn" data-tf="1D">1D</button>' +
-        '<button class="tf-btn" data-tf="1W">1W</button></div>' +
+        '<button type="button" class="tf-btn active" data-tf="1H">1H</button>' +
+        '<button type="button" class="tf-btn" data-tf="4H">4H</button>' +
+        '<button type="button" class="tf-btn" data-tf="1D">1D</button>' +
+        '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><p>Chart — Premium</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
+      : '<div class="locked-message glass"><p>График доступен в Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
         '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Buy/Sell</div><div class="metric-value">' + safe(adv.buySellRatio) + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Volatility</div><div class="metric-value">' + safe(adv.volatility) + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">' + safe(adv.holderCount) + '</div></div></div>'
-      : '') +
+      : (isPrem
+        ? '<div class="locked-message glass" style="margin-top:1rem;"><p>Whale-метрики — в Pro</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Открыть Pro</button></div>'
+        : '')) +
     '</div>' +
     '<div class="tab-pane" id="security">' +
     (isPrem
@@ -579,7 +674,7 @@ function renderTokenPage(data) {
         '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
-      : '<div class="locked-message glass"><p>Security — Premium</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
+      : '<div class="locked-message glass"><p>Security-отчёт — в Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
@@ -592,7 +687,7 @@ function renderTokenPage(data) {
         (data.projectLinks.twitter ? '<a class="home-chip" href="' + data.projectLinks.twitter + '" target="_blank">Twitter</a>' : '') +
         (data.projectLinks.telegram ? '<a class="home-chip" href="' + data.projectLinks.telegram + '" target="_blank">Telegram</a>' : '') +
         '</div>'
-      : '<div class="locked-message glass"><p>Links — Premium</p><button class="upgrade-btn" onclick="openAuthModal()">Upgrade</button></div>') +
+      : '<div class="locked-message glass"><p>Ссылки проекта — в Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     '</div></div>';
 
   document.querySelectorAll('.tab').forEach(tab => {
@@ -693,7 +788,6 @@ function removeChatMessage(id) {
   document.getElementById(id)?.remove();
 }
 
-// HISTORY / WATCHLIST
 async function loadHistory() {
   const box = document.getElementById('history-content');
   if (!box) return;
@@ -713,7 +807,7 @@ async function loadHistory() {
     box.innerHTML = data.history.map(h =>
       '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
       '</strong><small>' + (h.address || '').slice(0, 12) + '... · Risk ' + h.riskScore +
-      '</small></div><div class="list-actions"><button class="btn-sm" onclick="rescan(\'' + h.address + '\')">Scan</button></div></div>'
+      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address + '\')">Scan</button></div></div>'
     ).join('');
   } catch (e) {
     box.innerHTML = '<div class="empty-state">Error</div>';
@@ -745,8 +839,8 @@ async function loadWatchlist() {
     box.innerHTML = data.watchlist.map(item =>
       '<div class="list-row"><div class="list-info"><strong>' + item.symbol +
       '</strong><small>' + item.address + '</small></div><div class="list-actions">' +
-      '<button class="btn-sm" onclick="rescan(\'' + item.address + '\')">Scan</button>' +
-      '<button class="btn-sm danger" onclick="removeWatch(\'' + item.address + '\')">Remove</button></div></div>'
+      '<button type="button" class="btn-sm" onclick="rescan(\'' + item.address + '\')">Scan</button>' +
+      '<button type="button" class="btn-sm danger" onclick="removeWatch(\'' + item.address + '\')">Remove</button></div></div>'
     ).join('');
   } catch (e) {
     box.innerHTML = '<div class="empty-state">Error</div>';
@@ -754,7 +848,7 @@ async function loadWatchlist() {
 }
 
 async function addWatch(address, symbol, name) {
-  if (!user) return openAuthModal();
+  if (!user) return openAuthModal('Войдите, чтобы сохранять Watchlist');
   if (!address) return;
   try {
     const res = await fetch(API_BASE + '/api/watchlist', {
@@ -780,7 +874,6 @@ async function removeWatch(address) {
   loadHomeWatchlist();
 }
 
-// ALERTS + TELEGRAM
 async function loadAlerts() {
   const box = document.getElementById('alerts-content');
   if (!box) return;
@@ -800,7 +893,7 @@ async function loadAlerts() {
         '<div class="list-row"><div class="list-info"><strong>' + a.symbol + ' · ' + a.type +
         '</strong><small>' + a.address.slice(0, 12) + '... · ' + a.value +
         '</small></div><div class="list-actions">' +
-        '<button class="btn-sm danger" onclick="removeAlertItem(\'' + a.id + '\')">Delete</button></div></div>'
+        '<button type="button" class="btn-sm danger" onclick="removeAlertItem(\'' + a.id + '\')">Delete</button></div></div>'
       ).join('');
     }
   } catch (e) {
@@ -809,7 +902,7 @@ async function loadAlerts() {
 }
 
 async function createAlert() {
-  if (!user) return openAuthModal();
+  if (!user) return openAuthModal('Войдите, чтобы создавать алерты');
   const address = document.getElementById('alert-address').value.trim();
   const symbol = document.getElementById('alert-symbol').value.trim();
   const type = document.getElementById('alert-type').value;
@@ -860,7 +953,7 @@ async function refreshTelegramStatus() {
 }
 
 async function connectTelegram() {
-  if (!user) return openAuthModal();
+  if (!user) return openAuthModal('Войдите, чтобы подключить Telegram');
   try {
     const res = await fetch(API_BASE + '/api/telegram/link', {
       method: 'POST',
@@ -893,7 +986,6 @@ async function disconnectTelegram() {
   }
 }
 
-// COMPARE
 async function runCompare() {
   const a1 = document.getElementById('cmp-1').value.trim();
   const a2 = document.getElementById('cmp-2').value.trim();
@@ -924,7 +1016,7 @@ async function runCompare() {
       '<div class="compare-metric"><span>Liquidity</span><span>' + formatNum(tok.liquidity) + '</span></div>' +
       '<div class="compare-metric"><span>Volume</span><span>' + formatNum(tok.volume24h) + '</span></div>' +
       '<div class="compare-metric"><span>FDV</span><span>' + formatNum(tok.fdv) + '</span></div>' +
-      '<button class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' + tok.address + '\')">Scan</button></div>'
+      '<button type="button" class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' + tok.address + '\')">Scan</button></div>'
     ).join('') + '</div>';
   } catch (e) {
     box.innerHTML = '<div class="error-card">Compare failed</div>';
