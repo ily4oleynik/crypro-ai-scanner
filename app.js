@@ -9,10 +9,8 @@ let volumeSeries = null;
 let currentTimeframe = '1H';
 let chatHistory = [];
 let currentTokenContext = null;
-let bybitApiKey = null;
-let bybitApiSecret = null;
-let bybitNextCursor = null;
 let lastScannedToken = null;
+let lastPairMeta = null;
 let pendingPlan = null;
 let newsSource = 'all';
 
@@ -29,39 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  document.getElementById('nav-home')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('home');
-  });
-  document.getElementById('nav-scanner')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('scanner');
-  });
-  document.getElementById('nav-watchlist')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('watchlist');
-    loadWatchlist();
-  });
-  document.getElementById('nav-history')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('history');
-    loadHistory();
-  });
-  document.getElementById('nav-alerts')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('alerts');
-    loadAlerts();
-  });
-  document.getElementById('nav-compare')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('compare');
-  });
-  document.getElementById('nav-account')?.addEventListener('click', e => {
-    e.preventDefault();
-    showPage('account');
-  });
+  document.getElementById('nav-home')?.addEventListener('click', e => { e.preventDefault(); showPage('home'); });
+  document.getElementById('nav-scanner')?.addEventListener('click', e => { e.preventDefault(); showPage('scanner'); });
+  document.getElementById('nav-watchlist')?.addEventListener('click', e => { e.preventDefault(); showPage('watchlist'); loadWatchlist(); });
+  document.getElementById('nav-history')?.addEventListener('click', e => { e.preventDefault(); showPage('history'); loadHistory(); });
+  document.getElementById('nav-alerts')?.addEventListener('click', e => { e.preventDefault(); showPage('alerts'); loadAlerts(); });
+  document.getElementById('nav-compare')?.addEventListener('click', e => { e.preventDefault(); showPage('compare'); });
+  document.getElementById('nav-account')?.addEventListener('click', e => { e.preventDefault(); showPage('account'); });
 
-  // Free сразу, Premium/Pro → Pricing
   document.querySelectorAll('.plan-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const plan = btn.dataset.plan;
@@ -95,13 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const mode = tab.dataset.mode;
       const title = document.getElementById('auth-title');
       const submit = document.getElementById('auth-submit');
-      if (typeof t === 'function') {
-        if (title) title.textContent = mode === 'login' ? t('auth.login') : t('auth.register');
-        if (submit) submit.textContent = mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister');
-      } else {
-        if (title) title.textContent = mode === 'login' ? 'Login' : 'Register';
-        if (submit) submit.textContent = mode === 'login' ? 'Login' : 'Create Account';
-      }
+      if (title) title.textContent = mode === 'login' ? 'Login' : 'Register';
+      if (submit) submit.textContent = mode === 'login' ? 'Login' : 'Create Account';
     });
   });
 
@@ -158,15 +126,135 @@ document.addEventListener('DOMContentLoaded', () => {
     loadNews(btn.dataset.source);
   });
 
+  document.getElementById('refresh-trending')?.addEventListener('click', loadTrending);
+  document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+
   if (typeof setLanguage === 'function') {
     setLanguage(localStorage.getItem('lang') || 'ru');
   }
 
+  initTheme();
+  initBurger();
+  initOnboarding();
+  loadTicker();
+  loadTrending();
   loadNews('all');
   updateAuthUI();
   refreshUsage();
   loadHomeWidgets();
+  setInterval(loadTicker, 60000);
 });
+
+// ===== THEME =====
+function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  document.body.classList.toggle('theme-light', saved === 'light');
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = saved === 'light' ? '☀' : '☾';
+}
+
+function toggleTheme() {
+  const light = !document.body.classList.contains('theme-light');
+  document.body.classList.toggle('theme-light', light);
+  localStorage.setItem('theme', light ? 'light' : 'dark');
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = light ? '☀' : '☾';
+}
+
+// ===== BURGER =====
+function initBurger() {
+  const burger = document.getElementById('nav-burger');
+  const links = document.getElementById('nav-links');
+  if (!burger || !links) return;
+  burger.addEventListener('click', () => links.classList.toggle('open'));
+  links.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => links.classList.remove('open'));
+  });
+}
+
+// ===== ONBOARDING =====
+function initOnboarding() {
+  if (localStorage.getItem('ob_done') === '1') return;
+  const modal = document.getElementById('onboarding-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  let step = 1;
+
+  const show = (n) => {
+    document.querySelectorAll('.ob-step').forEach(s => {
+      s.classList.toggle('active', Number(s.dataset.step) === n);
+    });
+    const next = document.getElementById('ob-next');
+    if (next) next.textContent = n >= 3 ? 'Начать' : 'Далее';
+  };
+
+  document.getElementById('ob-next')?.addEventListener('click', () => {
+    if (step >= 3) {
+      localStorage.setItem('ob_done', '1');
+      modal.style.display = 'none';
+      showPage('scanner');
+      return;
+    }
+    step += 1;
+    show(step);
+  });
+
+  document.getElementById('ob-skip')?.addEventListener('click', () => {
+    localStorage.setItem('ob_done', '1');
+    modal.style.display = 'none';
+  });
+}
+
+// ===== TICKER =====
+async function loadTicker() {
+  const inner = document.getElementById('ticker-inner');
+  if (!inner) return;
+  try {
+    const res = await fetch(API_BASE + '/api/ticker');
+    const data = await res.json();
+    const items = data.ticker || [];
+    const html = items.map(t => {
+      const ch = t.change24h;
+      const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
+      const sign = ch > 0 ? '+' : '';
+      const price = t.price == null
+        ? '—'
+        : t.price >= 100
+          ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
+          : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+      const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + ch.toFixed(2) + '%</span>';
+      return '<span class="ticker-item"><strong>' + t.symbol + '</strong> $' + price + ' ' + chStr + '</span>';
+    }).join('');
+    inner.innerHTML = html + html;
+  } catch (e) {
+    inner.innerHTML = '<span class="ticker-item">Ticker unavailable</span>';
+  }
+}
+
+// ===== TRENDING =====
+async function loadTrending() {
+  const grid = document.getElementById('trending-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch(API_BASE + '/api/trending');
+    const data = await res.json();
+    const tokens = data.tokens || [];
+    if (!tokens.length) {
+      grid.innerHTML = '<div class="empty-state-cta"><p>Нет trending-данных</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Открыть Scanner</button></div>';
+      return;
+    }
+    grid.innerHTML = tokens.map(t => {
+      const price = t.price == null ? '—' : '$' + Number(t.price).toPrecision(5);
+      return '<div class="trend-card" onclick="rescan(\'' + t.address + '\')">' +
+        '<div class="trend-sym">' + (t.symbol || 'TOKEN') + '</div>' +
+        '<div class="trend-price">' + price + '</div>' +
+        '<div class="trend-meta">' + (t.name || t.chainId || '') + '</div></div>';
+    }).join('');
+  } catch (e) {
+    grid.innerHTML = '<div class="empty-state-cta"><p>Trending error</p><button type="button" class="connect-btn" onclick="loadTrending()">Retry</button></div>';
+  }
+}
 
 // ===== PRICING =====
 function openPricing(highlightPlan) {
@@ -211,11 +299,7 @@ async function activatePlanDemo(plan) {
   updateAuthUI();
   closePricing();
   refreshAccountPage();
-  alert(
-    plan.toUpperCase() + ' активирован в демо-режиме.\n\n' +
-    'Сканы и AI идут по правилам тарифа ' + plan + '.\n' +
-    'Реальная оплата (Stripe) — следующий этап.'
-  );
+  alert(plan.toUpperCase() + ' активирован в демо-режиме.\n\nСканы идут по тарифу ' + plan + '.\nStripe — следующий этап.');
 }
 
 // ===== AUTH =====
@@ -266,16 +350,15 @@ async function handleAuth(e) {
     refreshUsage();
     loadHomeWidgets();
     refreshAccountPage();
-
     if (pendingPlan && pendingPlan !== 'free') {
-      const planToActivate = pendingPlan;
+      const p = pendingPlan;
       pendingPlan = null;
-      await activatePlanDemo(planToActivate);
+      await activatePlanDemo(p);
     } else {
       alert('OK · ' + (data.user.plan || 'free').toUpperCase());
     }
   } catch (err) {
-    alert(typeof t === 'function' ? t('scanner.connectionError') : 'Connection error');
+    alert('Connection error');
   }
 }
 
@@ -292,16 +375,9 @@ function logout() {
   const portfolio = document.getElementById('portfolio-section');
   if (portfolio) portfolio.style.display = 'none';
   const ex = document.getElementById('connected-exchanges');
-  if (ex) {
-    ex.innerHTML =
-      '<p class="muted">' +
-      (typeof t === 'function' ? t('home.nothingConnected') : 'Nothing connected') +
-      '</p>';
-  }
+  if (ex) ex.innerHTML = '<p class="muted">Nothing connected</p>';
   const chat = document.getElementById('ai-chat-section');
   if (chat) chat.style.display = 'none';
-  const cta = document.getElementById('tg-channel-cta');
-  if (cta) cta.innerHTML = '';
   refreshUsage();
   loadHomeWidgets();
   refreshAccountPage();
@@ -312,7 +388,7 @@ function updateAuthUI() {
   const planLabel = document.getElementById('user-plan');
   if (!authBtn) return;
   if (user) {
-    authBtn.textContent = typeof t === 'function' ? t('nav.logout') : 'Logout';
+    authBtn.textContent = 'Logout';
     if (planLabel) {
       planLabel.textContent = (user.plan || currentPlan || 'free').toUpperCase();
       planLabel.style.display = 'inline-block';
@@ -322,7 +398,7 @@ function updateAuthUI() {
     });
     currentPlan = user.plan || currentPlan || 'free';
   } else {
-    authBtn.textContent = typeof t === 'function' ? t('nav.login') : 'Login';
+    authBtn.textContent = 'Login';
     if (planLabel) planLabel.style.display = 'none';
   }
 }
@@ -334,6 +410,7 @@ function showPage(page) {
   });
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
   document.getElementById('nav-' + page)?.classList.add('active');
+  document.getElementById('nav-links')?.classList.remove('open');
   if (page === 'home') loadHomeWidgets();
   if (page === 'account') refreshAccountPage();
 }
@@ -388,10 +465,7 @@ async function loadHomeWatchlist() {
   const box = document.getElementById('home-watchlist');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML =
-      '<div class="empty-state">' +
-      (typeof t === 'function' ? t('home.watchlistEmpty') : 'Login and add tokens') +
-      '</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Войдите, чтобы сохранять избранное</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
     return;
   }
   try {
@@ -400,28 +474,14 @@ async function loadHomeWatchlist() {
     });
     const data = await res.json();
     if (!data.watchlist?.length) {
-      box.innerHTML =
-        '<div class="empty-state">' +
-        (typeof t === 'function' ? t('home.watchlistEmpty') : 'Watchlist empty') +
-        '</div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>Список пуст</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Открыть Scanner</button></div>';
       return;
     }
-    box.innerHTML =
-      '<div class="home-chip-row">' +
-      data.watchlist
-        .slice(0, 8)
-        .map(
-          item =>
-            '<button type="button" class="home-chip" onclick="rescan(\'' +
-            item.address +
-            '\')"><strong>' +
-            (item.symbol || 'TOKEN') +
-            '</strong></button>'
-        )
-        .join('') +
-      '</div>';
+    box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
+      '<button type="button" class="home-chip" onclick="rescan(\'' + item.address + '\')"><strong>' + (item.symbol || 'TOKEN') + '</strong></button>'
+    ).join('') + '</div>';
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Error</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
   }
 }
 
@@ -429,10 +489,7 @@ async function loadHomeHistory() {
   const box = document.getElementById('home-history');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML =
-      '<div class="empty-state">' +
-      (typeof t === 'function' ? t('home.historyEmpty') : 'No scans') +
-      '</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Войдите, чтобы видеть историю</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
     return;
   }
   try {
@@ -441,33 +498,20 @@ async function loadHomeHistory() {
     });
     const data = await res.json();
     if (!data.history?.length) {
-      box.innerHTML =
-        '<div class="empty-state">' +
-        (typeof t === 'function' ? t('home.historyEmpty') : 'No scans') +
-        '</div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>Пока нет сканов</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Сканировать</button></div>';
       return;
     }
-    box.innerHTML = data.history
-      .slice(0, 5)
-      .map(
-        h =>
-          '<div class="list-row"><div class="list-info"><strong>' +
-          (h.symbol || 'TOKEN') +
-          '</strong><small>Risk ' +
-          h.riskScore +
-          ' · ' +
-          new Date(h.scannedAt).toLocaleString() +
-          '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' +
-          h.address +
-          '\')">Open</button></div></div>'
-      )
-      .join('');
+    box.innerHTML = data.history.slice(0, 5).map(h =>
+      '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
+      '</strong><small>Risk ' + h.riskScore + ' · ' + new Date(h.scannedAt).toLocaleString() +
+      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address + '\')">Open</button></div></div>'
+    ).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Error</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
   }
 }
 
-// ===== WALLET =====
+// ===== WALLET / BYBIT =====
 async function connectWallet() {
   if (typeof window.ethereum === 'undefined') return alert('Install MetaMask');
   try {
@@ -492,28 +536,19 @@ async function analyzePortfolio(address) {
     });
     const data = await res.json();
     if (data.locked) {
-      content.innerHTML =
-        '<div class="locked-message"><p>Portfolio — Premium+</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>';
+      content.innerHTML = '<div class="locked-message"><p>Portfolio — Premium+</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>';
       return;
     }
     content.innerHTML =
       '<div class="metrics-grid">' +
-      '<div class="metric-card glass"><div class="metric-label">Value</div><div class="metric-value">$' +
-      data.totalValue.toLocaleString() +
-      '</div></div>' +
-      '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value">' +
-      data.portfolioRisk +
-      '/100</div></div>' +
-      '<div class="metric-card glass"><div class="metric-label">Tokens</div><div class="metric-value">' +
-      data.tokenCount +
-      '</div></div></div>';
+      '<div class="metric-card glass"><div class="metric-label">Value</div><div class="metric-value">$' + data.totalValue.toLocaleString() + '</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value">' + data.portfolioRisk + '/100</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Tokens</div><div class="metric-value">' + data.tokenCount + '</div></div></div>';
   } catch (e) {
     content.innerHTML = '<div class="error-card">Portfolio error</div>';
   }
 }
 
-// ===== BYBIT =====
 async function connectBybit(e) {
   e.preventDefault();
   const apiKey = document.getElementById('bybit-api-key').value.trim();
@@ -524,52 +559,28 @@ async function connectBybit(e) {
   try {
     const res = await fetch(API_BASE + '/api/exchanges/bybit', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + token
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ apiKey, apiSecret, limit: 15 })
     });
     const data = await res.json();
-    if (!data.success) {
-      alert(data.error || 'Error');
-      return;
-    }
-    bybitApiKey = apiKey;
-    bybitApiSecret = apiSecret;
-    bybitNextCursor = data.nextCursor;
+    if (!data.success) { alert(data.error || 'Error'); return; }
     document.getElementById('bybit-modal').style.display = 'none';
     document.getElementById('bybit-form').reset();
-    renderBybitData(data);
+    const container = document.getElementById('connected-exchanges');
+    if (container) {
+      const balancesHtml = (data.balances || []).map(b =>
+        '<span style="margin-right:1rem;">' + b.coin + ': <strong>' + b.equity + '</strong></span>'
+      ).join('') || 'No assets';
+      container.innerHTML =
+        '<div><strong>Bybit</strong> · $' + Number(data.totalEquityUsd).toLocaleString() + '</div>' +
+        '<div class="muted" style="margin-top:0.5rem;">' + balancesHtml + '</div>';
+    }
   } catch (err) {
     alert('Bybit connection failed');
   } finally {
     submitBtn.textContent = 'Connect';
     submitBtn.disabled = false;
   }
-}
-
-function renderBybitData(data) {
-  const container = document.getElementById('connected-exchanges');
-  if (!container) return;
-  const balancesHtml =
-    (data.balances || [])
-      .map(
-        b =>
-          '<span style="margin-right:1rem;">' +
-          b.coin +
-          ': <strong>' +
-          b.equity +
-          '</strong></span>'
-      )
-      .join('') || 'No assets';
-  container.innerHTML =
-    '<div><strong>Bybit</strong> · $' +
-    Number(data.totalEquityUsd).toLocaleString() +
-    '</div>' +
-    '<div class="muted" style="margin-top:0.5rem;">' +
-    balancesHtml +
-    '</div>';
 }
 
 // ===== NEWS =====
@@ -579,45 +590,28 @@ async function loadNews(source) {
   if (!grid) return;
   grid.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch(
-      API_BASE + '/api/news?source=' + encodeURIComponent(newsSource)
-    );
+    const res = await fetch(API_BASE + '/api/news?source=' + encodeURIComponent(newsSource));
     const data = await res.json();
     if (!data.success || !data.news?.length) {
       grid.innerHTML = '<div class="error-card">No news</div>';
       return;
     }
-    grid.innerHTML = data.news
-      .map(
-        item =>
-          '<a href="' +
-          (item.url || '#') +
-          '" target="_blank" rel="noopener" class="news-card glass">' +
-          '<div class="news-meta">' +
-          (item.source || '') +
-          (item.time ? ' · ' + item.time : '') +
-          '</div>' +
-          '<h3 class="news-title">' +
-          item.title +
-          '</h3></a>'
-      )
-      .join('');
+    grid.innerHTML = data.news.map(item =>
+      '<a href="' + (item.url || '#') + '" target="_blank" rel="noopener" class="news-card glass">' +
+      '<div class="news-meta">' + (item.source || '') + (item.time ? ' · ' + item.time : '') + '</div>' +
+      '<h3 class="news-title">' + item.title + '</h3></a>'
+    ).join('');
   } catch (e) {
     grid.innerHTML = '<div class="error-card">News error</div>';
   }
 }
 
-// ===== SCANNER =====
+// ===== SCAN =====
 async function startScan() {
   const address = document.getElementById('token-input').value.trim();
-  if (!address) {
-    return alert(typeof t === 'function' ? t('scanner.enterAddress') : 'Enter address');
-  }
+  if (!address) return alert('Enter address');
   const results = document.getElementById('results');
-  results.innerHTML =
-    '<div class="loading">' +
-    (typeof t === 'function' ? t('scanner.loading') : 'Loading...') +
-    '</div>';
+  results.innerHTML = '<div class="loading">Analyzing...</div>';
   const chatSec = document.getElementById('ai-chat-section');
   if (chatSec) chatSec.style.display = 'none';
   chatHistory = [];
@@ -628,11 +622,8 @@ async function startScan() {
     const data = await res.json();
     if (res.status === 429 || (data.error && String(data.error).includes('Лимит'))) {
       results.innerHTML =
-        '<div class="error-card">' +
-        (data.error || 'Limit reached') +
-        '<div style="margin-top:1rem;">' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Upgrade</button>' +
-        '</div></div>';
+        '<div class="error-card">' + (data.error || 'Limit reached') +
+        '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Upgrade</button></div></div>';
       refreshUsage();
       return;
     }
@@ -643,18 +634,15 @@ async function startScan() {
         el.textContent = 'Scans: ' + data.usage.used + '/' + lim;
       }
     }
-    lastScannedToken = {
-      address,
-      symbol: data.token?.symbol,
-      name: data.token?.name
+    lastScannedToken = { address, symbol: data.token?.symbol, name: data.token?.name };
+    lastPairMeta = {
+      pairAddress: data.token?.pairAddress || null,
+      chainId: data.token?.chainId || 'ethereum'
     };
     renderTokenPage(data);
     refreshUsage();
   } catch (e) {
-    results.innerHTML =
-      '<div class="error-card">' +
-      (typeof t === 'function' ? t('scanner.connectionError') : 'Error') +
-      '</div>';
+    results.innerHTML = '<div class="error-card">Connection error</div>';
   }
 }
 
@@ -701,51 +689,80 @@ function generateCandleAndVolumeData(currentPrice, timeframe) {
   return { candles, volumes };
 }
 
-function initCandleChart(currentPrice) {
+async function fetchRealCandles(pairAddress, chainId, tf) {
+  if (!pairAddress) return null;
+  const map = { '1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w' };
+  try {
+    const res = await fetch(
+      API_BASE + '/api/chart/' + encodeURIComponent(pairAddress) +
+      '?chain=' + encodeURIComponent(chainId || 'eth') +
+      '&tf=' + (map[tf] || '1h')
+    );
+    const data = await res.json();
+    if (!data.success || !data.candles?.length) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function initCandleChart(currentPrice) {
   const container = document.getElementById('candle-chart');
   if (!container || typeof LightweightCharts === 'undefined') return;
   container.innerHTML = '';
+  const bg = getComputedStyle(document.body).getPropertyValue('--bg2').trim() || '#141825';
   candleChart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: 400,
-    layout: { background: { color: '#141825' }, textColor: '#888' },
-    grid: {
-      vertLines: { color: '#1e2438' },
-      horzLines: { color: '#1e2438' }
-    },
+    layout: { background: { color: bg }, textColor: '#888' },
+    grid: { vertLines: { color: '#1e2438' }, horzLines: { color: '#1e2438' } },
     rightPriceScale: { borderColor: '#1e2438' },
     timeScale: { borderColor: '#1e2438', timeVisible: true }
   });
   candleSeries = candleChart.addCandlestickSeries({
-    upColor: '#00ffc8',
-    downColor: '#ff4d6a',
-    borderUpColor: '#00ffc8',
-    borderDownColor: '#ff4d6a',
-    wickUpColor: '#00ffc8',
-    wickDownColor: '#ff4d6a'
+    upColor: '#00ffc8', downColor: '#ff4d6a',
+    borderUpColor: '#00ffc8', borderDownColor: '#ff4d6a',
+    wickUpColor: '#00ffc8', wickDownColor: '#ff4d6a'
   });
   volumeSeries = candleChart.addHistogramSeries({
     priceFormat: { type: 'volume' },
     priceScaleId: 'volume',
     scaleMargins: { top: 0.75, bottom: 0 }
   });
-  candleChart.priceScale('volume').applyOptions({
-    scaleMargins: { top: 0.75, bottom: 0 }
-  });
-  const data = generateCandleAndVolumeData(currentPrice, currentTimeframe);
-  candleSeries.setData(data.candles);
-  volumeSeries.setData(data.volumes);
+  candleChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
+
+  let used = false;
+  if (lastPairMeta?.pairAddress) {
+    const real = await fetchRealCandles(lastPairMeta.pairAddress, lastPairMeta.chainId, currentTimeframe);
+    if (real?.candles?.length) {
+      candleSeries.setData(real.candles);
+      if (real.volumes?.length) volumeSeries.setData(real.volumes);
+      used = true;
+    }
+  }
+  if (!used) {
+    const data = generateCandleAndVolumeData(currentPrice || 1, currentTimeframe);
+    candleSeries.setData(data.candles);
+    volumeSeries.setData(data.volumes);
+  }
   candleChart.timeScale().fitContent();
   window.addEventListener('resize', () => {
-    if (candleChart && container) {
-      candleChart.applyOptions({ width: container.clientWidth });
-    }
+    if (candleChart && container) candleChart.applyOptions({ width: container.clientWidth });
   });
 }
 
-function updateCandleData(currentPrice) {
+async function updateCandleData(currentPrice) {
   if (!candleSeries || !volumeSeries) return;
-  const data = generateCandleAndVolumeData(currentPrice, currentTimeframe);
+  if (lastPairMeta?.pairAddress) {
+    const real = await fetchRealCandles(lastPairMeta.pairAddress, lastPairMeta.chainId, currentTimeframe);
+    if (real?.candles?.length) {
+      candleSeries.setData(real.candles);
+      if (real.volumes?.length) volumeSeries.setData(real.volumes);
+      candleChart.timeScale().fitContent();
+      return;
+    }
+  }
+  const data = generateCandleAndVolumeData(currentPrice || 1, currentTimeframe);
   candleSeries.setData(data.candles);
   volumeSeries.setData(data.volumes);
   candleChart.timeScale().fitContent();
@@ -760,46 +777,26 @@ function renderTokenPage(data) {
   const addr = lastScannedToken?.address || '';
   const adv = data.advanced || {};
 
+  lastPairMeta = {
+    pairAddress: tok.pairAddress || lastPairMeta?.pairAddress || null,
+    chainId: tok.chainId || lastPairMeta?.chainId || 'ethereum'
+  };
+
   document.getElementById('results').innerHTML =
     '<div class="token-header glass">' +
-    '<div class="token-left"><div class="token-icon">' +
-    (tok.symbol || 'TK').slice(0, 2) +
-    '</div><div><h1 class="token-title">' +
-    safe(tok.symbol) +
-    ' <span class="token-name">' +
-    safe(tok.name) +
-    '</span></h1><div class="token-price">$' +
-    safe(tok.price) +
-    '</div></div></div>' +
+    '<div class="token-left"><div class="token-icon">' + (tok.symbol || 'TK').slice(0, 2) + '</div>' +
+    '<div><h1 class="token-title">' + safe(tok.symbol) + ' <span class="token-name">' + safe(tok.name) + '</span></h1>' +
+    '<div class="token-price">$' + safe(tok.price) + '</div></div></div>' +
     '<div class="token-right">' +
-    '<div class="risk-pill risk-' +
-    (r.riskLevel || 'medium').toLowerCase() +
-    '">Risk ' +
-    safe(r.riskScore) +
-    '/100</div>' +
-    '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' +
-    safe(data.plan) +
-    '</div>' +
-    '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' +
-    addr +
-    '\',\'' +
-    (tok.symbol || '') +
-    '\',\'' +
-    (tok.name || '') +
-    '\')">+ Watchlist</button></div></div>' +
+    '<div class="risk-pill risk-' + (r.riskLevel || 'medium').toLowerCase() + '">Risk ' + safe(r.riskScore) + '/100</div>' +
+    '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
+    '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
+    '</div></div>' +
     '<div class="metrics-grid">' +
-    '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' +
-    formatNum(tok.marketCap || tok.fdv) +
-    '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">FDV</div><div class="metric-value">' +
-    formatNum(tok.fdv) +
-    '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">Volume 24h</div><div class="metric-value">' +
-    formatNum(tok.volume24h) +
-    '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">' +
-    formatNum(tok.liquidity) +
-    '</div></div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">FDV</div><div class="metric-value">' + formatNum(tok.fdv) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">Volume 24h</div><div class="metric-value">' + formatNum(tok.volume24h) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">' + formatNum(tok.liquidity) + '</div></div></div>' +
     '<div class="tabs">' +
     '<button type="button" class="tab active" data-tab="overview">Overview</button>' +
     '<button type="button" class="tab" data-tab="security">Security</button>' +
@@ -814,69 +811,37 @@ function renderTokenPage(data) {
         '<button type="button" class="tf-btn" data-tf="1D">1D</button>' +
         '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><p>График доступен в Premium</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p>График доступен в Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
-        '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' +
-        safe(adv.whaleConcentration) +
-        '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Buy/Sell</div><div class="metric-value">' +
-        safe(adv.buySellRatio) +
-        '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Volatility</div><div class="metric-value">' +
-        safe(adv.volatility) +
-        '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">' +
-        safe(adv.holderCount) +
-        '</div></div></div>'
-      : isPrem
-        ? '<div class="locked-message glass" style="margin-top:1rem;"><p>Whale-метрики — в Pro</p>' +
-          '<button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Открыть Pro</button></div>'
-        : '') +
+        '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Buy/Sell</div><div class="metric-value">' + safe(adv.buySellRatio) + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Volatility</div><div class="metric-value">' + safe(adv.volatility) + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">' + safe(adv.holderCount) + '</div></div></div>'
+      : (isPrem
+        ? '<div class="locked-message glass" style="margin-top:1rem;"><p>Whale-метрики — в Pro</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Открыть Pro</button></div>'
+        : '')) +
     '</div>' +
     '<div class="tab-pane" id="security">' +
     (isPrem
       ? '<div class="metrics-grid">' +
-        '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' +
-        (data.security?.contractVerified ? 'Verified' : 'Not verified') +
-        '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' +
-        safe(data.security?.scamProbability) +
-        '%</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' +
-        (r.riskLevel || '').toLowerCase() +
-        '">' +
-        safe(r.riskLevel) +
-        '</div></div></div>'
-      : '<div class="locked-message glass"><p>Security-отчёт — в Premium</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+        '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
+      : '<div class="locked-message glass"><p>Security — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
-    '<h3>AI: <span class="verdict">' +
-    safe(ai.verdict) +
-    '</span></h3>' +
-    '<p style="margin:1rem 0;line-height:1.65;">' +
-    safe(ai.text) +
-    '</p>' +
-    '<div class="muted">Confidence: ' +
-    safe(ai.confidence) +
-    '%</div></div></div>' +
+    '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
+    '<p style="margin:1rem 0;line-height:1.65;">' + safe(ai.text) + '</p>' +
+    '<div class="muted">Confidence: ' + safe(ai.confidence) + '%</div></div></div>' +
     '<div class="tab-pane" id="links">' +
     (isPrem && data.projectLinks
       ? '<div class="home-chip-row">' +
-        (data.projectLinks.website
-          ? '<a class="home-chip" href="' + data.projectLinks.website + '" target="_blank">Website</a>'
-          : '') +
-        (data.projectLinks.twitter
-          ? '<a class="home-chip" href="' + data.projectLinks.twitter + '" target="_blank">Twitter</a>'
-          : '') +
-        (data.projectLinks.telegram
-          ? '<a class="home-chip" href="' + data.projectLinks.telegram + '" target="_blank">Telegram</a>'
-          : '') +
+        (data.projectLinks.website ? '<a class="home-chip" href="' + data.projectLinks.website + '" target="_blank">Website</a>' : '') +
+        (data.projectLinks.twitter ? '<a class="home-chip" href="' + data.projectLinks.twitter + '" target="_blank">Twitter</a>' : '') +
+        (data.projectLinks.telegram ? '<a class="home-chip" href="' + data.projectLinks.telegram + '" target="_blank">Telegram</a>' : '') +
         '</div>'
-      : '<div class="locked-message glass"><p>Ссылки проекта — в Premium</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p>Links — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     '</div></div>';
 
   document.querySelectorAll('.tab').forEach(tab => {
@@ -982,7 +947,7 @@ async function loadHistory() {
   const box = document.getElementById('history-content');
   if (!box) return;
   if (!user) {
-    box.innerHTML = '<div class="empty-state">Login</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
     return;
   }
   try {
@@ -991,26 +956,16 @@ async function loadHistory() {
     });
     const data = await res.json();
     if (!data.history?.length) {
-      box.innerHTML = '<div class="empty-state">Empty</div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>Empty</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scan</button></div>';
       return;
     }
-    box.innerHTML = data.history
-      .map(
-        h =>
-          '<div class="list-row"><div class="list-info"><strong>' +
-          (h.symbol || 'TOKEN') +
-          '</strong><small>' +
-          (h.address || '').slice(0, 12) +
-          '... · Risk ' +
-          h.riskScore +
-          '</small></div><div class="list-actions">' +
-          '<button type="button" class="btn-sm" onclick="rescan(\'' +
-          h.address +
-          '\')">Scan</button></div></div>'
-      )
-      .join('');
+    box.innerHTML = data.history.map(h =>
+      '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
+      '</strong><small>' + (h.address || '').slice(0, 12) + '... · Risk ' + h.riskScore +
+      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address + '\')">Scan</button></div></div>'
+    ).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Error</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
   }
 }
 
@@ -1024,7 +979,7 @@ async function loadWatchlist() {
   const box = document.getElementById('watchlist-content');
   if (!box) return;
   if (!user) {
-    box.innerHTML = '<div class="empty-state">Login</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
     return;
   }
   try {
@@ -1033,27 +988,17 @@ async function loadWatchlist() {
     });
     const data = await res.json();
     if (!data.watchlist?.length) {
-      box.innerHTML = '<div class="empty-state">Empty</div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>Empty</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
       return;
     }
-    box.innerHTML = data.watchlist
-      .map(
-        item =>
-          '<div class="list-row"><div class="list-info"><strong>' +
-          item.symbol +
-          '</strong><small>' +
-          item.address +
-          '</small></div><div class="list-actions">' +
-          '<button type="button" class="btn-sm" onclick="rescan(\'' +
-          item.address +
-          '\')">Scan</button>' +
-          '<button type="button" class="btn-sm danger" onclick="removeWatch(\'' +
-          item.address +
-          '\')">Remove</button></div></div>'
-      )
-      .join('');
+    box.innerHTML = data.watchlist.map(item =>
+      '<div class="list-row"><div class="list-info"><strong>' + item.symbol +
+      '</strong><small>' + item.address + '</small></div><div class="list-actions">' +
+      '<button type="button" class="btn-sm" onclick="rescan(\'' + item.address + '\')">Scan</button>' +
+      '<button type="button" class="btn-sm danger" onclick="removeWatch(\'' + item.address + '\')">Remove</button></div></div>'
+    ).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Error</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
   }
 }
 
@@ -1063,10 +1008,7 @@ async function addWatch(address, symbol, name) {
   try {
     const res = await fetch(API_BASE + '/api/watchlist', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + token
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ address, symbol, name })
     });
     const data = await res.json();
@@ -1087,12 +1029,12 @@ async function removeWatch(address) {
   loadHomeWatchlist();
 }
 
-// ===== ALERTS + TELEGRAM =====
+// ===== ALERTS / TELEGRAM =====
 async function loadAlerts() {
   const box = document.getElementById('alerts-content');
   if (!box) return;
   if (!user) {
-    box.innerHTML = '<div class="empty-state">Login</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
     return;
   }
   try {
@@ -1101,31 +1043,17 @@ async function loadAlerts() {
     });
     const data = await res.json();
     if (!data.alerts?.length) {
-      box.innerHTML =
-        '<div class="empty-state">' +
-        (typeof t === 'function' ? t('alerts.empty') : 'No alerts') +
-        '</div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>No alerts yet</p></div>';
     } else {
-      box.innerHTML = data.alerts
-        .map(
-          a =>
-            '<div class="list-row"><div class="list-info"><strong>' +
-            a.symbol +
-            ' · ' +
-            a.type +
-            '</strong><small>' +
-            a.address.slice(0, 12) +
-            '... · ' +
-            a.value +
-            '</small></div><div class="list-actions">' +
-            '<button type="button" class="btn-sm danger" onclick="removeAlertItem(\'' +
-            a.id +
-            '\')">Delete</button></div></div>'
-        )
-        .join('');
+      box.innerHTML = data.alerts.map(a =>
+        '<div class="list-row"><div class="list-info"><strong>' + a.symbol + ' · ' + a.type +
+        '</strong><small>' + a.address.slice(0, 12) + '... · ' + a.value +
+        '</small></div><div class="list-actions">' +
+        '<button type="button" class="btn-sm danger" onclick="removeAlertItem(\'' + a.id + '\')">Delete</button></div></div>'
+      ).join('');
     }
   } catch (e) {
-    box.innerHTML = '<div class="empty-state">Error</div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
   }
 }
 
@@ -1138,10 +1066,7 @@ async function createAlert() {
   if (!address || value === '') return alert('Fill address and value');
   const res = await fetch(API_BASE + '/api/alerts', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + token
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
     body: JSON.stringify({ type, address, symbol, value })
   });
   const data = await res.json();
@@ -1169,29 +1094,22 @@ async function refreshTelegramStatus() {
     const st = document.getElementById('tg-status');
     const btn = document.getElementById('tg-connect-btn');
     if (!st || !btn) return;
-
     if (data.channelUrl) {
       window.TG_CHANNEL_URL = data.channelUrl;
       const cta = document.getElementById('tg-channel-cta');
       if (cta) {
-        cta.innerHTML =
-          'Канал: <a class="link-more" href="' +
-          data.channelUrl +
-          '" target="_blank" rel="noopener">подписаться</a>';
+        cta.innerHTML = 'Канал: <a class="link-more" href="' + data.channelUrl + '" target="_blank" rel="noopener">подписаться</a>';
       }
     }
-
     if (data.linked) {
-      st.textContent = typeof t === 'function' ? t('alerts.linked') : 'Connected ✓';
+      st.textContent = 'Connected ✓';
       st.style.color = '#00ffc8';
-      btn.textContent =
-        typeof t === 'function' ? t('alerts.disconnectTg') : 'Disconnect';
+      btn.textContent = 'Disconnect';
       btn.onclick = disconnectTelegram;
     } else {
-      st.textContent = typeof t === 'function' ? t('alerts.notLinked') : 'Not connected';
-      st.style.color = '#888';
-      btn.textContent =
-        typeof t === 'function' ? t('alerts.connectTg') : 'Connect Telegram';
+      st.textContent = 'Not connected';
+      st.style.color = '';
+      btn.textContent = 'Connect Telegram';
       btn.onclick = connectTelegram;
     }
   } catch (e) {}
@@ -1213,13 +1131,9 @@ async function connectTelegram() {
     const code = document.getElementById('tg-code');
     if (code) code.textContent = data.code;
     if (data.channelUrl) {
-      window.TG_CHANNEL_URL = data.channelUrl;
       const cta = document.getElementById('tg-channel-cta');
       if (cta) {
-        cta.innerHTML =
-          'Канал: <a class="link-more" href="' +
-          data.channelUrl +
-          '" target="_blank" rel="noopener">подписаться</a>';
+        cta.innerHTML = 'Канал: <a class="link-more" href="' + data.channelUrl + '" target="_blank" rel="noopener">подписаться</a>';
       }
     }
   } catch (e) {
@@ -1247,9 +1161,7 @@ async function runCompare() {
   const a2 = document.getElementById('cmp-2').value.trim();
   const a3 = document.getElementById('cmp-3').value.trim();
   const addresses = [a1, a2, a3].filter(Boolean);
-  if (addresses.length < 2) {
-    return alert(typeof t === 'function' ? t('compare.need2') : 'Need 2 addresses');
-  }
+  if (addresses.length < 2) return alert('Need 2 addresses');
   const box = document.getElementById('compare-content');
   box.innerHTML = '<div class="loading">...</div>';
   try {
@@ -1266,32 +1178,14 @@ async function runCompare() {
       box.innerHTML = '<div class="error-card">' + data.error + '</div>';
       return;
     }
-    box.innerHTML =
-      '<div class="compare-grid">' +
-      data.tokens
-        .map(
-          tok =>
-            '<div class="compare-card glass"><h3>' +
-            tok.symbol +
-            '</h3>' +
-            '<div class="compare-metric"><span>Price</span><span>$' +
-            Number(tok.price).toFixed(6) +
-            '</span></div>' +
-            '<div class="compare-metric"><span>Liquidity</span><span>' +
-            formatNum(tok.liquidity) +
-            '</span></div>' +
-            '<div class="compare-metric"><span>Volume</span><span>' +
-            formatNum(tok.volume24h) +
-            '</span></div>' +
-            '<div class="compare-metric"><span>FDV</span><span>' +
-            formatNum(tok.fdv) +
-            '</span></div>' +
-            '<button type="button" class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' +
-            tok.address +
-            '\')">Scan</button></div>'
-        )
-        .join('') +
-      '</div>';
+    box.innerHTML = '<div class="compare-grid">' + data.tokens.map(tok =>
+      '<div class="compare-card glass"><h3>' + tok.symbol + '</h3>' +
+      '<div class="compare-metric"><span>Price</span><span>$' + Number(tok.price).toFixed(6) + '</span></div>' +
+      '<div class="compare-metric"><span>Liquidity</span><span>' + formatNum(tok.liquidity) + '</span></div>' +
+      '<div class="compare-metric"><span>Volume</span><span>' + formatNum(tok.volume24h) + '</span></div>' +
+      '<div class="compare-metric"><span>FDV</span><span>' + formatNum(tok.fdv) + '</span></div>' +
+      '<button type="button" class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' + tok.address + '\')">Scan</button></div>'
+    ).join('') + '</div>';
   } catch (e) {
     box.innerHTML = '<div class="error-card">Compare failed</div>';
   }
