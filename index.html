@@ -29,6 +29,7 @@
         </div>
         <span id="scan-usage" class="scan-usage">Scans: —</span>
         <span id="user-plan" class="plan-badge" style="display:none;"></span>
+        <button type="button" id="upgrade-nav-btn" class="upgrade-btn" onclick="openPricing('premium')">Upgrade</button>
         <button id="auth-btn" class="connect-btn" data-i18n="nav.login">Login</button>
       </div>
     </nav>
@@ -85,9 +86,9 @@
         <h1 data-i18n="scanner.title">Token Scanner</h1>
         <p data-i18n="scanner.subtitle">Paste contract address for AI risk analysis</p>
         <div class="plan-switcher">
-          <button class="plan-btn active" data-plan="free">Free</button>
-          <button class="plan-btn" data-plan="premium">Premium</button>
-          <button class="plan-btn" data-plan="pro">Pro</button>
+          <button type="button" class="plan-btn active" data-plan="free">Free</button>
+          <button type="button" class="plan-btn" data-plan="premium">Premium</button>
+          <button type="button" class="plan-btn" data-plan="pro">Pro</button>
         </div>
         <div class="search-box">
           <input type="text" id="token-input" data-i18n-placeholder="scanner.placeholder" placeholder="0x... contract address" />
@@ -99,13 +100,13 @@
       <section id="ai-chat-section" class="glass panel" style="display:none;margin-top:2rem;">
         <div class="section-head">
           <h3>AI Assistant</h3>
-          <button id="toggle-chat" class="btn-sm">Open chat</button>
+          <button id="toggle-chat" class="btn-sm" type="button">Open chat</button>
         </div>
         <div id="chat-window" style="display:none;flex-direction:column;margin-top:1rem;max-height:360px;">
           <div id="chat-messages" style="flex:1;overflow-y:auto;margin-bottom:0.8rem;min-height:120px;"></div>
           <div class="search-box">
             <input type="text" id="chat-input" placeholder="Ask about this token..." />
-            <button id="chat-send" class="upgrade-btn">Send</button>
+            <button id="chat-send" class="upgrade-btn" type="button">Send</button>
           </div>
         </div>
       </section>
@@ -140,7 +141,7 @@
             <option value="price_below">Price below</option>
           </select>
           <input type="number" id="alert-value" data-i18n-placeholder="alerts.value" placeholder="Value" step="any" />
-          <button id="alert-create" class="upgrade-btn" data-i18n="alerts.createBtn">Create</button>
+          <button id="alert-create" class="upgrade-btn" type="button" data-i18n="alerts.createBtn">Create</button>
         </div>
       </div>
       <div id="alerts-content" class="glass panel">
@@ -156,7 +157,7 @@
           <input type="text" id="cmp-1" placeholder="Address 1" />
           <input type="text" id="cmp-2" placeholder="Address 2" />
           <input type="text" id="cmp-3" placeholder="Address 3 (optional)" />
-          <button id="cmp-btn" class="upgrade-btn" data-i18n="compare.btn">Compare</button>
+          <button id="cmp-btn" class="upgrade-btn" type="button" data-i18n="compare.btn">Compare</button>
         </div>
       </div>
       <div id="compare-content"></div>
@@ -172,7 +173,8 @@
           <div class="account-row"><span data-i18n="account.email">Email</span><strong id="acc-email">—</strong></div>
           <div class="account-row"><span data-i18n="account.plan">Plan</span><strong id="acc-plan">—</strong></div>
           <div class="account-row"><span data-i18n="account.scans">Scans today</span><strong id="acc-scans">—</strong></div>
-          <button id="acc-logout" class="connect-btn full" data-i18n="nav.logout">Logout</button>
+          <button type="button" class="upgrade-btn full" style="margin-top:0.8rem;" onclick="openPricing('premium')">Сменить тариф</button>
+          <button id="acc-logout" class="connect-btn full" style="margin-top:0.6rem;" data-i18n="nav.logout">Logout</button>
         </div>
 
         <div class="account-card glass">
@@ -187,7 +189,7 @@
         <div class="account-card glass">
           <h3 data-i18n="alerts.telegram">Telegram</h3>
           <p id="tg-status" class="muted" data-i18n="alerts.notLinked">Not connected</p>
-          <button id="tg-connect-btn" class="connect-btn full" data-i18n="alerts.connectTg">Connect Telegram</button>
+          <button id="tg-connect-btn" class="connect-btn full" type="button" data-i18n="alerts.connectTg">Connect Telegram</button>
           <div id="tg-link-area" style="display:none;margin-top:1rem;">
             <a id="tg-deep-link" href="#" target="_blank" class="link-more">Open bot</a>
             <p class="muted small">Code: <span id="tg-code"></span></p>
@@ -199,7 +201,7 @@
           <div id="connected-exchanges">
             <p class="muted" data-i18n="home.nothingConnected">Nothing connected</p>
           </div>
-          <button id="connect-bybit-btn" class="connect-btn full" data-i18n="home.connectBybit">+ Connect Bybit</button>
+          <button id="connect-bybit-btn" class="connect-btn full" type="button" data-i18n="home.connectBybit">+ Connect Bybit</button>
         </div>
       </div>
     </div>
@@ -214,6 +216,7 @@
         <button type="button" class="auth-tab" data-mode="register" data-i18n="auth.register">Register</button>
       </div>
       <h2 id="auth-title" data-i18n="auth.login">Login</h2>
+      <p id="auth-hint" class="muted small" style="display:none;margin-bottom:0.6rem;"></p>
       <form id="auth-form">
         <input type="email" id="auth-email" data-i18n-placeholder="auth.email" placeholder="Email" required />
         <input type="password" id="auth-password" data-i18n-placeholder="auth.password" placeholder="Password" required minlength="6" />
@@ -234,6 +237,59 @@
         <input type="password" id="bybit-api-secret" placeholder="API Secret" required />
         <button type="submit" class="upgrade-btn full">Connect</button>
       </form>
+    </div>
+  </div>
+
+  <!-- PRICING MODAL -->
+  <div id="pricing-modal" class="modal" style="display:none;">
+    <div class="modal-content glass" style="max-width:820px;">
+      <button id="pricing-close" class="modal-close" type="button">&times;</button>
+      <h2 style="margin-bottom:0.4rem;">Выберите тариф</h2>
+      <p class="muted" style="margin-bottom:1.2rem;">Сначала выгода — аккаунт только чтобы сохранить доступ</p>
+
+      <div class="pricing-grid">
+        <div class="price-card glass" data-plan="free">
+          <div class="price-name">Free</div>
+          <div class="price-sum">$0</div>
+          <ul class="price-list">
+            <li>5 сканов / день</li>
+            <li>Базовый Risk Score</li>
+            <li>Краткий AI-вердикт</li>
+          </ul>
+          <button type="button" class="connect-btn full pricing-pick" data-plan="free">Остаться на Free</button>
+        </div>
+
+        <div class="price-card glass featured" data-plan="premium">
+          <div class="price-badge">Популярный</div>
+          <div class="price-name">Premium</div>
+          <div class="price-sum">$29<span>/мес</span></div>
+          <ul class="price-list">
+            <li>50 сканов / день</li>
+            <li>График + Security</li>
+            <li>Полный AI-отчёт</li>
+            <li>Watchlist + Alerts</li>
+            <li>Telegram-уведомления</li>
+          </ul>
+          <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Выбрать Premium</button>
+        </div>
+
+        <div class="price-card glass" data-plan="pro">
+          <div class="price-name">Pro</div>
+          <div class="price-sum">$79<span>/мес</span></div>
+          <ul class="price-list">
+            <li>Безлимит сканов</li>
+            <li>Всё из Premium</li>
+            <li>Whale / holders / volatility</li>
+            <li>AI-чат по токену</li>
+            <li>Bybit + приоритет</li>
+          </ul>
+          <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Выбрать Pro</button>
+        </div>
+      </div>
+
+      <p class="muted small" style="margin-top:1rem;text-align:center;">
+        Оплата (Stripe) — следующим этапом. Сейчас тариф активируется после входа (демо).
+      </p>
     </div>
   </div>
 
