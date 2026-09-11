@@ -34,7 +34,6 @@
       </div>
     </nav>
 
-    <!-- HOME -->
     <div id="page-home">
       <section class="hero">
         <h1 data-i18n="home.title">Institutional-grade Crypto Intelligence</h1>
@@ -75,12 +74,19 @@
       </section>
 
       <section class="home-block">
-        <h2 data-i18n="home.news">Latest News</h2>
+        <div class="section-head">
+          <h2 data-i18n="home.news">Latest News</h2>
+        </div>
+        <div class="news-filters" id="news-filters">
+          <button type="button" class="tf-btn active" data-source="all">All</button>
+          <button type="button" class="tf-btn" data-source="cryptopanic">CryptoPanic</button>
+          <button type="button" class="tf-btn" data-source="rss">Media</button>
+          <button type="button" class="tf-btn" data-source="x">X</button>
+        </div>
         <div class="news-grid" id="news-grid"></div>
       </section>
     </div>
 
-    <!-- SCANNER -->
     <div id="page-scanner" style="display:none;">
       <section class="scanner-hero">
         <h1 data-i18n="scanner.title">Token Scanner</h1>
@@ -112,7 +118,6 @@
       </section>
     </div>
 
-    <!-- WATCHLIST -->
     <div id="page-watchlist" style="display:none;">
       <h1 data-i18n="nav.watchlist">Watchlist</h1>
       <div id="watchlist-content" class="glass panel">
@@ -120,7 +125,6 @@
       </div>
     </div>
 
-    <!-- HISTORY -->
     <div id="page-history" style="display:none;">
       <h1 data-i18n="nav.history">History</h1>
       <div id="history-content" class="glass panel">
@@ -128,7 +132,6 @@
       </div>
     </div>
 
-    <!-- ALERTS -->
     <div id="page-alerts" style="display:none;">
       <h1 data-i18n="alerts.title">Alerts</h1>
       <div class="glass panel" style="margin-bottom:1.5rem;">
@@ -149,7 +152,6 @@
       </div>
     </div>
 
-    <!-- COMPARE -->
     <div id="page-compare" style="display:none;">
       <h1 data-i18n="compare.title">Compare Tokens</h1>
       <div class="glass panel" style="margin-bottom:1.5rem;">
@@ -163,7 +165,6 @@
       <div id="compare-content"></div>
     </div>
 
-    <!-- ACCOUNT -->
     <div id="page-account" style="display:none;">
       <h1 data-i18n="nav.account">Account</h1>
       <p class="page-sub" data-i18n="account.subtitle">Profile, plan, integrations</p>
@@ -194,6 +195,7 @@
             <a id="tg-deep-link" href="#" target="_blank" class="link-more">Open bot</a>
             <p class="muted small">Code: <span id="tg-code"></span></p>
           </div>
+          <p class="muted small" id="tg-channel-cta" style="margin-top:0.8rem;"></p>
         </div>
 
         <div class="account-card glass">
@@ -207,7 +209,6 @@
     </div>
   </div>
 
-  <!-- AUTH MODAL -->
   <div id="auth-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
       <button id="modal-close" class="modal-close" type="button">&times;</button>
@@ -226,7 +227,6 @@
     </div>
   </div>
 
-  <!-- BYBIT MODAL -->
   <div id="bybit-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
       <button id="bybit-modal-close" class="modal-close" type="button">&times;</button>
@@ -240,13 +240,11 @@
     </div>
   </div>
 
-  <!-- PRICING MODAL -->
   <div id="pricing-modal" class="modal" style="display:none;">
     <div class="modal-content glass" style="max-width:820px;">
       <button id="pricing-close" class="modal-close" type="button">&times;</button>
       <h2 style="margin-bottom:0.4rem;">Выберите тариф</h2>
       <p class="muted" style="margin-bottom:1.2rem;">Сначала выгода — аккаунт только чтобы сохранить доступ</p>
-
       <div class="pricing-grid">
         <div class="price-card glass" data-plan="free">
           <div class="price-name">Free</div>
@@ -258,7 +256,6 @@
           </ul>
           <button type="button" class="connect-btn full pricing-pick" data-plan="free">Остаться на Free</button>
         </div>
-
         <div class="price-card glass featured" data-plan="premium">
           <div class="price-badge">Популярный</div>
           <div class="price-name">Premium</div>
@@ -272,7 +269,6 @@
           </ul>
           <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Выбрать Premium</button>
         </div>
-
         <div class="price-card glass" data-plan="pro">
           <div class="price-name">Pro</div>
           <div class="price-sum">$79<span>/мес</span></div>
@@ -286,7 +282,6 @@
           <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Выбрать Pro</button>
         </div>
       </div>
-
       <p class="muted small" style="margin-top:1rem;text-align:center;">
         Оплата (Stripe) — следующим этапом. Сейчас тариф активируется после входа (демо).
       </p>
@@ -295,6 +290,7 @@
 
   <script>
     window.API_BASE = window.location.origin;
+    window.TG_CHANNEL_URL = '';
   </script>
   <script src="i18n.js"></script>
   <script src="app.js"></script>
