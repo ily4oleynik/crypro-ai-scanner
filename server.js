@@ -18,7 +18,7 @@ let newsService = null;
 try {
   newsService = require('./news');
 } catch (e) {
-  console.warn('[News] news.js not found — using fallback');
+  console.warn('[News] news.js not found — CryptoPanic fallback');
 }
 
 const app = express();
@@ -115,7 +115,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
     }
 
     const dexResponse = await axios.get(
-      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+      { timeout: 10000 }
     );
     const pair = dexResponse.data.pairs?.[0] || {};
 
@@ -130,7 +131,10 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
       isVerified: !!pair.info?.imageUrl,
       website: pair.info?.websites?.[0]?.url || null,
       twitter: pair.info?.socials?.find((s) => s.type === 'twitter')?.url || null,
-      telegram: pair.info?.socials?.find((s) => s.type === 'telegram')?.url || null
+      telegram: pair.info?.socials?.find((s) => s.type === 'telegram')?.url || null,
+      pairAddress: pair.pairAddress || null,
+      chainId: pair.chainId || 'ethereum',
+      dexId: pair.dexId || null
     };
 
     let riskScore = 58;
@@ -169,7 +173,9 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
           name: base.name,
           price: base.price,
           liquidity: base.liquidity,
-          volume24h: base.volume24h
+          volume24h: base.volume24h,
+          pairAddress: base.pairAddress,
+          chainId: base.chainId
         },
         risk: { riskScore, riskLevel, confidence },
         ai: { text: aiText, confidence, verdict: aiVerdict },
@@ -282,7 +288,9 @@ app.post('/api/compare', authMiddleware, async (req, res) => {
   try {
     const results = [];
     for (const addr of addresses) {
-      const dex = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${addr}`);
+      const dex = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, {
+        timeout: 8000
+      });
       const pair = dex.data.pairs?.[0] || {};
       results.push({
         address: addr,
@@ -344,17 +352,17 @@ app.post('/api/telegram/digest-test', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== NEWS (multi-source) =====
+// ===== NEWS =====
 app.get('/api/news', async (req, res) => {
   try {
     const source = (req.query.source || 'all').toLowerCase();
     let news = [];
-
     if (newsService && typeof newsService.fetchNews === 'function') {
       news = await newsService.fetchNews(30);
     } else {
       const response = await axios.get(
-        'https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&kind=news&limit=15'
+        'https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&kind=news&limit=15',
+        { timeout: 8000 }
       );
       news = (response.data.results || []).map((item) => ({
         title: item.title,
@@ -369,32 +377,148 @@ app.get('/api/news', async (req, res) => {
         platform: 'cryptopanic'
       }));
     }
-
     if (source !== 'all') {
       news = news.filter(
         (n) =>
           (n.platform && n.platform === source) ||
-          (n.source && n.source.toLowerCase().includes(source))
+          (n.source && String(n.source).toLowerCase().includes(source))
       );
     }
-
     res.json({ success: true, news });
   } catch (e) {
     res.json({
       success: true,
-      news: [
-        {
-          title: 'Bitcoin consolidates above key support',
-          source: 'System',
-          url: '#',
-          time: '',
-          platform: 'system'
-        }
+      news: [{ title: 'News temporarily unavailable', source: 'System', url: '#', time: '', platform: 'system' }]
+    });
+  }
+});
+
+// ===== TICKER =====
+app.get('/api/ticker', async (req, res) => {
+  try {
+    const r = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+      params: {
+        ids: 'bitcoin,ethereum,solana',
+        vs_currencies: 'usd',
+        include_24hr_change: 'true'
+      },
+      timeout: 8000
+    });
+    const d = r.data || {};
+    res.json({
+      success: true,
+      ticker: [
+        { id: 'btc', symbol: 'BTC', price: d.bitcoin?.usd ?? null, change24h: d.bitcoin?.usd_24h_change ?? null },
+        { id: 'eth', symbol: 'ETH', price: d.ethereum?.usd ?? null, change24h: d.ethereum?.usd_24h_change ?? null },
+        { id: 'sol', symbol: 'SOL', price: d.solana?.usd ?? null, change24h: d.solana?.usd_24h_change ?? null }
+      ]
+    });
+  } catch (e) {
+    res.json({
+      success: true,
+      ticker: [
+        { id: 'btc', symbol: 'BTC', price: null, change24h: null },
+        { id: 'eth', symbol: 'ETH', price: null, change24h: null },
+        { id: 'sol', symbol: 'SOL', price: null, change24h: null }
       ]
     });
   }
 });
 
+// ===== TRENDING =====
+app.get('/api/trending', async (req, res) => {
+  try {
+    const r = await axios.get('https://api.dexscreener.com/token-boosts/top/v1', { timeout: 8000 });
+    const list = Array.isArray(r.data) ? r.data : [];
+    const tokens = list.slice(0, 12).map((item) => ({
+      address: item.tokenAddress || '',
+      chainId: item.chainId || ''
+    }));
+
+    if (!tokens.length) {
+      return res.json({
+        success: true,
+        tokens: [
+          { address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', symbol: 'LINK', name: 'Chainlink', chainId: 'ethereum', price: null }
+        ]
+      });
+    }
+
+    const enriched = [];
+    for (const t of tokens.slice(0, 8)) {
+      try {
+        const dx = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${t.address}`, { timeout: 5000 });
+        const pair = dx.data?.pairs?.[0];
+        enriched.push({
+          address: t.address,
+          chainId: t.chainId,
+          symbol: pair?.baseToken?.symbol || 'TOKEN',
+          name: pair?.baseToken?.name || '',
+          price: pair?.priceUsd || null,
+          volume24h: pair?.volume?.h24 || null,
+          liquidity: pair?.liquidity?.usd || null
+        });
+      } catch {
+        enriched.push({ address: t.address, chainId: t.chainId, symbol: 'TOKEN', name: '', price: null });
+      }
+    }
+    res.json({ success: true, tokens: enriched });
+  } catch (e) {
+    res.json({
+      success: true,
+      tokens: [
+        { address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', symbol: 'LINK', name: 'Chainlink', price: null }
+      ]
+    });
+  }
+});
+
+// ===== CHART (GeckoTerminal) =====
+app.get('/api/chart/:pairAddress', async (req, res) => {
+  try {
+    const pairAddress = req.params.pairAddress;
+    const chainRaw = (req.query.chain || 'eth').toLowerCase();
+    const tf = (req.query.tf || '1h').toLowerCase();
+    const chainMap = {
+      eth: 'eth',
+      ethereum: 'eth',
+      bsc: 'bsc',
+      base: 'base',
+      arbitrum: 'arbitrum',
+      polygon: 'polygon_pos',
+      solana: 'solana'
+    };
+    const network = chainMap[chainRaw] || 'eth';
+    const gtTf = tf === '1d' || tf === '1w' ? 'day' : 'hour';
+    const aggregate = tf === '4h' ? 4 : 1;
+    const url =
+      `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${pairAddress}/ohlcv/${gtTf}` +
+      `?aggregate=${aggregate}&limit=100`;
+    const r = await axios.get(url, { timeout: 10000, headers: { Accept: 'application/json' } });
+    const raw = r.data?.data?.attributes?.ohlcv_list || [];
+    const candles = raw
+      .map((row) => ({
+        time: Number(row[0]),
+        open: Number(row[1]),
+        high: Number(row[2]),
+        low: Number(row[3]),
+        close: Number(row[4])
+      }))
+      .filter((c) => c.time && c.close)
+      .sort((a, b) => a.time - b.time);
+    const volumes = raw.map((row) => ({
+      time: Number(row[0]),
+      value: Number(row[5]) || 0,
+      color: Number(row[4]) >= Number(row[1]) ? 'rgba(0, 255, 200, 0.55)' : 'rgba(255, 77, 106, 0.55)'
+    }));
+    res.json({ success: true, source: 'geckoterminal', candles, volumes });
+  } catch (e) {
+    console.error('[Chart]', e.response?.status || e.message);
+    res.json({ success: false, error: 'chart_unavailable', candles: [], volumes: [] });
+  }
+});
+
+// ===== PORTFOLIO =====
 app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
   const plan = (req.user?.plan || 'free').toLowerCase();
   if (plan === 'free') {
@@ -408,14 +532,13 @@ app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
     { symbol: 'PEPE', name: 'Pepe', value: 480, riskLevel: 'HIGH', riskScore: 78 }
   ];
   const totalValue = tokens.reduce((s, t) => s + t.value, 0);
-  const highRiskCount = tokens.filter((t) => t.riskLevel === 'HIGH').length;
   const avgRisk = Math.round(tokens.reduce((s, t) => s + t.riskScore, 0) / tokens.length);
   res.json({
     success: true,
     plan,
     totalValue,
     tokenCount: tokens.length,
-    highRiskCount,
+    highRiskCount: tokens.filter((t) => t.riskLevel === 'HIGH').length,
     portfolioRisk: avgRisk,
     riskLevel: avgRisk > 60 ? 'HIGH' : avgRisk > 35 ? 'MEDIUM' : 'LOW',
     tokens,
@@ -423,6 +546,7 @@ app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
   });
 });
 
+// ===== BYBIT =====
 app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
   const { apiKey, apiSecret, cursor = '', limit = 20 } = req.body;
   if (!apiKey || !apiSecret) {
@@ -467,27 +591,25 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
     const totalEquity = coins.reduce((sum, c) => sum + parseFloat(c.usdValue || 0), 0);
     const rawTrades = tradesRes.data?.result?.list || [];
     const nextCursor = tradesRes.data?.result?.nextPageCursor || null;
-    const trades = rawTrades.map((t) => ({
-      symbol: t.symbol,
-      side: t.side,
-      price: parseFloat(t.execPrice),
-      qty: parseFloat(t.execQty),
-      value: parseFloat(t.execValue || t.execPrice * t.execQty),
-      fee: parseFloat(t.execFee || 0),
-      time: new Date(parseInt(t.execTime)).toLocaleString('ru-RU'),
-      orderId: t.orderId
-    }));
     res.json({
       success: true,
       exchange: 'Bybit',
       totalEquityUsd: Math.round(totalEquity * 100) / 100,
       balances,
-      trades,
+      trades: rawTrades.map((t) => ({
+        symbol: t.symbol,
+        side: t.side,
+        price: parseFloat(t.execPrice),
+        qty: parseFloat(t.execQty),
+        value: parseFloat(t.execValue || t.execPrice * t.execQty),
+        fee: parseFloat(t.execFee || 0),
+        time: new Date(parseInt(t.execTime)).toLocaleString('ru-RU'),
+        orderId: t.orderId
+      })),
       nextCursor,
       hasMore: !!nextCursor
     });
   } catch (error) {
-    console.error('Bybit error:', error.response?.data || error.message);
     res.status(500).json({
       success: false,
       error: error.response?.data?.retMsg || error.message || 'Ошибка Bybit'
@@ -495,6 +617,7 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
   }
 });
 
+// ===== AI CHAT =====
 app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   if ((req.user?.plan || 'free').toLowerCase() !== 'pro') {
     return res.status(403).json({ success: false, error: 'AI-чат доступен только на тарифе Pro' });
@@ -511,7 +634,7 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   }
 });
 
-// SPA fallback (Express 5 safe)
+// SPA fallback
 app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api')) return next();
