@@ -4,16 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Crypto AI Scanner</title>
+  <meta property="og:title" content="Crypto AI Scanner" />
+  <meta property="og:description" content="AI risk analysis · Watchlist · Telegram alerts" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
+  <div id="live-ticker" class="live-ticker">
+    <div class="ticker-inner" id="ticker-inner">
+      <span class="ticker-item">Loading markets…</span>
+    </div>
+  </div>
+
   <div class="container">
     <nav class="top-nav">
-      <div class="logo">Crypto AI Scanner</div>
-      <div class="nav-links">
+      <div class="nav-left">
+        <button type="button" id="nav-burger" class="nav-burger" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="logo">Crypto AI Scanner</div>
+      </div>
+      <div class="nav-links" id="nav-links">
         <a href="#" id="nav-home" class="active" data-i18n="nav.home">Home</a>
         <a href="#" id="nav-scanner" data-i18n="nav.scanner">Scanner</a>
         <a href="#" id="nav-watchlist" data-i18n="nav.watchlist">Watchlist</a>
@@ -27,13 +40,15 @@
           <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
           <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
         </div>
+        <button type="button" id="theme-toggle" class="lang-btn" title="Theme">☾</button>
         <span id="scan-usage" class="scan-usage">Scans: —</span>
         <span id="user-plan" class="plan-badge" style="display:none;"></span>
-        <button type="button" id="upgrade-nav-btn" class="upgrade-btn" onclick="openPricing('premium')">Upgrade</button>
+        <button type="button" class="upgrade-btn" onclick="openPricing('premium')">Upgrade</button>
         <button id="auth-btn" class="connect-btn" data-i18n="nav.login">Login</button>
       </div>
     </nav>
 
+    <!-- HOME -->
     <div id="page-home">
       <section class="hero">
         <h1 data-i18n="home.title">Institutional-grade Crypto Intelligence</h1>
@@ -55,11 +70,23 @@
 
       <section class="home-block">
         <div class="section-head">
+          <h2>Trending</h2>
+          <button type="button" class="link-more" id="refresh-trending">Refresh</button>
+        </div>
+        <div id="trending-grid" class="trending-grid">
+          <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+      </section>
+
+      <section class="home-block">
+        <div class="section-head">
           <h2 data-i18n="home.watchlist">Your Watchlist</h2>
           <a href="#" id="home-watchlist-all" class="link-more" data-i18n="home.openAll">Open all</a>
         </div>
         <div id="home-watchlist" class="glass panel">
-          <div class="empty-state" data-i18n="home.watchlistEmpty">Login and add tokens from Scanner</div>
+          <div class="empty-state-cta">
+            <p data-i18n="home.watchlistEmpty">Login and add tokens from Scanner</p>
+          </div>
         </div>
       </section>
 
@@ -69,7 +96,9 @@
           <a href="#" id="home-history-all" class="link-more" data-i18n="home.history">History</a>
         </div>
         <div id="home-history" class="glass panel">
-          <div class="empty-state" data-i18n="home.historyEmpty">No recent scans yet</div>
+          <div class="empty-state-cta">
+            <p data-i18n="home.historyEmpty">No recent scans yet</p>
+          </div>
         </div>
       </section>
 
@@ -87,6 +116,7 @@
       </section>
     </div>
 
+    <!-- SCANNER -->
     <div id="page-scanner" style="display:none;">
       <section class="scanner-hero">
         <h1 data-i18n="scanner.title">Token Scanner</h1>
@@ -102,7 +132,6 @@
         </div>
       </section>
       <div id="results"></div>
-
       <section id="ai-chat-section" class="glass panel" style="display:none;margin-top:2rem;">
         <div class="section-head">
           <h3>AI Assistant</h3>
@@ -120,16 +149,12 @@
 
     <div id="page-watchlist" style="display:none;">
       <h1 data-i18n="nav.watchlist">Watchlist</h1>
-      <div id="watchlist-content" class="glass panel">
-        <div class="empty-state">Login to use watchlist</div>
-      </div>
+      <div id="watchlist-content" class="glass panel"></div>
     </div>
 
     <div id="page-history" style="display:none;">
       <h1 data-i18n="nav.history">History</h1>
-      <div id="history-content" class="glass panel">
-        <div class="empty-state">Login to see history</div>
-      </div>
+      <div id="history-content" class="glass panel"></div>
     </div>
 
     <div id="page-alerts" style="display:none;">
@@ -137,19 +162,17 @@
       <div class="glass panel" style="margin-bottom:1.5rem;">
         <h3 data-i18n="alerts.create">Create alert</h3>
         <div class="form-grid">
-          <input type="text" id="alert-address" data-i18n-placeholder="alerts.address" placeholder="Token address 0x..." />
-          <input type="text" id="alert-symbol" data-i18n-placeholder="alerts.symbol" placeholder="Symbol (e.g. LINK)" />
+          <input type="text" id="alert-address" placeholder="Token address 0x..." />
+          <input type="text" id="alert-symbol" placeholder="Symbol (e.g. LINK)" />
           <select id="alert-type">
             <option value="price_above">Price above</option>
             <option value="price_below">Price below</option>
           </select>
-          <input type="number" id="alert-value" data-i18n-placeholder="alerts.value" placeholder="Value" step="any" />
-          <button id="alert-create" class="upgrade-btn" type="button" data-i18n="alerts.createBtn">Create</button>
+          <input type="number" id="alert-value" placeholder="Value" step="any" />
+          <button id="alert-create" class="upgrade-btn" type="button">Create</button>
         </div>
       </div>
-      <div id="alerts-content" class="glass panel">
-        <div class="empty-state" data-i18n="alerts.empty">No alerts yet</div>
-      </div>
+      <div id="alerts-content" class="glass panel"></div>
     </div>
 
     <div id="page-compare" style="display:none;">
@@ -159,7 +182,7 @@
           <input type="text" id="cmp-1" placeholder="Address 1" />
           <input type="text" id="cmp-2" placeholder="Address 2" />
           <input type="text" id="cmp-3" placeholder="Address 3 (optional)" />
-          <button id="cmp-btn" class="upgrade-btn" type="button" data-i18n="compare.btn">Compare</button>
+          <button id="cmp-btn" class="upgrade-btn" type="button">Compare</button>
         </div>
       </div>
       <div id="compare-content"></div>
@@ -167,66 +190,61 @@
 
     <div id="page-account" style="display:none;">
       <h1 data-i18n="nav.account">Account</h1>
-      <p class="page-sub" data-i18n="account.subtitle">Profile, plan, integrations</p>
+      <p class="page-sub">Profile, plan, integrations</p>
       <div class="account-grid">
         <div class="account-card glass">
-          <h3 data-i18n="account.profile">Profile</h3>
-          <div class="account-row"><span data-i18n="account.email">Email</span><strong id="acc-email">—</strong></div>
-          <div class="account-row"><span data-i18n="account.plan">Plan</span><strong id="acc-plan">—</strong></div>
-          <div class="account-row"><span data-i18n="account.scans">Scans today</span><strong id="acc-scans">—</strong></div>
+          <h3>Profile</h3>
+          <div class="account-row"><span>Email</span><strong id="acc-email">—</strong></div>
+          <div class="account-row"><span>Plan</span><strong id="acc-plan">—</strong></div>
+          <div class="account-row"><span>Scans today</span><strong id="acc-scans">—</strong></div>
           <button type="button" class="upgrade-btn full" style="margin-top:0.8rem;" onclick="openPricing('premium')">Сменить тариф</button>
-          <button id="acc-logout" class="connect-btn full" style="margin-top:0.6rem;" data-i18n="nav.logout">Logout</button>
+          <button id="acc-logout" class="connect-btn full" style="margin-top:0.6rem;">Logout</button>
         </div>
-
         <div class="account-card glass">
-          <h3 data-i18n="account.wallet">Wallet</h3>
-          <p class="muted" data-i18n="account.walletHint">Connect wallet to view portfolio</p>
-          <button id="connect-wallet" class="connect-btn full" data-i18n="nav.wallet">Connect Wallet</button>
-          <div id="portfolio-section" style="display:none;margin-top:1rem;">
-            <div id="portfolio-content"></div>
-          </div>
+          <h3>Wallet</h3>
+          <p class="muted">Connect wallet to view portfolio</p>
+          <button id="connect-wallet" class="connect-btn full">Connect Wallet</button>
+          <div id="portfolio-section" style="display:none;margin-top:1rem;"><div id="portfolio-content"></div></div>
         </div>
-
         <div class="account-card glass">
-          <h3 data-i18n="alerts.telegram">Telegram</h3>
-          <p id="tg-status" class="muted" data-i18n="alerts.notLinked">Not connected</p>
-          <button id="tg-connect-btn" class="connect-btn full" type="button" data-i18n="alerts.connectTg">Connect Telegram</button>
+          <h3>Telegram</h3>
+          <p id="tg-status" class="muted">Not connected</p>
+          <button id="tg-connect-btn" class="connect-btn full" type="button">Connect Telegram</button>
           <div id="tg-link-area" style="display:none;margin-top:1rem;">
             <a id="tg-deep-link" href="#" target="_blank" class="link-more">Open bot</a>
             <p class="muted small">Code: <span id="tg-code"></span></p>
           </div>
           <p class="muted small" id="tg-channel-cta" style="margin-top:0.8rem;"></p>
         </div>
-
         <div class="account-card glass">
-          <h3 data-i18n="home.exchanges">Exchanges</h3>
-          <div id="connected-exchanges">
-            <p class="muted" data-i18n="home.nothingConnected">Nothing connected</p>
-          </div>
-          <button id="connect-bybit-btn" class="connect-btn full" type="button" data-i18n="home.connectBybit">+ Connect Bybit</button>
+          <h3>Exchanges</h3>
+          <div id="connected-exchanges"><p class="muted">Nothing connected</p></div>
+          <button id="connect-bybit-btn" class="connect-btn full" type="button">+ Connect Bybit</button>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- AUTH -->
   <div id="auth-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
       <button id="modal-close" class="modal-close" type="button">&times;</button>
       <div class="auth-tabs">
-        <button type="button" class="auth-tab active" data-mode="login" data-i18n="auth.login">Login</button>
-        <button type="button" class="auth-tab" data-mode="register" data-i18n="auth.register">Register</button>
+        <button type="button" class="auth-tab active" data-mode="login">Login</button>
+        <button type="button" class="auth-tab" data-mode="register">Register</button>
       </div>
-      <h2 id="auth-title" data-i18n="auth.login">Login</h2>
+      <h2 id="auth-title">Login</h2>
       <p id="auth-hint" class="muted small" style="display:none;margin-bottom:0.6rem;"></p>
       <form id="auth-form">
-        <input type="email" id="auth-email" data-i18n-placeholder="auth.email" placeholder="Email" required />
-        <input type="password" id="auth-password" data-i18n-placeholder="auth.password" placeholder="Password" required minlength="6" />
-        <button type="submit" id="auth-submit" class="upgrade-btn full" data-i18n="auth.submitLogin">Login</button>
+        <input type="email" id="auth-email" placeholder="Email" required />
+        <input type="password" id="auth-password" placeholder="Password" required minlength="6" />
+        <button type="submit" id="auth-submit" class="upgrade-btn full">Login</button>
       </form>
-      <p class="muted small" data-i18n="auth.demo">Demo: pro@test.com / pro123</p>
+      <p class="muted small">Demo: pro@test.com / pro123</p>
     </div>
   </div>
 
+  <!-- BYBIT -->
   <div id="bybit-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
       <button id="bybit-modal-close" class="modal-close" type="button">&times;</button>
@@ -240,6 +258,7 @@
     </div>
   </div>
 
+  <!-- PRICING -->
   <div id="pricing-modal" class="modal" style="display:none;">
     <div class="modal-content glass" style="max-width:820px;">
       <button id="pricing-close" class="modal-close" type="button">&times;</button>
@@ -265,7 +284,7 @@
             <li>График + Security</li>
             <li>Полный AI-отчёт</li>
             <li>Watchlist + Alerts</li>
-            <li>Telegram-уведомления</li>
+            <li>Telegram</li>
           </ul>
           <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Выбрать Premium</button>
         </div>
@@ -275,16 +294,41 @@
           <ul class="price-list">
             <li>Безлимит сканов</li>
             <li>Всё из Premium</li>
-            <li>Whale / holders / volatility</li>
-            <li>AI-чат по токену</li>
-            <li>Bybit + приоритет</li>
+            <li>Whale-метрики</li>
+            <li>AI-чат</li>
+            <li>Bybit</li>
           </ul>
           <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Выбрать Pro</button>
         </div>
       </div>
-      <p class="muted small" style="margin-top:1rem;text-align:center;">
-        Оплата (Stripe) — следующим этапом. Сейчас тариф активируется после входа (демо).
-      </p>
+      <p class="muted small" style="margin-top:1rem;text-align:center;">Stripe — следующим этапом. Сейчас демо-активация после входа.</p>
+    </div>
+  </div>
+
+  <!-- ONBOARDING -->
+  <div id="onboarding-modal" class="modal" style="display:none;">
+    <div class="modal-content glass" style="max-width:420px;">
+      <div class="ob-steps">
+        <div class="ob-step active" data-step="1">
+          <div class="ob-num">1</div>
+          <h3>Вставь адрес контракта</h3>
+          <p class="muted">Любой токен из DexScreener / Etherscan</p>
+        </div>
+        <div class="ob-step" data-step="2">
+          <div class="ob-num">2</div>
+          <h3>Получи Risk + AI</h3>
+          <p class="muted">Оценка риска и вердикт за секунды</p>
+        </div>
+        <div class="ob-step" data-step="3">
+          <div class="ob-num">3</div>
+          <h3>Алерты в Telegram</h3>
+          <p class="muted">Следи за ценой без открытой вкладки</p>
+        </div>
+      </div>
+      <div class="ob-actions">
+        <button type="button" id="ob-skip" class="connect-btn">Пропустить</button>
+        <button type="button" id="ob-next" class="upgrade-btn">Далее</button>
+      </div>
     </div>
   </div>
 
