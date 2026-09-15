@@ -4,6 +4,8 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const API = TOKEN ? `https://api.telegram.org/bot${TOKEN}` : null;
 const CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID || '';
 const CHANNEL_URL = process.env.TELEGRAM_CHANNEL_URL || '';
+const CHANNEL_URL_RU = process.env.TELEGRAM_CHANNEL_URL_RU || CHANNEL_URL || '';
+const CHANNEL_URL_EN = process.env.TELEGRAM_CHANNEL_URL_EN || '';
 
 async function sendMessage(chatId, text, extra = {}) {
   if (!API || !chatId) {
@@ -25,12 +27,12 @@ async function sendMessage(chatId, text, extra = {}) {
 }
 
 async function sendAlert(chatId, alert, price) {
-  const dir = alert.type === 'price_above' ? 'выше' : 'ниже';
+  const dir = alert.type === 'price_above' ? 'above' : 'below';
   const text =
-    `🚨 <b>Алерт сработал</b>\n\n` +
+    `🚨 <b>Alert triggered</b>\n\n` +
     `<b>${alert.symbol || 'TOKEN'}</b>\n` +
-    `Условие: цена ${dir} <b>${alert.value}</b>\n` +
-    `Сейчас: <b>$${Number(price).toPrecision(6)}</b>\n` +
+    `Condition: price ${dir} <b>${alert.value}</b>\n` +
+    `Now: <b>$${Number(price).toPrecision(6)}</b>\n` +
     `<code>${alert.address}</code>\n\n` +
     `Crypto AI Scanner`;
   return sendMessage(chatId, text);
@@ -38,25 +40,35 @@ async function sendAlert(chatId, alert, price) {
 
 async function sendDigest(chatId, lines) {
   const text =
-    `📰 <b>Ежедневный дайджест Watchlist</b>\n\n` +
+    `📰 <b>Watchlist digest</b>\n\n` +
     (Array.isArray(lines) ? lines.join('\n') : String(lines || '')) +
     `\n\nCrypto AI Scanner`;
   return sendMessage(chatId, text);
 }
 
-async function postToChannel(text) {
-  if (!CHANNEL_ID) {
-    return { ok: false, error: 'No TELEGRAM_CHANNEL_ID' };
-  }
-  return sendMessage(CHANNEL_ID, text);
+async function postToChannel(text, which = 'ru') {
+  const id =
+    which === 'en'
+      ? process.env.TELEGRAM_CHANNEL_ID_EN || CHANNEL_ID
+      : process.env.TELEGRAM_CHANNEL_ID_RU || CHANNEL_ID;
+  if (!id) return { ok: false, error: 'No channel id' };
+  return sendMessage(id, text);
 }
 
 function hasChannel() {
-  return !!CHANNEL_ID;
+  return !!(CHANNEL_ID || process.env.TELEGRAM_CHANNEL_ID_RU);
 }
 
 function getChannelUrl() {
-  return CHANNEL_URL || '';
+  return CHANNEL_URL_RU || CHANNEL_URL || '';
+}
+
+function getChannelUrlRu() {
+  return CHANNEL_URL_RU || CHANNEL_URL || '';
+}
+
+function getChannelUrlEn() {
+  return CHANNEL_URL_EN || '';
 }
 
 module.exports = {
@@ -65,5 +77,7 @@ module.exports = {
   sendDigest,
   postToChannel,
   hasChannel,
-  getChannelUrl
+  getChannelUrl,
+  getChannelUrlRu,
+  getChannelUrlEn
 };
