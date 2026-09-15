@@ -48,7 +48,6 @@
       </div>
     </nav>
 
-    <!-- HOME -->
     <div id="page-home">
       <section class="hero">
         <h1 data-i18n="home.title">Institutional-grade Crypto Intelligence</h1>
@@ -116,7 +115,6 @@
       </section>
     </div>
 
-    <!-- SCANNER -->
     <div id="page-scanner" style="display:none;">
       <section class="scanner-hero">
         <h1 data-i18n="scanner.title">Token Scanner</h1>
@@ -127,8 +125,8 @@
           <button type="button" class="plan-btn" data-plan="pro">Pro</button>
         </div>
         <div class="search-box">
-          <input type="text" id="token-input" data-i18n-placeholder="scanner.placeholder" placeholder="0x... contract address" />
-          <button id="scan-button" class="upgrade-btn" data-i18n="scanner.analyze">Analyze</button>
+          <input type="text" id="token-input" placeholder="0x... contract address" />
+          <button id="scan-button" class="upgrade-btn">Analyze</button>
         </div>
       </section>
       <div id="results"></div>
@@ -148,19 +146,19 @@
     </div>
 
     <div id="page-watchlist" style="display:none;">
-      <h1 data-i18n="nav.watchlist">Watchlist</h1>
+      <h1>Watchlist</h1>
       <div id="watchlist-content" class="glass panel"></div>
     </div>
 
     <div id="page-history" style="display:none;">
-      <h1 data-i18n="nav.history">History</h1>
+      <h1>History</h1>
       <div id="history-content" class="glass panel"></div>
     </div>
 
     <div id="page-alerts" style="display:none;">
-      <h1 data-i18n="alerts.title">Alerts</h1>
+      <h1>Alerts</h1>
       <div class="glass panel" style="margin-bottom:1.5rem;">
-        <h3 data-i18n="alerts.create">Create alert</h3>
+        <h3>Create alert</h3>
         <div class="form-grid">
           <input type="text" id="alert-address" placeholder="Token address 0x..." />
           <input type="text" id="alert-symbol" placeholder="Symbol (e.g. LINK)" />
@@ -176,7 +174,7 @@
     </div>
 
     <div id="page-compare" style="display:none;">
-      <h1 data-i18n="compare.title">Compare Tokens</h1>
+      <h1>Compare Tokens</h1>
       <div class="glass panel" style="margin-bottom:1.5rem;">
         <div class="form-grid">
           <input type="text" id="cmp-1" placeholder="Address 1" />
@@ -189,7 +187,7 @@
     </div>
 
     <div id="page-account" style="display:none;">
-      <h1 data-i18n="nav.account">Account</h1>
+      <h1>Account</h1>
       <p class="page-sub">Profile, plan, integrations</p>
       <div class="account-grid">
         <div class="account-card glass">
@@ -225,7 +223,12 @@
     </div>
   </div>
 
-  <!-- AUTH -->
+  <footer class="site-footer">
+    <a href="/privacy.html">Политика конфиденциальности</a>
+    <span>·</span>
+    <span>© Crypto AI Scanner</span>
+  </footer>
+
   <div id="auth-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
       <button id="modal-close" class="modal-close" type="button">&times;</button>
@@ -244,7 +247,6 @@
     </div>
   </div>
 
-  <!-- BYBIT -->
   <div id="bybit-modal" class="modal" style="display:none;">
     <div class="modal-content glass">
       <button id="bybit-modal-close" class="modal-close" type="button">&times;</button>
@@ -258,7 +260,6 @@
     </div>
   </div>
 
-  <!-- PRICING -->
   <div id="pricing-modal" class="modal" style="display:none;">
     <div class="modal-content glass" style="max-width:820px;">
       <button id="pricing-close" class="modal-close" type="button">&times;</button>
@@ -301,11 +302,10 @@
           <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Выбрать Pro</button>
         </div>
       </div>
-      <p class="muted small" style="margin-top:1rem;text-align:center;">Stripe — следующим этапом. Сейчас демо-активация после входа.</p>
+      <p class="muted small" style="margin-top:1rem;text-align:center;">Оплата подключится после открытия ИП. Сейчас — демо-активация после входа.</p>
     </div>
   </div>
 
-  <!-- ONBOARDING -->
   <div id="onboarding-modal" class="modal" style="display:none;">
     <div class="modal-content glass" style="max-width:420px;">
       <div class="ob-steps">
