@@ -581,6 +581,10 @@ async function connectBybit(e) {
       body: JSON.stringify({ apiKey, apiSecret, limit: 15 })
     });
     const data = await res.json();
+    if (res.status === 403) {
+      if (confirm((data.error || 'Нужен Pro') + '\n\nОткрыть тарифы?')) openPricing(data.upsell || 'pro');
+      return;
+    }
     if (!data.success) { alert(data.error || 'Error'); return; }
     document.getElementById('bybit-modal').style.display = 'none';
     document.getElementById('bybit-form').reset();
@@ -1037,6 +1041,10 @@ async function addWatch(address, symbol, name) {
       body: JSON.stringify({ address, symbol, name })
     });
     const data = await res.json();
+    if (res.status === 403) {
+      if (confirm((data.error || 'Лимит') + '\n\nОткрыть тарифы?')) openPricing(data.upsell || 'premium');
+      return;
+    }
     if (!data.success) return alert(data.error || 'Error');
     alert('Added to watchlist');
     loadHomeWatchlist();
@@ -1094,6 +1102,10 @@ async function createAlert() {
     body: JSON.stringify({ type, address, symbol, value })
   });
   const data = await res.json();
+  if (res.status === 403) {
+    if (confirm((data.error || 'Нужен Premium') + '\n\nОткрыть тарифы?')) openPricing(data.upsell || 'premium');
+    return;
+  }
   if (!data.success) return alert(data.error || 'Error');
   document.getElementById('alert-address').value = '';
   document.getElementById('alert-value').value = '';
@@ -1190,8 +1202,16 @@ async function runCompare() {
       body: JSON.stringify({ addresses })
     });
     const data = await res.json();
+    if (res.status === 403) {
+      box.innerHTML =
+        '<div class="error-card limit-upsell glass">' +
+        '<h3>Сравнение — Premium</h3>' +
+        '<p>' + (data.error || '') + '</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>';
+      return;
+    }
     if (!data.success) {
-      box.innerHTML = '<div class="error-card">' + data.error + '</div>';
+      box.innerHTML = '<div class="error-card">' + (data.error || 'Error') + '</div>';
       return;
     }
     box.innerHTML = '<div class="compare-grid">' + data.tokens.map(tok =>
