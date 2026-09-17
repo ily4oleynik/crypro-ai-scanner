@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const aiService = require('./services/ai.js');
+const { computeRiskFromPair } = require('./services/scoring.js');
 const { initDb } = require('./db');
 const store = require('./store');
 const { startAlertWorker } = require('./alertWorker');
@@ -30,6 +31,7 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 const tgLinkCodes = new Map();
+const rateBuckets = new Map();
 
 const PLAN_LIMITS = {
   free: { watchlist: 5, historyDays: 7 },
@@ -59,6 +61,42 @@ function createBybitSignature(apiSecret, payload) {
   return crypto.createHmac('sha256', apiSecret).update(payload).digest('hex');
 }
 
+function clientIp(req) {
+  return (
+    req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    'unknown'
+  );
+}
+
+function rateLimit({ windowMs = 60_000, max = 30, keyFn }) {
+  return (req, res, next) => {
+    const key = keyFn(req);
+    const now = Date.now();
+    let bucket = rateBuckets.get(key);
+    if (!bucket || now > bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      return res.status(429).json({
+        success: false,
+        error: 'Слишком много запросов. Подождите минуту.',
+        upsell: 'premium'
+      });
+    }
+    next();
+  };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of rateBuckets.entries()) {
+    if (now > v.resetAt) rateBuckets.delete(k);
+  }
+}, 10 * 60 * 1000);
+
 app.get('/api/config/public', (req, res) => {
   res.json({
     success: true,
@@ -67,54 +105,70 @@ app.get('/api/config/public', (req, res) => {
   });
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = await store.findUserByEmail(email);
-    if (!user || !(await store.verifyPassword(user, password))) {
-      return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
+app.post(
+  '/api/auth/login',
+  rateLimit({
+    windowMs: 15 * 60_000,
+    max: 30,
+    keyFn: (req) => 'login:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      const user = await store.findUserByEmail(email);
+      if (!user || !(await store.verifyPassword(user, password))) {
+        return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
+      }
+      const token = jwt.sign(
+        { id: user.id, email: user.email, plan: user.plan || 'free' },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      res.json({
+        success: true,
+        token,
+        user: { id: user.id, email: user.email, plan: user.plan || 'free' }
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ success: false, error: 'Ошибка сервера' });
     }
-    const token = jwt.sign(
-      { id: user.id, email: user.email, plan: user.plan || 'free' },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    res.json({
-      success: true,
-      token,
-      user: { id: user.id, email: user.email, plan: user.plan || 'free' }
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, error: 'Ошибка сервера' });
   }
-});
+);
 
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password || password.length < 6) {
-      return res.status(400).json({ success: false, error: 'Минимум 6 символов в пароле' });
+app.post(
+  '/api/auth/register',
+  rateLimit({
+    windowMs: 60 * 60_000,
+    max: 10,
+    keyFn: (req) => 'reg:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password || password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Минимум 6 символов в пароле' });
+      }
+      if (await store.findUserByEmail(email)) {
+        return res.status(400).json({ success: false, error: 'Email уже зарегистрирован' });
+      }
+      const user = await store.createUser(email, password, 'free');
+      const token = jwt.sign(
+        { id: user.id, email: user.email, plan: 'free' },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      res.json({
+        success: true,
+        token,
+        user: { id: user.id, email: user.email, plan: 'free' }
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ success: false, error: 'Ошибка регистрации' });
     }
-    if (await store.findUserByEmail(email)) {
-      return res.status(400).json({ success: false, error: 'Email уже зарегистрирован' });
-    }
-    const user = await store.createUser(email, password, 'free');
-    const token = jwt.sign(
-      { id: user.id, email: user.email, plan: 'free' },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    res.json({
-      success: true,
-      token,
-      user: { id: user.id, email: user.email, plan: 'free' }
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, error: 'Ошибка регистрации' });
   }
-});
+);
 
 app.post('/api/user/plan', authMiddleware, async (req, res) => {
   if (!req.user?.id) {
@@ -147,159 +201,182 @@ app.post('/api/user/plan', authMiddleware, async (req, res) => {
   }
 });
 
-app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
-  const { tokenAddress } = req.params;
-  const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
+app.get(
+  '/api/scan/:tokenAddress',
+  rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    keyFn: (req) => 'scan:' + clientIp(req)
+  }),
+  authMiddleware,
+  async (req, res) => {
+    const { tokenAddress } = req.params;
+    const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
 
-  try {
-    const usage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
-    if (!usage.allowed) {
-      return res.status(429).json({
-        success: false,
-        error: `Лимит сканов на сегодня исчерпан (${usage.used}/${usage.limit}). Обновите тариф.`,
-        usage,
-        upsell: 'premium'
+    if (!tokenAddress || tokenAddress.length < 8 || tokenAddress.length > 128) {
+      return res.status(400).json({ success: false, error: 'Некорректный адрес' });
+    }
+
+    try {
+      const usage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
+      if (!usage.allowed) {
+        return res.status(429).json({
+          success: false,
+          error: `Лимит сканов на сегодня исчерпан (${usage.used}/${usage.limit}). Обновите тариф.`,
+          usage,
+          upsell: 'premium'
+        });
+      }
+
+      const dexResponse = await axios.get(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+        { timeout: 10000 }
+      );
+      const pair = dexResponse.data.pairs?.[0] || {};
+
+      const base = {
+        symbol: pair.baseToken?.symbol || 'TOKEN',
+        name: pair.baseToken?.name || '',
+        price: pair.priceUsd || 0,
+        liquidity: pair.liquidity?.usd || 0,
+        volume24h: pair.volume?.h24 || 0,
+        fdv: pair.fdv || 0,
+        marketCap: pair.fdv || 0,
+        isVerified: !!pair.info?.imageUrl,
+        website: pair.info?.websites?.[0]?.url || null,
+        twitter: pair.info?.socials?.find((s) => s.type === 'twitter')?.url || null,
+        telegram: pair.info?.socials?.find((s) => s.type === 'telegram')?.url || null,
+        pairAddress: pair.pairAddress || null,
+        chainId: pair.chainId || 'ethereum',
+        dexId: pair.dexId || null
+      };
+
+      const risk = computeRiskFromPair(pair, base);
+      const riskScore = risk.riskScore;
+      const riskLevel = risk.riskLevel;
+
+      const aiPlan = plan === 'pro' ? 'pro' : plan === 'premium' ? 'premium' : 'free';
+      const ai = await aiService.analyzeToken(
+        base,
+        { riskScore, riskLevel, reasons: risk.reasons },
+        aiPlan
+      );
+
+      await store.incrementScan(req.user);
+      await store.addHistory(req.user, {
+        address: tokenAddress,
+        symbol: base.symbol,
+        name: base.name,
+        price: base.price,
+        riskScore,
+        plan
       });
-    }
 
-    const dexResponse = await axios.get(
-      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
-      { timeout: 10000 }
-    );
-    const pair = dexResponse.data.pairs?.[0] || {};
+      const currentUsage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
+      const aiPayload = {
+        text: ai.text,
+        confidence: ai.confidence,
+        verdict: ai.verdict,
+        risks: ai.risks || [],
+        positives: ai.positives || []
+      };
+      const riskPayload = {
+        riskScore,
+        riskLevel,
+        confidence: ai.confidence || risk.confidence,
+        reasons: risk.reasons || []
+      };
 
-    const base = {
-      symbol: pair.baseToken?.symbol || 'TOKEN',
-      name: pair.baseToken?.name || '',
-      price: pair.priceUsd || 0,
-      liquidity: pair.liquidity?.usd || 0,
-      volume24h: pair.volume?.h24 || 0,
-      fdv: pair.fdv || 0,
-      marketCap: pair.fdv || 0,
-      isVerified: !!pair.info?.imageUrl,
-      website: pair.info?.websites?.[0]?.url || null,
-      twitter: pair.info?.socials?.find((s) => s.type === 'twitter')?.url || null,
-      telegram: pair.info?.socials?.find((s) => s.type === 'telegram')?.url || null,
-      pairAddress: pair.pairAddress || null,
-      chainId: pair.chainId || 'ethereum',
-      dexId: pair.dexId || null
-    };
+      if (plan === 'free') {
+        return res.json({
+          success: true,
+          plan: 'Free',
+          token: {
+            symbol: base.symbol,
+            name: base.name,
+            price: base.price,
+            liquidity: base.liquidity,
+            volume24h: base.volume24h,
+            pairAddress: base.pairAddress,
+            chainId: base.chainId
+          },
+          risk: riskPayload,
+          ai: aiPayload,
+          locked: true,
+          usage: currentUsage
+        });
+      }
 
-    let riskScore = 58;
-    let riskLevel = 'MEDIUM';
-    if (plan === 'premium') {
-      riskScore = 67;
-      riskLevel = 'MEDIUM';
-    } else if (plan === 'pro') {
-      riskScore = 74;
-      riskLevel = 'LOW';
-    }
+      if (plan === 'premium') {
+        return res.json({
+          success: true,
+          plan: 'Premium',
+          token: base,
+          risk: riskPayload,
+          ai: aiPayload,
+          security: {
+            contractVerified: base.isVerified,
+            liquidityLock: false,
+            scamProbability: Math.min(90, Math.max(5, riskScore - 10))
+          },
+          projectLinks: {
+            website: base.website,
+            twitter: base.twitter,
+            telegram: base.telegram
+          },
+          usage: currentUsage
+        });
+      }
 
-    const aiPlan = plan === 'pro' ? 'pro' : plan === 'premium' ? 'premium' : 'free';
-    const ai = await aiService.analyzeToken(base, { riskScore, riskLevel }, aiPlan);
-
-    await store.incrementScan(req.user);
-    await store.addHistory(req.user, {
-      address: tokenAddress,
-      symbol: base.symbol,
-      name: base.name,
-      price: base.price,
-      riskScore,
-      plan
-    });
-
-    const currentUsage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
-    const aiPayload = {
-      text: ai.text,
-      confidence: ai.confidence,
-      verdict: ai.verdict,
-      risks: ai.risks || [],
-      positives: ai.positives || []
-    };
-
-    if (plan === 'free') {
       return res.json({
         success: true,
-        plan: 'Free',
-        token: {
-          symbol: base.symbol,
-          name: base.name,
-          price: base.price,
-          liquidity: base.liquidity,
-          volume24h: base.volume24h,
-          pairAddress: base.pairAddress,
-          chainId: base.chainId
-        },
-        risk: { riskScore, riskLevel, confidence: ai.confidence },
-        ai: aiPayload,
-        locked: true,
-        usage: currentUsage
-      });
-    }
-
-    if (plan === 'premium') {
-      return res.json({
-        success: true,
-        plan: 'Premium',
+        plan: 'Pro',
         token: base,
-        risk: { riskScore, riskLevel, confidence: ai.confidence },
+        risk: riskPayload,
         ai: aiPayload,
         security: {
           contractVerified: base.isVerified,
           liquidityLock: false,
-          scamProbability: 22
+          scamProbability: Math.min(90, Math.max(5, riskScore - 15))
         },
         projectLinks: {
           website: base.website,
           twitter: base.twitter,
           telegram: base.telegram
         },
+        advanced: {
+          whaleConcentration: 'n/a',
+          buySellRatio:
+            pair.txns?.h24
+              ? (
+                  (Number(pair.txns.h24.buys || 0) + 1) /
+                  (Number(pair.txns.h24.sells || 0) + 1)
+                ).toFixed(2)
+              : '—',
+          volatility: pair.priceChange?.h24 != null ? Number(pair.priceChange.h24).toFixed(1) + '%' : '—',
+          holderCount: '—'
+        },
         usage: currentUsage
       });
+    } catch (error) {
+      console.error(error.message);
+      res.json({
+        success: true,
+        plan,
+        token: { symbol: String(tokenAddress).slice(0, 8) + '...' },
+        risk: { riskScore: 50, riskLevel: 'MEDIUM', confidence: 40, reasons: [] },
+        ai: {
+          text: 'Не удалось загрузить данные',
+          confidence: 30,
+          verdict: 'Ошибка',
+          risks: [],
+          positives: []
+        },
+        usage: await store.canScan(req.user)
+      });
     }
-
-    return res.json({
-      success: true,
-      plan: 'Pro',
-      token: base,
-      risk: { riskScore, riskLevel, confidence: ai.confidence },
-      ai: aiPayload,
-      security: {
-        contractVerified: base.isVerified,
-        liquidityLock: false,
-        scamProbability: 14
-      },
-      projectLinks: {
-        website: base.website,
-        twitter: base.twitter,
-        telegram: base.telegram
-      },
-      advanced: {
-        whaleConcentration: '19%',
-        buySellRatio: '1.38',
-        volatility: '16.2%',
-        holderCount: '2 140+'
-      },
-      usage: currentUsage
-    });
-  } catch (error) {
-    console.error(error.message);
-    res.json({
-      success: true,
-      plan,
-      token: { symbol: String(tokenAddress).slice(0, 8) + '...' },
-      risk: { riskScore: 50, riskLevel: 'MEDIUM', confidence: 40 },
-      ai: {
-        text: 'Не удалось загрузить данные',
-        confidence: 30,
-        verdict: 'Ошибка',
-        risks: [],
-        positives: []
-      },
-      usage: await store.canScan(req.user)
-    });
   }
-});
+);
 
 app.get('/api/usage', authMiddleware, async (req, res) => {
   res.json({ success: true, usage: await store.canScan(req.user) });
