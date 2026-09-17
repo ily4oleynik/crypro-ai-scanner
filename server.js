@@ -31,6 +31,12 @@ app.use(express.static(__dirname));
 
 const tgLinkCodes = new Map();
 
+const PLAN_LIMITS = {
+  free: { scans: 5, watchlist: 5, historyDays: 7 },
+  premium: { scans: 50, watchlist: 30, historyDays: null },
+  pro: { scans: 999999, watchlist: 999999, historyDays: null }
+};
+
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -45,11 +51,22 @@ function authMiddleware(req, res, next) {
   next();
 }
 
+function getPlan(user) {
+  return String(user?.plan || 'free').toLowerCase();
+}
+
 function createBybitSignature(apiSecret, payload) {
   return crypto.createHmac('sha256', apiSecret).update(payload).digest('hex');
 }
 
-// ===== AUTH =====
+app.get('/api/config/public', (req, res) => {
+  res.json({
+    success: true,
+    channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || process.env.TELEGRAM_CHANNEL_URL || 'https://t.me/Crypto_AI_Scanner',
+    channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
+  });
+});
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -99,10 +116,9 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// ===== SCAN =====
 app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
   const { tokenAddress } = req.params;
-  const plan = (req.query.plan || req.user?.plan || 'free').toLowerCase();
+  const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
 
   try {
     const usage = await store.canScan(req.user);
@@ -110,7 +126,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
       return res.status(429).json({
         success: false,
         error: `Лимит сканов на сегодня исчерпан (${usage.used}/${usage.limit}). Обновите тариф.`,
-        usage
+        usage,
+        upsell: 'premium'
       });
     }
 
@@ -140,8 +157,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
     let riskScore = 58;
     let riskLevel = 'MEDIUM';
     let confidence = 55;
-    let aiText = 'Краткий анализ: средние показатели. Полный отчёт в Premium.';
-    let aiVerdict = 'Ограниченный доступ';
+    let aiText = 'Краткий анализ: средние показатели по доступным данным. Полный разбор Security, графика и AI — в Premium.';
+    let aiVerdict = 'Ограниченный доступ (Free)';
 
     if (plan === 'premium' || plan === 'pro') {
       riskScore = plan === 'pro' ? 74 : 67;
@@ -247,7 +264,17 @@ app.get('/api/usage', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/history', authMiddleware, async (req, res) => {
-  res.json({ success: true, history: await store.getHistory(req.user) });
+  let history = await store.getHistory(req.user);
+  const plan = getPlan(req.user);
+  const days = PLAN_LIMITS[plan]?.historyDays;
+  if (days) {
+    const from = Date.now() - days * 24 * 60 * 60 * 1000;
+    history = (history || []).filter((h) => {
+      const t = new Date(h.scannedAt || h.created_at || 0).getTime();
+      return t >= from;
+    });
+  }
+  res.json({ success: true, history: history || [] });
 });
 
 app.get('/api/watchlist', authMiddleware, async (req, res) => {
@@ -255,6 +282,19 @@ app.get('/api/watchlist', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/watchlist', authMiddleware, async (req, res) => {
+  const plan = getPlan(req.user);
+  const max = PLAN_LIMITS[plan]?.watchlist ?? 5;
+  const list = (await store.getWatchlist(req.user)) || [];
+  if (list.length >= max) {
+    return res.status(403).json({
+      success: false,
+      error:
+        plan === 'free'
+          ? 'На Free — до 5 токенов в Watchlist. Premium — до 30.'
+          : 'Лимит Watchlist исчерпан',
+      upsell: plan === 'free' ? 'premium' : 'pro'
+    });
+  }
   const { address, symbol, name } = req.body;
   if (!address) return res.status(400).json({ success: false, error: 'address required' });
   res.json(await store.addToWatchlist(req.user, { address, symbol, name }));
@@ -269,6 +309,14 @@ app.get('/api/alerts', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/alerts', authMiddleware, async (req, res) => {
+  const plan = getPlan(req.user);
+  if (plan === 'free') {
+    return res.status(403).json({
+      success: false,
+      error: 'Алерты доступны с Premium. Не пропусти движение цены.',
+      upsell: 'premium'
+    });
+  }
   const { type, address, symbol, value } = req.body;
   if (!type || !address || value === undefined) {
     return res.status(400).json({ success: false, error: 'type, address, value required' });
@@ -281,6 +329,14 @@ app.delete('/api/alerts/:id', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/compare', authMiddleware, async (req, res) => {
+  const plan = getPlan(req.user);
+  if (plan === 'free') {
+    return res.status(403).json({
+      success: false,
+      error: 'Сравнение токенов доступно с Premium',
+      upsell: 'premium'
+    });
+  }
   const { addresses } = req.body;
   if (!Array.isArray(addresses) || addresses.length < 2 || addresses.length > 3) {
     return res.status(400).json({ success: false, error: 'Передайте 2–3 адреса' });
@@ -308,7 +364,6 @@ app.post('/api/compare', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== TELEGRAM =====
 app.post('/api/telegram/link', authMiddleware, async (req, res) => {
   if (!req.user?.id) {
     return res.status(401).json({ success: false, error: 'Войдите в аккаунт' });
@@ -325,7 +380,7 @@ app.post('/api/telegram/link', authMiddleware, async (req, res) => {
     code,
     deepLink: `https://t.me/${botUsername}?start=${code}`,
     expiresIn: 600,
-    channelUrl: getChannelUrl() || null
+    channelUrl: getChannelUrl() || 'https://t.me/Crypto_AI_Scanner'
   });
 });
 
@@ -335,7 +390,9 @@ app.get('/api/telegram/status', authMiddleware, async (req, res) => {
     success: true,
     linked: !!chatId,
     chatId: chatId || null,
-    channelUrl: getChannelUrl() || null
+    channelUrl: getChannelUrl() || 'https://t.me/Crypto_AI_Scanner',
+    channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
+    channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
   });
 });
 
@@ -352,7 +409,6 @@ app.post('/api/telegram/digest-test', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== NEWS =====
 app.get('/api/news', async (req, res) => {
   try {
     const source = (req.query.source || 'all').toLowerCase();
@@ -393,7 +449,6 @@ app.get('/api/news', async (req, res) => {
   }
 });
 
-// ===== TICKER =====
 app.get('/api/ticker', async (req, res) => {
   try {
     const r = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
@@ -425,7 +480,6 @@ app.get('/api/ticker', async (req, res) => {
   }
 });
 
-// ===== TRENDING =====
 app.get('/api/trending', async (req, res) => {
   try {
     const r = await axios.get('https://api.dexscreener.com/token-boosts/top/v1', { timeout: 8000 });
@@ -434,7 +488,6 @@ app.get('/api/trending', async (req, res) => {
       address: item.tokenAddress || '',
       chainId: item.chainId || ''
     }));
-
     if (!tokens.length) {
       return res.json({
         success: true,
@@ -443,7 +496,6 @@ app.get('/api/trending', async (req, res) => {
         ]
       });
     }
-
     const enriched = [];
     for (const t of tokens.slice(0, 8)) {
       try {
@@ -473,7 +525,6 @@ app.get('/api/trending', async (req, res) => {
   }
 });
 
-// ===== CHART (GeckoTerminal) =====
 app.get('/api/chart/:pairAddress', async (req, res) => {
   try {
     const pairAddress = req.params.pairAddress;
@@ -518,9 +569,8 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
   }
 });
 
-// ===== PORTFOLIO =====
 app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
-  const plan = (req.user?.plan || 'free').toLowerCase();
+  const plan = getPlan(req.user);
   if (plan === 'free') {
     return res.json({ success: true, locked: true, message: 'Портфель доступен с Premium' });
   }
@@ -546,8 +596,14 @@ app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
   });
 });
 
-// ===== BYBIT =====
 app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
+  if (getPlan(req.user) === 'free') {
+    return res.status(403).json({
+      success: false,
+      error: 'Bybit доступен с Pro',
+      upsell: 'pro'
+    });
+  }
   const { apiKey, apiSecret, cursor = '', limit = 20 } = req.body;
   if (!apiKey || !apiSecret) {
     return res.status(400).json({ success: false, error: 'API Key и Secret обязательны' });
@@ -617,10 +673,13 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
   }
 });
 
-// ===== AI CHAT =====
 app.post('/api/ai/chat', authMiddleware, async (req, res) => {
-  if ((req.user?.plan || 'free').toLowerCase() !== 'pro') {
-    return res.status(403).json({ success: false, error: 'AI-чат доступен только на тарифе Pro' });
+  if (getPlan(req.user) !== 'pro') {
+    return res.status(403).json({
+      success: false,
+      error: 'AI-чат доступен только на тарифе Pro',
+      upsell: 'pro'
+    });
   }
   const { messages, context } = req.body;
   if (!messages || !Array.isArray(messages) || !messages.length) {
@@ -634,7 +693,6 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   }
 });
 
-// SPA fallback
 app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api')) return next();
