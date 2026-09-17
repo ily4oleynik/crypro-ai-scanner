@@ -1,62 +1,101 @@
-// backend/alertWorker.js
 const axios = require('axios');
 const store = require('./store');
-const { sendMessage, formatAlertMessage } = require('./telegram');
 
-async function getTokenPrice(address) {
+let sendAlertFn = null;
+try {
+  const tg = require('./telegram');
+  sendAlertFn = typeof tg.sendAlert === 'function' ? tg.sendAlert : null;
+} catch (e) {
+  console.warn('[Alerts] telegram module not loaded:', e.message);
+}
+
+async function fetchPrice(address) {
   try {
-    const res = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${address}`, {
-      timeout: 8000
-    });
-    const pair = res.data.pairs?.[0];
-    return {
-      price: parseFloat(pair?.priceUsd || 0),
-      symbol: pair?.baseToken?.symbol || 'TOKEN'
-    };
+    const res = await axios.get(
+      `https://api.dexscreener.com/latest/dex/tokens/${address}`,
+      { timeout: 8000 }
+    );
+    const pair = res.data?.pairs?.[0];
+    const price = parseFloat(pair?.priceUsd);
+    return Number.isFinite(price) ? price : null;
   } catch (e) {
     return null;
   }
 }
 
-function isTriggered(alert, price) {
-  if (!price && price !== 0) return false;
-  if (alert.type === 'price_above') return price >= alert.value;
-  if (alert.type === 'price_below') return price <= alert.value;
-  // risk_above — упрощённо: пока нет live risk, пропускаем или используй своё
-  if (alert.type === 'risk_above') return false;
+function shouldTrigger(alert, price) {
+  const value = parseFloat(alert.value);
+  if (!Number.isFinite(value) || !Number.isFinite(price)) return false;
+  if (alert.type === 'price_above') return price >= value;
+  if (alert.type === 'price_below') return price <= value;
   return false;
 }
 
 async function checkAlerts() {
-  const users = store.getAllAlertUsers();
-  if (!users.length) return;
+  if (typeof store.getAllAlertUsers !== 'function') {
+    console.warn('[Alerts] getAllAlertUsers missing — skip');
+    return;
+  }
 
-  for (const { userId, chatId, alerts } of users) {
+  let users = [];
+  try {
+    users = await store.getAllAlertUsers();
+  } catch (e) {
+    console.error('[Alerts] getAllAlertUsers error:', e.message);
+    return;
+  }
+
+  if (!users || !users.length) return;
+
+  for (const user of users) {
+    const chatId = user.telegramChatId || user.telegram_chat_id;
+    const alerts = user.alerts || [];
+    if (!chatId || !alerts.length) continue;
+
     for (const alert of alerts) {
-      if (store.wasAlertFired(userId, alert.id)) continue;
+      try {
+        const price = await fetchPrice(alert.address);
+        if (price == null) continue;
+        if (!shouldTrigger(alert, price)) continue;
 
-      const data = await getTokenPrice(alert.address);
-      if (!data) continue;
-
-      if (isTriggered(alert, data.price)) {
-        const text = formatAlertMessage(
-          { ...alert, symbol: alert.symbol || data.symbol },
-          data.price
-        );
-        const result = await sendMessage(chatId, text);
-        if (result.ok) {
-          store.markAlertFired(userId, alert.id);
-          console.log(`[Alerts] Fired ${alert.id} -> chat ${chatId}`);
+        if (sendAlertFn) {
+          await sendAlertFn(chatId, alert, price);
+        } else {
+          console.log(
+            '[Alerts] triggered',
+            alert.symbol || alert.address,
+            price,
+            'chat',
+            chatId
+          );
         }
+
+        // опционально: удалить сработавший алерт
+        // if (typeof store.removeAlert === 'function') {
+        //   await store.removeAlert(user, alert.id);
+        // }
+      } catch (e) {
+        console.error('[Alerts] item error:', e.message);
       }
     }
   }
 }
 
-function startAlertWorker(intervalMs = 60000) {
-  console.log('[Alerts] Worker started, interval', intervalMs, 'ms');
-  checkAlerts();
-  setInterval(checkAlerts, intervalMs);
+function startAlertWorker(intervalMs) {
+  const ms = intervalMs || 60000;
+  console.log('[Alerts] Worker started, interval', ms, 'ms');
+
+  const tick = async () => {
+    try {
+      await checkAlerts();
+    } catch (e) {
+      console.error('[Alerts] tick error:', e.message);
+    }
+  };
+
+  // не блокируем старт сервера
+  setTimeout(tick, 5000);
+  setInterval(tick, ms);
 }
 
 module.exports = { startAlertWorker, checkAlerts };
