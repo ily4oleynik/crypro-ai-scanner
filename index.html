@@ -27,13 +27,13 @@
         <div class="logo">Crypto AI Scanner</div>
       </div>
       <div class="nav-links" id="nav-links">
-        <a href="#" id="nav-home" class="active" data-i18n="nav.home">Home</a>
-        <a href="#" id="nav-scanner" data-i18n="nav.scanner">Scanner</a>
-        <a href="#" id="nav-watchlist" data-i18n="nav.watchlist">Watchlist</a>
-        <a href="#" id="nav-history" data-i18n="nav.history">History</a>
-        <a href="#" id="nav-alerts" data-i18n="nav.alerts">Alerts</a>
-        <a href="#" id="nav-compare" data-i18n="nav.compare">Compare</a>
-        <a href="#" id="nav-account" data-i18n="nav.account">Account</a>
+        <a href="#" id="nav-home" class="active">Home</a>
+        <a href="#" id="nav-scanner">Scanner</a>
+        <a href="#" id="nav-watchlist">Watchlist</a>
+        <a href="#" id="nav-history">History</a>
+        <a href="#" id="nav-alerts">Alerts</a>
+        <a href="#" id="nav-compare">Compare</a>
+        <a href="#" id="nav-account">Account</a>
       </div>
       <div class="nav-right">
         <div class="lang-switch">
@@ -44,27 +44,40 @@
         <span id="scan-usage" class="scan-usage">Scans: —</span>
         <span id="user-plan" class="plan-badge" style="display:none;"></span>
         <button type="button" class="upgrade-btn" onclick="openPricing('premium')">Upgrade</button>
-        <button id="auth-btn" class="connect-btn" data-i18n="nav.login">Login</button>
+        <button id="auth-btn" class="connect-btn">Login</button>
       </div>
     </nav>
 
     <div id="page-home">
       <section class="hero">
-        <h1 data-i18n="home.title">Institutional-grade Crypto Intelligence</h1>
-        <p data-i18n="home.subtitle">AI risk analysis · Watchlist · Alerts</p>
+        <h1>Institutional-grade Crypto Intelligence</h1>
+        <p class="hero-sub">
+          Риск смарт-контракта + AI-вердикт + алерты — чтобы не потерять деньги на очередном rug’е.
+        </p>
+        <p class="hero-proof">Сделано для тех, кто уже обжигался на скамах</p>
         <div class="hero-actions">
-          <button class="upgrade-btn" id="try-link-btn" data-i18n="home.tryLink">Try example: LINK</button>
-          <button class="connect-btn" id="go-scanner-btn" data-i18n="home.scanToken">Scan token</button>
+          <button class="upgrade-btn" id="try-link-btn">Проверить токен бесплатно</button>
+          <button class="connect-btn" id="go-scanner-btn">Пример: LINK</button>
+          <button class="connect-btn" id="example-report-btn" type="button">Посмотреть пример полного анализа</button>
         </div>
       </section>
 
       <section class="quick-start glass">
-        <h3 data-i18n="home.how">How it works</h3>
+        <h3>Как это работает</h3>
         <div class="steps-row">
-          <div class="step-item"><span>1</span><span data-i18n="home.step1">Paste contract address</span></div>
-          <div class="step-item"><span>2</span><span data-i18n="home.step2">Get risk + AI verdict</span></div>
-          <div class="step-item"><span>3</span><span data-i18n="home.step3">Track via Watchlist &amp; Telegram</span></div>
+          <div class="step-item"><span>1</span><span>Вставь адрес контракта</span></div>
+          <div class="step-item"><span>2</span><span>Получи риск + AI-вердикт</span></div>
+          <div class="step-item"><span>3</span><span>Следи через Watchlist и Telegram</span></div>
         </div>
+      </section>
+
+      <section class="home-block glass panel sell-strip">
+        <h3>После 1–2 сканов обычно не хватает глубины</h3>
+        <p class="muted">
+          Free — быстро «пощупать» риск. Premium — полный разбор, алерты и watchlist,
+          когда решение уже стоит денег.
+        </p>
+        <button type="button" class="upgrade-btn" onclick="openPricing('premium')">Смотреть тарифы</button>
       </section>
 
       <section class="home-block">
@@ -79,32 +92,26 @@
 
       <section class="home-block">
         <div class="section-head">
-          <h2 data-i18n="home.watchlist">Your Watchlist</h2>
-          <a href="#" id="home-watchlist-all" class="link-more" data-i18n="home.openAll">Open all</a>
+          <h2>Your Watchlist</h2>
+          <a href="#" id="home-watchlist-all" class="link-more">Open all</a>
         </div>
         <div id="home-watchlist" class="glass panel">
-          <div class="empty-state-cta">
-            <p data-i18n="home.watchlistEmpty">Login and add tokens from Scanner</p>
-          </div>
+          <div class="empty-state-cta"><p>Войдите и добавьте токены из Scanner</p></div>
         </div>
       </section>
 
       <section class="home-block">
         <div class="section-head">
-          <h2 data-i18n="home.continue">Continue</h2>
-          <a href="#" id="home-history-all" class="link-more" data-i18n="home.history">History</a>
+          <h2>Continue</h2>
+          <a href="#" id="home-history-all" class="link-more">History</a>
         </div>
         <div id="home-history" class="glass panel">
-          <div class="empty-state-cta">
-            <p data-i18n="home.historyEmpty">No recent scans yet</p>
-          </div>
+          <div class="empty-state-cta"><p>Пока нет сканов</p></div>
         </div>
       </section>
 
       <section class="home-block">
-        <div class="section-head">
-          <h2 data-i18n="home.news">Latest News</h2>
-        </div>
+        <div class="section-head"><h2>Latest News</h2></div>
         <div class="news-filters" id="news-filters">
           <button type="button" class="tf-btn active" data-source="all">All</button>
           <button type="button" class="tf-btn" data-source="cryptopanic">CryptoPanic</button>
@@ -117,8 +124,8 @@
 
     <div id="page-scanner" style="display:none;">
       <section class="scanner-hero">
-        <h1 data-i18n="scanner.title">Token Scanner</h1>
-        <p data-i18n="scanner.subtitle">Paste contract address for AI risk analysis</p>
+        <h1>Token Scanner</h1>
+        <p>Вставь адрес контракта — AI оценит риск до покупки</p>
         <div class="plan-switcher">
           <button type="button" class="plan-btn active" data-plan="free">Free</button>
           <button type="button" class="plan-btn" data-plan="premium">Premium</button>
@@ -126,7 +133,7 @@
         </div>
         <div class="search-box">
           <input type="text" id="token-input" placeholder="0x... contract address" />
-          <button id="scan-button" class="upgrade-btn">Analyze</button>
+          <button id="scan-button" class="upgrade-btn">Проверить токен бесплатно</button>
         </div>
       </section>
       <div id="results"></div>
@@ -138,7 +145,7 @@
         <div id="chat-window" style="display:none;flex-direction:column;margin-top:1rem;max-height:360px;">
           <div id="chat-messages" style="flex:1;overflow-y:auto;margin-bottom:0.8rem;min-height:120px;"></div>
           <div class="search-box">
-            <input type="text" id="chat-input" placeholder="Ask about this token..." />
+            <input type="text" id="chat-input" placeholder="Спроси про этот токен..." />
             <button id="chat-send" class="upgrade-btn" type="button">Send</button>
           </div>
         </div>
@@ -226,6 +233,10 @@
   <footer class="site-footer">
     <a href="/privacy.html">Политика конфиденциальности</a>
     <span>·</span>
+    <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">TG RU</a>
+    <span>·</span>
+    <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">TG EN</a>
+    <span>·</span>
     <span>© Crypto AI Scanner</span>
   </footer>
 
@@ -243,7 +254,7 @@
         <input type="password" id="auth-password" placeholder="Password" required minlength="6" />
         <button type="submit" id="auth-submit" class="upgrade-btn full">Login</button>
       </form>
-      <p class="muted small">Demo: pro@test.com / pro123</p>
+      <p class="muted small">После регистрации — тариф Free. Оплата подключится позже.</p>
     </div>
   </div>
 
@@ -264,45 +275,61 @@
     <div class="modal-content glass" style="max-width:820px;">
       <button id="pricing-close" class="modal-close" type="button">&times;</button>
       <h2 style="margin-bottom:0.4rem;">Выберите тариф</h2>
-      <p class="muted" style="margin-bottom:1.2rem;">Сначала выгода — аккаунт только чтобы сохранить доступ</p>
+      <p class="muted" style="margin-bottom:1.2rem;">Free — попробовать. Premium — когда цена ошибки уже высока.</p>
       <div class="pricing-grid">
         <div class="price-card glass" data-plan="free">
           <div class="price-name">Free</div>
           <div class="price-sum">$0</div>
+          <p class="price-hook">Чтобы понять, нужен ли тебе инструмент</p>
           <ul class="price-list">
             <li>5 сканов / день</li>
             <li>Базовый Risk Score</li>
-            <li>Краткий AI-вердикт</li>
+            <li>Короткий AI-вердикт</li>
+            <li>История 7 дней</li>
+            <li>Watchlist до 5 токенов</li>
+            <li class="price-no">Полный AI-отчёт</li>
+            <li class="price-no">Алерты в Telegram</li>
+            <li class="price-no">Сравнение токенов</li>
           </ul>
           <button type="button" class="connect-btn full pricing-pick" data-plan="free">Остаться на Free</button>
         </div>
         <div class="price-card glass featured" data-plan="premium">
-          <div class="price-badge">Популярный</div>
+          <div class="price-badge">Рекомендуем</div>
           <div class="price-name">Premium</div>
           <div class="price-sum">$29<span>/мес</span></div>
+          <p class="price-hook">Один вовремя пойманный скам обычно окупает месяц</p>
           <ul class="price-list">
             <li>50 сканов / день</li>
-            <li>График + Security</li>
-            <li>Полный AI-отчёт</li>
-            <li>Watchlist + Alerts</li>
-            <li>Telegram</li>
+            <li>Полный Risk + Security</li>
+            <li>Развёрнутый AI-отчёт</li>
+            <li>Алерты в Telegram</li>
+            <li>Сравнение до 3 токенов</li>
+            <li>Полная история</li>
+            <li>Watchlist до 30</li>
+            <li>График (свечи)</li>
           </ul>
-          <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Выбрать Premium</button>
+          <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Открыть Premium</button>
         </div>
         <div class="price-card glass" data-plan="pro">
           <div class="price-name">Pro</div>
           <div class="price-sum">$79<span>/мес</span></div>
+          <p class="price-hook">Для тех, кто проверяет токены каждый день</p>
           <ul class="price-list">
             <li>Безлимит сканов</li>
             <li>Всё из Premium</li>
-            <li>Whale-метрики</li>
-            <li>AI-чат</li>
-            <li>Bybit</li>
+            <li>Whale / Buy-Sell / Holders</li>
+            <li>AI-чат по токену</li>
+            <li>Сравнение без лимита</li>
+            <li>Watchlist без лимита</li>
+            <li>Приоритет алертов</li>
+            <li>Bybit read-only</li>
           </ul>
-          <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Выбрать Pro</button>
+          <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Открыть Pro</button>
         </div>
       </div>
-      <p class="muted small" style="margin-top:1rem;text-align:center;">Оплата подключится после открытия ИП. Сейчас — демо-активация после входа.</p>
+      <p class="muted small" style="margin-top:1rem;text-align:center;">
+        Оплата заработает после подключения эквайринга (совсем скоро). Сейчас — выбор тарифа в демо после входа.
+      </p>
     </div>
   </div>
 
@@ -317,7 +344,7 @@
         <div class="ob-step" data-step="2">
           <div class="ob-num">2</div>
           <h3>Получи Risk + AI</h3>
-          <p class="muted">Оценка риска и вердикт за секунды</p>
+          <p class="muted">Оценка риска за секунды</p>
         </div>
         <div class="ob-step" data-step="3">
           <div class="ob-num">3</div>
@@ -334,7 +361,7 @@
 
   <script>
     window.API_BASE = window.location.origin;
-    window.TG_CHANNEL_URL = '';
+    window.TG_CHANNEL_URL = 'https://t.me/Crypto_AI_Scanner';
   </script>
   <script src="i18n.js"></script>
   <script src="app.js"></script>
