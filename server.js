@@ -18,7 +18,7 @@ let newsService = null;
 try {
   newsService = require('./news');
 } catch (e) {
-  console.warn('[News] news.js not found — CryptoPanic fallback');
+  console.warn('[News] news.js not found — fallback');
 }
 
 const app = express();
@@ -32,9 +32,9 @@ app.use(express.static(__dirname));
 const tgLinkCodes = new Map();
 
 const PLAN_LIMITS = {
-  free: { scans: 5, watchlist: 5, historyDays: 7 },
-  premium: { scans: 50, watchlist: 30, historyDays: null },
-  pro: { scans: 999999, watchlist: 999999, historyDays: null }
+  free: { watchlist: 5, historyDays: 7 },
+  premium: { watchlist: 30, historyDays: null },
+  pro: { watchlist: 999999, historyDays: null }
 };
 
 function authMiddleware(req, res, next) {
@@ -62,7 +62,7 @@ function createBybitSignature(apiSecret, payload) {
 app.get('/api/config/public', (req, res) => {
   res.json({
     success: true,
-    channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || process.env.TELEGRAM_CHANNEL_URL || 'https://t.me/Crypto_AI_Scanner',
+    channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
     channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
   });
 });
@@ -71,18 +71,18 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await store.findUserByEmail(email);
-    if (!user || user.password !== password) {
+    if (!user || !(await store.verifyPassword(user, password))) {
       return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
     }
     const token = jwt.sign(
-      { id: user.id, email: user.email, plan: user.plan },
+      { id: user.id, email: user.email, plan: user.plan || 'free' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
     res.json({
       success: true,
       token,
-      user: { id: user.id, email: user.email, plan: user.plan }
+      user: { id: user.id, email: user.email, plan: user.plan || 'free' }
     });
   } catch (e) {
     console.error(e);
@@ -101,7 +101,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
     const user = await store.createUser(email, password, 'free');
     const token = jwt.sign(
-      { id: user.id, email: user.email, plan: user.plan },
+      { id: user.id, email: user.email, plan: 'free' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -116,12 +116,43 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+app.post('/api/user/plan', authMiddleware, async (req, res) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ success: false, error: 'Войдите в аккаунт' });
+  }
+  const plan = String(req.body.plan || '').toLowerCase();
+  if (!['free', 'premium', 'pro'].includes(plan)) {
+    return res.status(400).json({ success: false, error: 'Неверный тариф' });
+  }
+  try {
+    const updated = await store.updateUserPlan(req.user, plan);
+    if (!updated) {
+      return res.status(500).json({ success: false, error: 'Не удалось обновить тариф' });
+    }
+    const tokenJwt = jwt.sign(
+      { id: updated.id, email: updated.email, plan: updated.plan },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    res.json({
+      success: true,
+      plan: updated.plan,
+      token: tokenJwt,
+      user: { id: updated.id, email: updated.email, plan: updated.plan },
+      note: 'Демо-активация до оплаты'
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, error: 'Ошибка сервера' });
+  }
+});
+
 app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
   const { tokenAddress } = req.params;
   const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
 
   try {
-    const usage = await store.canScan(req.user);
+    const usage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
     if (!usage.allowed) {
       return res.status(429).json({
         success: false,
@@ -156,18 +187,16 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
 
     let riskScore = 58;
     let riskLevel = 'MEDIUM';
-    let confidence = 55;
-    let aiText = 'Краткий анализ: средние показатели по доступным данным. Полный разбор Security, графика и AI — в Premium.';
-    let aiVerdict = 'Ограниченный доступ (Free)';
-
-    if (plan === 'premium' || plan === 'pro') {
-      riskScore = plan === 'pro' ? 74 : 67;
-      riskLevel = plan === 'pro' ? 'LOW' : 'MEDIUM';
-      const ai = await aiService.analyzeToken(base, { riskScore, riskLevel });
-      aiText = ai.text;
-      aiVerdict = ai.verdict;
-      confidence = ai.confidence || (plan === 'pro' ? 89 : 78);
+    if (plan === 'premium') {
+      riskScore = 67;
+      riskLevel = 'MEDIUM';
+    } else if (plan === 'pro') {
+      riskScore = 74;
+      riskLevel = 'LOW';
     }
+
+    const aiPlan = plan === 'pro' ? 'pro' : plan === 'premium' ? 'premium' : 'free';
+    const ai = await aiService.analyzeToken(base, { riskScore, riskLevel }, aiPlan);
 
     await store.incrementScan(req.user);
     await store.addHistory(req.user, {
@@ -179,7 +208,14 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
       plan
     });
 
-    const currentUsage = await store.canScan(req.user);
+    const currentUsage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
+    const aiPayload = {
+      text: ai.text,
+      confidence: ai.confidence,
+      verdict: ai.verdict,
+      risks: ai.risks || [],
+      positives: ai.positives || []
+    };
 
     if (plan === 'free') {
       return res.json({
@@ -194,8 +230,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
           pairAddress: base.pairAddress,
           chainId: base.chainId
         },
-        risk: { riskScore, riskLevel, confidence },
-        ai: { text: aiText, confidence, verdict: aiVerdict },
+        risk: { riskScore, riskLevel, confidence: ai.confidence },
+        ai: aiPayload,
         locked: true,
         usage: currentUsage
       });
@@ -206,8 +242,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
         success: true,
         plan: 'Premium',
         token: base,
-        risk: { riskScore, riskLevel, confidence },
-        ai: { text: aiText, confidence, verdict: aiVerdict },
+        risk: { riskScore, riskLevel, confidence: ai.confidence },
+        ai: aiPayload,
         security: {
           contractVerified: base.isVerified,
           liquidityLock: false,
@@ -226,8 +262,8 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
       success: true,
       plan: 'Pro',
       token: base,
-      risk: { riskScore, riskLevel, confidence },
-      ai: { text: aiText, confidence, verdict: aiVerdict },
+      risk: { riskScore, riskLevel, confidence: ai.confidence },
+      ai: aiPayload,
       security: {
         contractVerified: base.isVerified,
         liquidityLock: false,
@@ -251,9 +287,15 @@ app.get('/api/scan/:tokenAddress', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       plan,
-      token: { symbol: tokenAddress.slice(0, 8) + '...' },
+      token: { symbol: String(tokenAddress).slice(0, 8) + '...' },
       risk: { riskScore: 50, riskLevel: 'MEDIUM', confidence: 40 },
-      ai: { text: 'Не удалось загрузить данные', confidence: 30, verdict: 'Ошибка' },
+      ai: {
+        text: 'Не удалось загрузить данные',
+        confidence: 30,
+        verdict: 'Ошибка',
+        risks: [],
+        positives: []
+      },
       usage: await store.canScan(req.user)
     });
   }
@@ -270,7 +312,7 @@ app.get('/api/history', authMiddleware, async (req, res) => {
   if (days) {
     const from = Date.now() - days * 24 * 60 * 60 * 1000;
     history = (history || []).filter((h) => {
-      const t = new Date(h.scannedAt || h.created_at || 0).getTime();
+      const t = new Date(h.scannedAt || 0).getTime();
       return t >= from;
     });
   }
@@ -309,11 +351,10 @@ app.get('/api/alerts', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/alerts', authMiddleware, async (req, res) => {
-  const plan = getPlan(req.user);
-  if (plan === 'free') {
+  if (getPlan(req.user) === 'free') {
     return res.status(403).json({
       success: false,
-      error: 'Алерты доступны с Premium. Не пропусти движение цены.',
+      error: 'Алерты доступны с Premium',
       upsell: 'premium'
     });
   }
@@ -329,8 +370,7 @@ app.delete('/api/alerts/:id', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/compare', authMiddleware, async (req, res) => {
-  const plan = getPlan(req.user);
-  if (plan === 'free') {
+  if (getPlan(req.user) === 'free') {
     return res.status(403).json({
       success: false,
       error: 'Сравнение токенов доступно с Premium',
@@ -444,7 +484,15 @@ app.get('/api/news', async (req, res) => {
   } catch (e) {
     res.json({
       success: true,
-      news: [{ title: 'News temporarily unavailable', source: 'System', url: '#', time: '', platform: 'system' }]
+      news: [
+        {
+          title: 'News temporarily unavailable',
+          source: 'System',
+          url: '#',
+          time: '',
+          platform: 'system'
+        }
+      ]
     });
   }
 });
@@ -463,9 +511,24 @@ app.get('/api/ticker', async (req, res) => {
     res.json({
       success: true,
       ticker: [
-        { id: 'btc', symbol: 'BTC', price: d.bitcoin?.usd ?? null, change24h: d.bitcoin?.usd_24h_change ?? null },
-        { id: 'eth', symbol: 'ETH', price: d.ethereum?.usd ?? null, change24h: d.ethereum?.usd_24h_change ?? null },
-        { id: 'sol', symbol: 'SOL', price: d.solana?.usd ?? null, change24h: d.solana?.usd_24h_change ?? null }
+        {
+          id: 'btc',
+          symbol: 'BTC',
+          price: d.bitcoin?.usd ?? null,
+          change24h: d.bitcoin?.usd_24h_change ?? null
+        },
+        {
+          id: 'eth',
+          symbol: 'ETH',
+          price: d.ethereum?.usd ?? null,
+          change24h: d.ethereum?.usd_24h_change ?? null
+        },
+        {
+          id: 'sol',
+          symbol: 'SOL',
+          price: d.solana?.usd ?? null,
+          change24h: d.solana?.usd_24h_change ?? null
+        }
       ]
     });
   } catch (e) {
@@ -482,7 +545,9 @@ app.get('/api/ticker', async (req, res) => {
 
 app.get('/api/trending', async (req, res) => {
   try {
-    const r = await axios.get('https://api.dexscreener.com/token-boosts/top/v1', { timeout: 8000 });
+    const r = await axios.get('https://api.dexscreener.com/token-boosts/top/v1', {
+      timeout: 8000
+    });
     const list = Array.isArray(r.data) ? r.data : [];
     const tokens = list.slice(0, 12).map((item) => ({
       address: item.tokenAddress || '',
@@ -492,14 +557,23 @@ app.get('/api/trending', async (req, res) => {
       return res.json({
         success: true,
         tokens: [
-          { address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', symbol: 'LINK', name: 'Chainlink', chainId: 'ethereum', price: null }
+          {
+            address: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+            symbol: 'LINK',
+            name: 'Chainlink',
+            chainId: 'ethereum',
+            price: null
+          }
         ]
       });
     }
     const enriched = [];
     for (const t of tokens.slice(0, 8)) {
       try {
-        const dx = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${t.address}`, { timeout: 5000 });
+        const dx = await axios.get(
+          `https://api.dexscreener.com/latest/dex/tokens/${t.address}`,
+          { timeout: 5000 }
+        );
         const pair = dx.data?.pairs?.[0];
         enriched.push({
           address: t.address,
@@ -511,7 +585,13 @@ app.get('/api/trending', async (req, res) => {
           liquidity: pair?.liquidity?.usd || null
         });
       } catch {
-        enriched.push({ address: t.address, chainId: t.chainId, symbol: 'TOKEN', name: '', price: null });
+        enriched.push({
+          address: t.address,
+          chainId: t.chainId,
+          symbol: 'TOKEN',
+          name: '',
+          price: null
+        });
       }
     }
     res.json({ success: true, tokens: enriched });
@@ -519,7 +599,12 @@ app.get('/api/trending', async (req, res) => {
     res.json({
       success: true,
       tokens: [
-        { address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', symbol: 'LINK', name: 'Chainlink', price: null }
+        {
+          address: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+          symbol: 'LINK',
+          name: 'Chainlink',
+          price: null
+        }
       ]
     });
   }
@@ -545,7 +630,10 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
     const url =
       `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${pairAddress}/ohlcv/${gtTf}` +
       `?aggregate=${aggregate}&limit=100`;
-    const r = await axios.get(url, { timeout: 10000, headers: { Accept: 'application/json' } });
+    const r = await axios.get(url, {
+      timeout: 10000,
+      headers: { Accept: 'application/json' }
+    });
     const raw = r.data?.data?.attributes?.ohlcv_list || [];
     const candles = raw
       .map((row) => ({
@@ -560,7 +648,10 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
     const volumes = raw.map((row) => ({
       time: Number(row[0]),
       value: Number(row[5]) || 0,
-      color: Number(row[4]) >= Number(row[1]) ? 'rgba(0, 255, 200, 0.55)' : 'rgba(255, 77, 106, 0.55)'
+      color:
+        Number(row[4]) >= Number(row[1])
+          ? 'rgba(0, 255, 200, 0.55)'
+          : 'rgba(255, 77, 106, 0.55)'
     }));
     res.json({ success: true, source: 'geckoterminal', candles, volumes });
   } catch (e) {
@@ -612,7 +703,10 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
     const timestamp = Date.now().toString();
     const recvWindow = '5000';
     const balanceQuery = 'accountType=UNIFIED';
-    const balanceSign = createBybitSignature(apiSecret, timestamp + apiKey + recvWindow + balanceQuery);
+    const balanceSign = createBybitSignature(
+      apiSecret,
+      timestamp + apiKey + recvWindow + balanceQuery
+    );
     const balanceRes = await axios.get('https://api.bybit.com/v5/account/wallet-balance', {
       params: { accountType: 'UNIFIED' },
       headers: {
@@ -624,7 +718,10 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
     });
     let tradesQuery = `category=linear&limit=${limit}`;
     if (cursor) tradesQuery += `&cursor=${cursor}`;
-    const tradesSign = createBybitSignature(apiSecret, timestamp + apiKey + recvWindow + tradesQuery);
+    const tradesSign = createBybitSignature(
+      apiSecret,
+      timestamp + apiKey + recvWindow + tradesQuery
+    );
     const tradesParams = { category: 'linear', limit: Number(limit) };
     if (cursor) tradesParams.cursor = cursor;
     const tradesRes = await axios.get('https://api.bybit.com/v5/execution/list', {
