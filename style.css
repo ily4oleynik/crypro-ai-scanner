@@ -228,7 +228,20 @@ body.theme-light .hero h1 {
   -webkit-background-clip: text;
   background-clip: text;
 }
-.hero p { color: var(--muted); }
+.hero-sub {
+  color: var(--muted);
+  max-width: 560px;
+  margin: 0.6rem auto 0.4rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+.hero-proof {
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+  opacity: 0.9;
+}
 .hero-actions {
   display: flex;
   gap: 0.8rem;
@@ -263,6 +276,15 @@ body.theme-light .hero h1 {
   font-size: 0.8rem;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+.sell-strip {
+  text-align: center;
+  margin-top: 2rem;
+}
+.sell-strip h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.15rem;
 }
 
 .home-block { margin-top: 2rem; }
@@ -488,6 +510,36 @@ body.theme-light .hero h1 {
   padding: 2rem;
   color: var(--muted);
 }
+.limit-upsell {
+  text-align: center;
+  padding: 2rem 1.5rem;
+}
+.limit-upsell h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+.limit-upsell p {
+  color: var(--muted);
+  max-width: 420px;
+  margin: 0 auto 1.25rem;
+  line-height: 1.55;
+}
+.example-report {
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+.example-report h3 { margin-bottom: 0.75rem; }
+.example-report .ex-block {
+  margin-bottom: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.example-report .ex-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
 .ai-card { padding: 1.2rem; }
 .verdict { color: var(--accent); }
 
@@ -535,6 +587,13 @@ body.theme-light .hero h1 {
 .price-name { font-weight: 700; }
 .price-sum { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
 .price-sum span { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+.price-hook {
+  font-size: 0.88rem;
+  color: var(--accent);
+  min-height: 2.4em;
+  margin: 0.2rem 0 0.4rem;
+  line-height: 1.35;
+}
 .price-list {
   list-style: none;
   margin: 0.4rem 0 0.8rem;
@@ -546,6 +605,11 @@ body.theme-light .hero h1 {
   border-bottom: 1px solid var(--border);
   font-size: 0.88rem;
   color: var(--muted);
+}
+.price-list .price-no {
+  color: #666;
+  text-decoration: line-through;
+  opacity: 0.75;
 }
 
 .modal {
