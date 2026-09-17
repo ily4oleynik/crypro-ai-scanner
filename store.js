@@ -34,12 +34,10 @@ function verifyPasswordHash(stored, password) {
     }
   }
 
-  // bcrypt hash (если когда-то ставили bcryptjs) — без модуля не проверяем
   if (String(stored).startsWith('$2')) {
     return false;
   }
 
-  // старый plain-text
   return stored === password;
 }
 
@@ -76,7 +74,6 @@ async function createUser(email, password, plan = 'free') {
 async function verifyPassword(user, password) {
   if (!user?.password) return false;
   const ok = verifyPasswordHash(user.password, password);
-  // один раз переписать plain-text в scrypt
   if (ok && user.password === password) {
     const hash = hashPassword(password);
     await query(`UPDATE users SET password = $1 WHERE id = $2`, [hash, user.id]);
@@ -262,12 +259,48 @@ async function unlinkTelegram(user) {
 }
 
 async function getUsersWithTelegram() {
-  const r = await query(
-    `SELECT id, email, plan, telegram_chat_id AS "telegramChatId"
-     FROM users
-     WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id <> ''`
-  );
-  return r.rows;
+  try {
+    const r = await query(
+      `SELECT id, email, plan, telegram_chat_id AS "telegramChatId"
+       FROM users
+       WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id <> ''`
+    );
+    return r.rows;
+  } catch (e) {
+    console.error('[store] getUsersWithTelegram:', e.message);
+    return [];
+  }
+}
+
+async function getAllAlertUsers() {
+  try {
+    const r = await query(
+      `SELECT DISTINCT u.id, u.email, u.plan, u.telegram_chat_id AS "telegramChatId"
+       FROM users u
+       INNER JOIN alerts a ON a.user_id = u.id
+       WHERE u.telegram_chat_id IS NOT NULL
+         AND u.telegram_chat_id <> ''`
+    );
+    const users = [];
+    for (const row of r.rows) {
+      const alertsRes = await query(
+        `SELECT id, type, address, symbol, value
+         FROM alerts WHERE user_id = $1`,
+        [row.id]
+      );
+      users.push({
+        id: row.id,
+        email: row.email,
+        plan: row.plan || 'free',
+        telegramChatId: row.telegramChatId,
+        alerts: alertsRes.rows || []
+      });
+    }
+    return users;
+  } catch (e) {
+    console.error('[store] getAllAlertUsers:', e.message);
+    return [];
+  }
 }
 
 module.exports = {
@@ -288,5 +321,6 @@ module.exports = {
   getTelegramChatId,
   linkTelegram,
   unlinkTelegram,
-  getUsersWithTelegram
+  getUsersWithTelegram,
+  getAllAlertUsers
 };
