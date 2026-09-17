@@ -1,288 +1,246 @@
-// backend/store.js
-const { query } = require('./db');
+const bcrypt = require('bcryptjs');
 
-const LIMITS = {
-  free: 5,
-  premium: 50,
-  pro: 999999
-};
+let pool = null;
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+try {
+  const db = require('./db');
+  pool = db.pool || db.getPool?.() || db;
+} catch (e) {
+  console.warn('[store] db module:', e.message);
 }
 
-function getUserId(user) {
-  return user?.id != null ? String(user.id) : 'anonymous';
+function uid(user) {
+  return user?.id || user?.userId || null;
+}
+
+async function query(text, params) {
+  if (!pool || typeof pool.query !== 'function') {
+    throw new Error('PostgreSQL pool not initialized');
+  }
+  return pool.query(text, params);
 }
 
 async function findUserByEmail(email) {
-  const r = await query('SELECT * FROM users WHERE email = $1', [email]);
-  return r.rows[0] || null;
-}
-
-async function findUserById(id) {
-  const r = await query('SELECT * FROM users WHERE id = $1', [id]);
+  const r = await query(
+    `SELECT id, email, password, plan FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    [email]
+  );
   return r.rows[0] || null;
 }
 
 async function createUser(email, password, plan = 'free') {
+  const hash = await bcrypt.hash(password, 10);
   const r = await query(
     `INSERT INTO users (email, password, plan)
      VALUES ($1, $2, $3)
-     RETURNING *`,
-    [email, password, plan]
+     RETURNING id, email, plan`,
+    [email, hash, plan || 'free']
   );
   return r.rows[0];
 }
 
-async function canScan(user) {
-  const plan = (user?.plan || 'free').toLowerCase();
-  const uid = getUserId(user);
-  const day = today();
+async function verifyPassword(user, password) {
+  if (!user?.password) return false;
+  if (String(user.password).startsWith('$2')) {
+    return bcrypt.compare(password, user.password);
+  }
+  // legacy plain-text → migrate
+  if (user.password === password) {
+    const hash = await bcrypt.hash(password, 10);
+    await query(`UPDATE users SET password = $1 WHERE id = $2`, [hash, user.id]);
+    return true;
+  }
+  return false;
+}
 
-  let r = await query(
-    'SELECT count FROM scan_usage WHERE user_id = $1 AND day = $2',
-    [uid, day]
+async function updateUserPlan(user, plan) {
+  const id = uid(user);
+  if (!id) return null;
+  const r = await query(
+    `UPDATE users SET plan = $1 WHERE id = $2
+     RETURNING id, email, plan`,
+    [plan, id]
   );
+  return r.rows[0] || null;
+}
 
-  if (!r.rows[0]) {
-    await query(
-      `INSERT INTO scan_usage (user_id, day, count)
-       VALUES ($1, $2, 0)
-       ON CONFLICT (user_id, day) DO NOTHING`,
-      [uid, day]
-    );
-    r = { rows: [{ count: 0 }] };
+function planLimits(plan) {
+  const p = String(plan || 'free').toLowerCase();
+  if (p === 'pro') return { limit: 999999 };
+  if (p === 'premium') return { limit: 50 };
+  return { limit: 5 };
+}
+
+async function canScan(user) {
+  const id = uid(user);
+  const plan = String(user?.plan || 'free').toLowerCase();
+  const { limit } = planLimits(plan);
+
+  if (!id) {
+    return { allowed: true, used: 0, limit, plan: 'guest' };
   }
 
-  const used = Number(r.rows[0].count);
-  const limit = LIMITS[plan] ?? LIMITS.free;
-
+  const day = new Date().toISOString().slice(0, 10);
+  const r = await query(
+    `SELECT count FROM scan_usage WHERE user_id = $1 AND day = $2`,
+    [id, day]
+  );
+  const used = r.rows[0] ? Number(r.rows[0].count) : 0;
   return {
     allowed: used < limit,
     used,
     limit,
-    remaining: Math.max(0, limit - used)
+    plan
   };
 }
 
 async function incrementScan(user) {
-  const uid = getUserId(user);
-  const day = today();
-  const r = await query(
+  const id = uid(user);
+  if (!id) return;
+  const day = new Date().toISOString().slice(0, 10);
+  await query(
     `INSERT INTO scan_usage (user_id, day, count)
      VALUES ($1, $2, 1)
      ON CONFLICT (user_id, day)
-     DO UPDATE SET count = scan_usage.count + 1
-     RETURNING count`,
-    [uid, day]
+     DO UPDATE SET count = scan_usage.count + 1`,
+    [id, day]
   );
-  return Number(r.rows[0].count);
 }
 
 async function addHistory(user, item) {
-  const uid = getUserId(user);
+  const id = uid(user);
+  if (!id) return;
   await query(
-    `INSERT INTO scan_history (user_id, address, symbol, name, price, risk_score, plan)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO scan_history (user_id, address, symbol, name, price, risk_score, plan, scanned_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
     [
-      uid,
-      item.address,
-      item.symbol || null,
-      item.name || null,
-      item.price != null ? Number(item.price) : null,
-      item.riskScore != null ? Number(item.riskScore) : null,
-      item.plan || null
+      id,
+      item.address || '',
+      item.symbol || '',
+      item.name || '',
+      item.price || 0,
+      item.riskScore || 0,
+      item.plan || 'free'
     ]
-  );
-
-  await query(
-    `DELETE FROM scan_history
-     WHERE user_id = $1
-       AND id NOT IN (
-         SELECT id FROM scan_history
-         WHERE user_id = $1
-         ORDER BY scanned_at DESC, id DESC
-         LIMIT 50
-       )`,
-    [uid]
   );
 }
 
 async function getHistory(user) {
-  const uid = getUserId(user);
+  const id = uid(user);
+  if (!id) return [];
   const r = await query(
-    `SELECT address, symbol, name, price,
-            risk_score AS "riskScore", plan,
-            scanned_at AS "scannedAt"
+    `SELECT address, symbol, name, price, risk_score AS "riskScore", plan, scanned_at AS "scannedAt"
      FROM scan_history
      WHERE user_id = $1
-     ORDER BY scanned_at DESC, id DESC
-     LIMIT 50`,
-    [uid]
+     ORDER BY scanned_at DESC
+     LIMIT 100`,
+    [id]
   );
   return r.rows;
 }
 
 async function getWatchlist(user) {
-  const uid = getUserId(user);
+  const id = uid(user);
+  if (!id) return [];
   const r = await query(
-    `SELECT address, symbol, name, added_at AS "addedAt"
-     FROM watchlist
-     WHERE user_id = $1
-     ORDER BY added_at DESC`,
-    [uid]
+    `SELECT address, symbol, name, created_at AS "createdAt"
+     FROM watchlist WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [id]
   );
   return r.rows;
 }
 
-async function addToWatchlist(user, token) {
-  const uid = getUserId(user);
+async function addToWatchlist(user, item) {
+  const id = uid(user);
+  if (!id) return { success: false, error: 'Auth required' };
   try {
     await query(
       `INSERT INTO watchlist (user_id, address, symbol, name)
-       VALUES ($1, $2, $3, $4)`,
-      [uid, token.address, token.symbol || 'TOKEN', token.name || '']
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, address) DO UPDATE
+       SET symbol = EXCLUDED.symbol, name = EXCLUDED.name`,
+      [id, item.address, item.symbol || '', item.name || '']
     );
-    return { success: true, watchlist: await getWatchlist(user) };
+    return { success: true };
   } catch (e) {
-    if (e.code === '23505') {
-      return { success: false, error: 'Уже в watchlist' };
-    }
-    throw e;
+    return { success: false, error: e.message };
   }
 }
 
 async function removeFromWatchlist(user, address) {
-  const uid = getUserId(user);
-  await query(
-    `DELETE FROM watchlist
-     WHERE user_id = $1 AND lower(address) = lower($2)`,
-    [uid, address]
-  );
-  return { success: true, watchlist: await getWatchlist(user) };
+  const id = uid(user);
+  if (!id) return { success: false };
+  await query(`DELETE FROM watchlist WHERE user_id = $1 AND address = $2`, [id, address]);
+  return { success: true };
 }
 
 async function getAlerts(user) {
-  const uid = getUserId(user);
+  const id = uid(user);
+  if (!id) return [];
   const r = await query(
-    `SELECT id, type, address, symbol, value, active,
-            created_at AS "createdAt"
-     FROM alerts
-     WHERE user_id = $1
+    `SELECT id, type, address, symbol, value, created_at AS "createdAt"
+     FROM alerts WHERE user_id = $1
      ORDER BY created_at DESC`,
-    [uid]
+    [id]
   );
   return r.rows;
 }
 
-async function addAlert(user, alert) {
-  const uid = getUserId(user);
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  await query(
-    `INSERT INTO alerts (id, user_id, type, address, symbol, value, active)
-     VALUES ($1, $2, $3, $4, $5, $6, TRUE)`,
-    [id, uid, alert.type, alert.address, alert.symbol || 'TOKEN', Number(alert.value)]
+async function addAlert(user, item) {
+  const id = uid(user);
+  if (!id) return { success: false, error: 'Auth required' };
+  const r = await query(
+    `INSERT INTO alerts (user_id, type, address, symbol, value)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, type, address, symbol, value`,
+    [id, item.type, item.address, item.symbol || '', item.value]
   );
-  return { success: true, alerts: await getAlerts(user) };
+  return { success: true, alert: r.rows[0] };
 }
 
 async function removeAlert(user, alertId) {
-  const uid = getUserId(user);
-  await query('DELETE FROM alerts WHERE user_id = $1 AND id = $2', [uid, alertId]);
-  await query('DELETE FROM fired_alerts WHERE user_id = $1 AND alert_id = $2', [uid, alertId]);
-  return { success: true, alerts: await getAlerts(user) };
-}
-
-async function linkTelegram(user, chatId) {
-  const uid = getUserId(user);
-  await query(
-    `INSERT INTO telegram_links (user_id, chat_id)
-     VALUES ($1, $2)
-     ON CONFLICT (user_id) DO UPDATE SET chat_id = EXCLUDED.chat_id`,
-    [uid, String(chatId)]
-  );
-  return { success: true, chatId: String(chatId) };
-}
-
-async function getTelegramChatId(user) {
-  const uid = getUserId(user);
-  const r = await query(
-    'SELECT chat_id FROM telegram_links WHERE user_id = $1',
-    [uid]
-  );
-  return r.rows[0]?.chat_id || null;
-}
-
-async function unlinkTelegram(user) {
-  const uid = getUserId(user);
-  await query('DELETE FROM telegram_links WHERE user_id = $1', [uid]);
+  const id = uid(user);
+  if (!id) return { success: false };
+  await query(`DELETE FROM alerts WHERE user_id = $1 AND id = $2`, [id, alertId]);
   return { success: true };
 }
 
-async function markAlertFired(userId, alertId) {
-  await query(
-    `INSERT INTO fired_alerts (user_id, alert_id)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING`,
-    [String(userId), String(alertId)]
-  );
+async function getTelegramChatId(user) {
+  const id = uid(user);
+  if (!id) return null;
+  const r = await query(`SELECT telegram_chat_id FROM users WHERE id = $1`, [id]);
+  return r.rows[0]?.telegram_chat_id || null;
 }
 
-async function wasAlertFired(userId, alertId) {
+async function linkTelegram(user, chatId) {
+  const id = uid(user);
+  if (!id) return { success: false };
+  await query(`UPDATE users SET telegram_chat_id = $1 WHERE id = $2`, [String(chatId), id]);
+  return { success: true };
+}
+
+async function unlinkTelegram(user) {
+  const id = uid(user);
+  if (!id) return { success: false };
+  await query(`UPDATE users SET telegram_chat_id = NULL WHERE id = $1`, [id]);
+  return { success: true };
+}
+
+async function getUsersWithTelegram() {
   const r = await query(
-    'SELECT 1 FROM fired_alerts WHERE user_id = $1 AND alert_id = $2',
-    [String(userId), String(alertId)]
+    `SELECT id, email, plan, telegram_chat_id AS "telegramChatId"
+     FROM users
+     WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id <> ''`
   );
-  return r.rows.length > 0;
-}
-
-async function getAllAlertUsers() {
-  const links = await query('SELECT user_id, chat_id FROM telegram_links');
-  const result = [];
-  for (const link of links.rows) {
-    const alerts = await query(
-      `SELECT id, type, address, symbol, value, active,
-              created_at AS "createdAt"
-       FROM alerts
-       WHERE user_id = $1 AND active = TRUE`,
-      [link.user_id]
-    );
-    if (alerts.rows.length) {
-      result.push({
-        userId: link.user_id,
-        chatId: link.chat_id,
-        alerts: alerts.rows
-      });
-    }
-  }
-  return result;
-}
-
-async function getDigestUsers() {
-  const links = await query('SELECT user_id, chat_id FROM telegram_links');
-  const result = [];
-  for (const link of links.rows) {
-    const wl = await query(
-      `SELECT address, symbol, name, added_at AS "addedAt"
-       FROM watchlist WHERE user_id = $1
-       ORDER BY added_at DESC`,
-      [link.user_id]
-    );
-    result.push({
-      userId: link.user_id,
-      chatId: link.chat_id,
-      watchlist: wl.rows
-    });
-  }
-  return result;
+  return r.rows;
 }
 
 module.exports = {
-  LIMITS,
   findUserByEmail,
-  findUserById,
   createUser,
+  verifyPassword,
+  updateUserPlan,
   canScan,
   incrementScan,
   addHistory,
@@ -293,11 +251,8 @@ module.exports = {
   getAlerts,
   addAlert,
   removeAlert,
-  linkTelegram,
   getTelegramChatId,
+  linkTelegram,
   unlinkTelegram,
-  markAlertFired,
-  wasAlertFired,
-  getAllAlertUsers,
-  getDigestUsers
+  getUsersWithTelegram
 };
