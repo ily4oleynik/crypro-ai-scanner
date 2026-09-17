@@ -100,13 +100,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('try-link-btn')?.addEventListener('click', () => {
     showPage('scanner');
-    document.getElementById('token-input').value = '0x514910771AF9Ca656af840dff83E8264EcF986CA';
-    startScan();
+    document.getElementById('token-input').value = '';
+    document.getElementById('token-input')?.focus();
   });
   document.getElementById('go-scanner-btn')?.addEventListener('click', () => {
     showPage('scanner');
-    document.getElementById('token-input')?.focus();
+    document.getElementById('token-input').value = '0x514910771AF9Ca656af840dff83E8264EcF986CA';
+    startScan();
   });
+  document.getElementById('example-report-btn')?.addEventListener('click', showExampleReport);
+
   document.getElementById('home-watchlist-all')?.addEventListener('click', e => {
     e.preventDefault();
     showPage('watchlist');
@@ -145,7 +148,34 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(loadTicker, 60000);
 });
 
-// ===== THEME =====
+function showExampleReport() {
+  showPage('scanner');
+  const results = document.getElementById('results');
+  if (!results) return;
+  results.innerHTML =
+    '<div class="example-report glass">' +
+    '<h3>Пример полного анализа (Premium)</h3>' +
+    '<p class="muted small">Демо-отчёт. Реальные цифры зависят от токена.</p>' +
+    '<div class="ex-block"><div class="ex-label">Risk Score</div><div class="metric-value risk-MEDIUM">67 / 100 · MEDIUM</div></div>' +
+    '<div class="ex-block"><div class="ex-label">Security</div>' +
+    'Contract: Verified · Scam probability: ~22% · Liquidity lock: проверяется отдельно</div>' +
+    '<div class="ex-block"><div class="ex-label">AI Summary</div>' +
+    'Ликвидность умеренная, объём за 24ч не аномальный. Концентрация холдеров и соцсигналы — средние. ' +
+    'Резких red flags по доступным данным нет, но мем-сегмент всегда несёт риск rug. DYOR.</div>' +
+    '<div class="ex-block"><div class="ex-label">Key risks</div>' +
+    '· Волатильность · Возможная концентрация китов · Зависимость от одного DEX-пула</div>' +
+    '<div class="ex-block"><div class="ex-label">Positive signals</div>' +
+    '· Контракт верифицирован · Есть сайт/соцсети · Объём не выглядит полностью «пустым»</div>' +
+    '<div class="ex-block"><div class="ex-label">Verdict</div><span class="verdict">Осторожный интерес · только на риск, который готов потерять</span></div>' +
+    '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Хочу такие отчёты — Premium</button> ' +
+    '<button type="button" class="connect-btn" id="try-link-btn-2">Проверить свой токен</button>' +
+    '</div>';
+  document.getElementById('try-link-btn-2')?.addEventListener('click', () => {
+    document.getElementById('token-input').value = '';
+    document.getElementById('token-input')?.focus();
+  });
+}
+
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   document.body.classList.toggle('theme-light', saved === 'light');
@@ -161,7 +191,6 @@ function toggleTheme() {
   if (btn) btn.textContent = light ? '☀' : '☾';
 }
 
-// ===== BURGER =====
 function initBurger() {
   const burger = document.getElementById('nav-burger');
   const links = document.getElementById('nav-links');
@@ -172,14 +201,12 @@ function initBurger() {
   });
 }
 
-// ===== ONBOARDING =====
 function initOnboarding() {
   if (localStorage.getItem('ob_done') === '1') return;
   const modal = document.getElementById('onboarding-modal');
   if (!modal) return;
   modal.style.display = 'flex';
   let step = 1;
-
   const show = (n) => {
     document.querySelectorAll('.ob-step').forEach(s => {
       s.classList.toggle('active', Number(s.dataset.step) === n);
@@ -187,7 +214,6 @@ function initOnboarding() {
     const next = document.getElementById('ob-next');
     if (next) next.textContent = n >= 3 ? 'Начать' : 'Далее';
   };
-
   document.getElementById('ob-next')?.addEventListener('click', () => {
     if (step >= 3) {
       localStorage.setItem('ob_done', '1');
@@ -198,14 +224,12 @@ function initOnboarding() {
     step += 1;
     show(step);
   });
-
   document.getElementById('ob-skip')?.addEventListener('click', () => {
     localStorage.setItem('ob_done', '1');
     modal.style.display = 'none';
   });
 }
 
-// ===== TICKER =====
 async function loadTicker() {
   const inner = document.getElementById('ticker-inner');
   if (!inner) return;
@@ -222,7 +246,7 @@ async function loadTicker() {
         : t.price >= 100
           ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
           : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
-      const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + ch.toFixed(2) + '%</span>';
+      const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
       return '<span class="ticker-item"><strong>' + t.symbol + '</strong> $' + price + ' ' + chStr + '</span>';
     }).join('');
     inner.innerHTML = html + html;
@@ -231,7 +255,6 @@ async function loadTicker() {
   }
 }
 
-// ===== TRENDING =====
 async function loadTrending() {
   const grid = document.getElementById('trending-grid');
   if (!grid) return;
@@ -241,7 +264,7 @@ async function loadTrending() {
     const data = await res.json();
     const tokens = data.tokens || [];
     if (!tokens.length) {
-      grid.innerHTML = '<div class="empty-state-cta"><p>Нет trending-данных</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Открыть Scanner</button></div>';
+      grid.innerHTML = '<div class="empty-state-cta"><p>Нет trending</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
       return;
     }
     grid.innerHTML = tokens.map(t => {
@@ -252,11 +275,10 @@ async function loadTrending() {
         '<div class="trend-meta">' + (t.name || t.chainId || '') + '</div></div>';
     }).join('');
   } catch (e) {
-    grid.innerHTML = '<div class="empty-state-cta"><p>Trending error</p><button type="button" class="connect-btn" onclick="loadTrending()">Retry</button></div>';
+    grid.innerHTML = '<div class="empty-state-cta"><p>Error</p><button type="button" class="connect-btn" onclick="loadTrending()">Retry</button></div>';
   }
 }
 
-// ===== PRICING =====
 function openPricing(highlightPlan) {
   pendingPlan = highlightPlan || null;
   const modal = document.getElementById('pricing-modal');
@@ -299,10 +321,9 @@ async function activatePlanDemo(plan) {
   updateAuthUI();
   closePricing();
   refreshAccountPage();
-  alert(plan.toUpperCase() + ' активирован в демо-режиме.\n\nСканы идут по тарифу ' + plan + '.\nStripe — следующий этап.');
+  alert(plan.toUpperCase() + ' активирован в демо-режиме.\nОплата подключится после эквайринга.');
 }
 
-// ===== AUTH =====
 function openAuthModal(hintText) {
   const modal = document.getElementById('auth-modal');
   const hint = document.getElementById('auth-hint');
@@ -354,8 +375,6 @@ async function handleAuth(e) {
       const p = pendingPlan;
       pendingPlan = null;
       await activatePlanDemo(p);
-    } else {
-      alert('OK · ' + (data.user.plan || 'free').toUpperCase());
     }
   } catch (err) {
     alert('Connection error');
@@ -474,7 +493,7 @@ async function loadHomeWatchlist() {
     });
     const data = await res.json();
     if (!data.watchlist?.length) {
-      box.innerHTML = '<div class="empty-state-cta"><p>Список пуст</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Открыть Scanner</button></div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>Список пуст</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
       return;
     }
     box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
@@ -511,7 +530,6 @@ async function loadHomeHistory() {
   }
 }
 
-// ===== WALLET / BYBIT =====
 async function connectWallet() {
   if (typeof window.ethereum === 'undefined') return alert('Install MetaMask');
   try {
@@ -583,7 +601,6 @@ async function connectBybit(e) {
   }
 }
 
-// ===== NEWS =====
 async function loadNews(source) {
   if (source) newsSource = source;
   const grid = document.getElementById('news-grid');
@@ -606,10 +623,9 @@ async function loadNews(source) {
   }
 }
 
-// ===== SCAN =====
 async function startScan() {
   const address = document.getElementById('token-input').value.trim();
-  if (!address) return alert('Enter address');
+  if (!address) return alert('Введите адрес контракта');
   const results = document.getElementById('results');
   results.innerHTML = '<div class="loading">Analyzing...</div>';
   const chatSec = document.getElementById('ai-chat-section');
@@ -622,8 +638,12 @@ async function startScan() {
     const data = await res.json();
     if (res.status === 429 || (data.error && String(data.error).includes('Лимит'))) {
       results.innerHTML =
-        '<div class="error-card">' + (data.error || 'Limit reached') +
-        '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Upgrade</button></div></div>';
+        '<div class="error-card limit-upsell glass">' +
+        '<h3>Ты упёрся в лимит Free</h3>' +
+        '<p>Полный разбор риска, Security и алерты в Telegram — на Premium. ' +
+        'Один вовремя пойманный скам обычно окупает подписку.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button>' +
+        '</div>';
       refreshUsage();
       return;
     }
@@ -811,7 +831,8 @@ function renderTokenPage(data) {
         '<button type="button" class="tf-btn" data-tf="1D">1D</button>' +
         '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><p>График доступен в Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p><strong>На Free виден только краткий вердикт.</strong><br>Полный AI-отчёт, график и Security — в Premium.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
         '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
@@ -828,12 +849,17 @@ function renderTokenPage(data) {
         '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
-      : '<div class="locked-message glass"><p>Security — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p><strong>Security скрыт на Free.</strong><br>Полный разбор контракта — в Premium.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
     '<p style="margin:1rem 0;line-height:1.65;">' + safe(ai.text) + '</p>' +
-    '<div class="muted">Confidence: ' + safe(ai.confidence) + '%</div></div></div>' +
+    '<div class="muted">Confidence: ' + safe(ai.confidence) + '%</div>' +
+    (!isPrem
+      ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Полный AI-отчёт — Premium</button></div>'
+      : '') +
+    '</div></div>' +
     '<div class="tab-pane" id="links">' +
     (isPrem && data.projectLinks
       ? '<div class="home-chip-row">' +
@@ -942,7 +968,6 @@ function removeChatMessage(id) {
   document.getElementById(id)?.remove();
 }
 
-// ===== HISTORY / WATCHLIST =====
 async function loadHistory() {
   const box = document.getElementById('history-content');
   if (!box) return;
@@ -1029,7 +1054,6 @@ async function removeWatch(address) {
   loadHomeWatchlist();
 }
 
-// ===== ALERTS / TELEGRAM =====
 async function loadAlerts() {
   const box = document.getElementById('alerts-content');
   if (!box) return;
@@ -1094,12 +1118,11 @@ async function refreshTelegramStatus() {
     const st = document.getElementById('tg-status');
     const btn = document.getElementById('tg-connect-btn');
     if (!st || !btn) return;
-    if (data.channelUrl) {
-      window.TG_CHANNEL_URL = data.channelUrl;
-      const cta = document.getElementById('tg-channel-cta');
-      if (cta) {
-        cta.innerHTML = 'Канал: <a class="link-more" href="' + data.channelUrl + '" target="_blank" rel="noopener">подписаться</a>';
-      }
+    const cta = document.getElementById('tg-channel-cta');
+    if (cta) {
+      cta.innerHTML =
+        'Каналы: <a class="link-more" href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">RU</a> · ' +
+        '<a class="link-more" href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">EN</a>';
     }
     if (data.linked) {
       st.textContent = 'Connected ✓';
@@ -1130,12 +1153,6 @@ async function connectTelegram() {
     if (link) link.href = data.deepLink;
     const code = document.getElementById('tg-code');
     if (code) code.textContent = data.code;
-    if (data.channelUrl) {
-      const cta = document.getElementById('tg-channel-cta');
-      if (cta) {
-        cta.innerHTML = 'Канал: <a class="link-more" href="' + data.channelUrl + '" target="_blank" rel="noopener">подписаться</a>';
-      }
-    }
   } catch (e) {
     alert('Telegram link failed');
   }
@@ -1155,7 +1172,6 @@ async function disconnectTelegram() {
   }
 }
 
-// ===== COMPARE =====
 async function runCompare() {
   const a1 = document.getElementById('cmp-1').value.trim();
   const a2 = document.getElementById('cmp-2').value.trim();
