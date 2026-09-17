@@ -1,12 +1,46 @@
-const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 let pool = null;
 
 try {
   const db = require('./db');
-  pool = db.pool || db.getPool?.() || db;
+  pool = db.pool || (typeof db.getPool === 'function' ? db.getPool() : db);
 } catch (e) {
   console.warn('[store] db module:', e.message);
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return 'scrypt:' + salt + ':' + hash;
+}
+
+function verifyPasswordHash(stored, password) {
+  if (!stored) return false;
+
+  if (String(stored).startsWith('scrypt:')) {
+    const parts = String(stored).split(':');
+    if (parts.length !== 3) return false;
+    const salt = parts[1];
+    const hash = parts[2];
+    const test = crypto.scryptSync(String(password), salt, 64).toString('hex');
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(hash, 'hex'),
+        Buffer.from(test, 'hex')
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // bcrypt hash (если когда-то ставили bcryptjs) — без модуля не проверяем
+  if (String(stored).startsWith('$2')) {
+    return false;
+  }
+
+  // старый plain-text
+  return stored === password;
 }
 
 function uid(user) {
@@ -29,7 +63,7 @@ async function findUserByEmail(email) {
 }
 
 async function createUser(email, password, plan = 'free') {
-  const hash = await bcrypt.hash(password, 10);
+  const hash = hashPassword(password);
   const r = await query(
     `INSERT INTO users (email, password, plan)
      VALUES ($1, $2, $3)
@@ -41,16 +75,13 @@ async function createUser(email, password, plan = 'free') {
 
 async function verifyPassword(user, password) {
   if (!user?.password) return false;
-  if (String(user.password).startsWith('$2')) {
-    return bcrypt.compare(password, user.password);
-  }
-  // legacy plain-text → migrate
-  if (user.password === password) {
-    const hash = await bcrypt.hash(password, 10);
+  const ok = verifyPasswordHash(user.password, password);
+  // один раз переписать plain-text в scrypt
+  if (ok && user.password === password) {
+    const hash = hashPassword(password);
     await query(`UPDATE users SET password = $1 WHERE id = $2`, [hash, user.id]);
-    return true;
   }
-  return false;
+  return ok;
 }
 
 async function updateUserPlan(user, plan) {
@@ -216,7 +247,10 @@ async function getTelegramChatId(user) {
 async function linkTelegram(user, chatId) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`UPDATE users SET telegram_chat_id = $1 WHERE id = $2`, [String(chatId), id]);
+  await query(`UPDATE users SET telegram_chat_id = $1 WHERE id = $2`, [
+    String(chatId),
+    id
+  ]);
   return { success: true };
 }
 
