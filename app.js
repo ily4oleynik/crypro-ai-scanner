@@ -237,18 +237,38 @@ async function loadTicker() {
     const res = await fetch(API_BASE + '/api/ticker');
     const data = await res.json();
     const items = data.ticker || [];
-    const html = items.map(t => {
-      const ch = t.change24h;
-      const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
-      const sign = ch > 0 ? '+' : '';
-      const price = t.price == null
-        ? '—'
-        : t.price >= 100
-          ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
-          : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
-      const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
-      return '<span class="ticker-item"><strong>' + t.symbol + '</strong> $' + price + ' ' + chStr + '</span>';
-    }).join('');
+    if (!items.length) {
+      inner.innerHTML = '<span class="ticker-item">Markets unavailable</span>';
+      return;
+    }
+    const html = items
+      .map((t) => {
+        const ch = t.change24h;
+        const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
+        const sign = ch > 0 ? '+' : '';
+        const price =
+          t.price == null
+            ? '—'
+            : t.price >= 100
+              ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
+              : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        const chStr =
+          ch == null
+            ? ''
+            : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
+        return (
+          '<span class="ticker-item">' +
+          '<strong>' +
+          t.symbol +
+          '</strong>' +
+          '<span>$' +
+          price +
+          '</span>' +
+          chStr +
+          '</span>'
+        );
+      })
+      .join('');
     inner.innerHTML = html + html;
   } catch (e) {
     inner.innerHTML = '<span class="ticker-item">Ticker unavailable</span>';
@@ -313,15 +333,40 @@ async function selectPlan(plan) {
 }
 
 async function activatePlanDemo(plan) {
-  currentPlan = plan;
-  if (user) user.plan = plan;
-  document.querySelectorAll('.plan-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.plan === plan);
-  });
-  updateAuthUI();
-  closePricing();
-  refreshAccountPage();
-  alert(plan.toUpperCase() + ' активирован в демо-режиме.\nОплата подключится после эквайринга.');
+  try {
+    const res = await fetch(API_BASE + '/api/user/plan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      body: JSON.stringify({ plan })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.error || 'Не удалось сменить тариф');
+      return;
+    }
+    if (data.token) {
+      token = data.token;
+      localStorage.setItem('token', token);
+    }
+    currentPlan = data.plan || plan;
+    if (user) user.plan = currentPlan;
+    document.querySelectorAll('.plan-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.plan === currentPlan);
+    });
+    updateAuthUI();
+    closePricing();
+    refreshAccountPage();
+    refreshUsage();
+    alert(
+      currentPlan.toUpperCase() +
+        ' сохранён в аккаунте (демо до эквайринга).\nОбнови страницу — тариф останется.'
+    );
+  } catch (e) {
+    alert('Ошибка сети');
+  }
 }
 
 function openAuthModal(hintText) {
@@ -800,6 +845,7 @@ function renderTokenPage(data) {
   const isPro = data.plan === 'Pro';
   const addr = lastScannedToken?.address || '';
   const adv = data.advanced || {};
+  const reasons = Array.isArray(r.reasons) ? r.reasons : [];
 
   lastPairMeta = {
     pairAddress: tok.pairAddress || lastPairMeta?.pairAddress || null,
@@ -816,6 +862,11 @@ function renderTokenPage(data) {
     '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
     '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
     '</div></div>' +
+    (reasons.length
+      ? '<div class="glass panel" style="margin-bottom:1rem;"><div class="muted small">Факторы риска</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
+        reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') +
+        '</ul></div>'
+      : '') +
     '<div class="metrics-grid">' +
     '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
     '<div class="metric-card glass"><div class="metric-label">FDV</div><div class="metric-value">' + formatNum(tok.fdv) + '</div></div>' +
@@ -859,7 +910,15 @@ function renderTokenPage(data) {
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
     '<p style="margin:1rem 0;line-height:1.65;">' + safe(ai.text) + '</p>' +
-    '<div class="muted">Confidence: ' + safe(ai.confidence) + '%</div>' +
+    (Array.isArray(ai.risks) && ai.risks.length
+      ? '<div style="margin-top:0.8rem;"><div class="muted">Key risks</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
+        ai.risks.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
+      : '') +
+    (Array.isArray(ai.positives) && ai.positives.length
+      ? '<div style="margin-top:0.8rem;"><div class="muted">Positive signals</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
+        ai.positives.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
+      : '') +
+    '<div class="muted" style="margin-top:0.8rem;">Confidence: ' + safe(ai.confidence) + '%</div>' +
     (!isPrem
       ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Полный AI-отчёт — Premium</button></div>'
       : '') +
