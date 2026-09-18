@@ -1,4 +1,4 @@
-const API_BASE = window.API_BASE || 'http://localhost:3000';
+const API_BASE = window.API_BASE || window.location.origin;
 
 let currentPlan = 'free';
 let user = null;
@@ -68,8 +68,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const mode = tab.dataset.mode;
       const title = document.getElementById('auth-title');
       const submit = document.getElementById('auth-submit');
-      if (title) title.textContent = mode === 'login' ? 'Login' : 'Register';
-      if (submit) submit.textContent = mode === 'login' ? 'Login' : 'Create Account';
+      const pass2 = document.getElementById('auth-password2');
+      const terms = document.getElementById('auth-terms-wrap');
+      const err = document.getElementById('auth-error');
+      if (err) { err.style.display = 'none'; err.textContent = ''; }
+      if (title) title.textContent = mode === 'login' ? 'Login' : 'Create account';
+      if (submit) submit.textContent = mode === 'login' ? 'Login' : 'Create account';
+      if (pass2) pass2.style.display = mode === 'register' ? 'block' : 'none';
+      if (terms) terms.style.display = mode === 'register' ? 'flex' : 'none';
+      const p1 = document.getElementById('auth-password');
+      if (p1) p1.autocomplete = mode === 'register' ? 'new-password' : 'current-password';
     });
   });
 
@@ -157,23 +165,11 @@ function showExampleReport() {
     '<h3>Пример полного анализа (Premium)</h3>' +
     '<p class="muted small">Демо-отчёт. Реальные цифры зависят от токена.</p>' +
     '<div class="ex-block"><div class="ex-label">Risk Score</div><div class="metric-value risk-MEDIUM">67 / 100 · MEDIUM</div></div>' +
-    '<div class="ex-block"><div class="ex-label">Security</div>' +
-    'Contract: Verified · Scam probability: ~22% · Liquidity lock: проверяется отдельно</div>' +
-    '<div class="ex-block"><div class="ex-label">AI Summary</div>' +
-    'Ликвидность умеренная, объём за 24ч не аномальный. Концентрация холдеров и соцсигналы — средние. ' +
-    'Резких red flags по доступным данным нет, но мем-сегмент всегда несёт риск rug. DYOR.</div>' +
-    '<div class="ex-block"><div class="ex-label">Key risks</div>' +
-    '· Волатильность · Возможная концентрация китов · Зависимость от одного DEX-пула</div>' +
-    '<div class="ex-block"><div class="ex-label">Positive signals</div>' +
-    '· Контракт верифицирован · Есть сайт/соцсети · Объём не выглядит полностью «пустым»</div>' +
-    '<div class="ex-block"><div class="ex-label">Verdict</div><span class="verdict">Осторожный интерес · только на риск, который готов потерять</span></div>' +
-    '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Хочу такие отчёты — Premium</button> ' +
-    '<button type="button" class="connect-btn" id="try-link-btn-2">Проверить свой токен</button>' +
+    '<div class="ex-block"><div class="ex-label">Security</div>Contract: Verified · Scam probability: ~22%</div>' +
+    '<div class="ex-block"><div class="ex-label">AI Summary</div>Ликвидность умеренная, объём за 24ч не аномальный. DYOR.</div>' +
+    '<div class="ex-block"><div class="ex-label">Verdict</div><span class="verdict">Осторожный интерес</span></div>' +
+    '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Хочу такие отчёты — Premium</button>' +
     '</div>';
-  document.getElementById('try-link-btn-2')?.addEventListener('click', () => {
-    document.getElementById('token-input').value = '';
-    document.getElementById('token-input')?.focus();
-  });
 }
 
 function initTheme() {
@@ -241,34 +237,16 @@ async function loadTicker() {
       inner.innerHTML = '<span class="ticker-item">Markets unavailable</span>';
       return;
     }
-    const html = items
-      .map((t) => {
-        const ch = t.change24h;
-        const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
-        const sign = ch > 0 ? '+' : '';
-        const price =
-          t.price == null
-            ? '—'
-            : t.price >= 100
-              ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
-              : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
-        const chStr =
-          ch == null
-            ? ''
-            : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
-        return (
-          '<span class="ticker-item">' +
-          '<strong>' +
-          t.symbol +
-          '</strong>' +
-          '<span>$' +
-          price +
-          '</span>' +
-          chStr +
-          '</span>'
-        );
-      })
-      .join('');
+    const html = items.map((t) => {
+      const ch = t.change24h;
+      const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
+      const sign = ch > 0 ? '+' : '';
+      const price = t.price == null ? '—' : t.price >= 100
+        ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
+        : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+      const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
+      return '<span class="ticker-item"><strong>' + t.symbol + '</strong><span>$' + price + '</span>' + chStr + '</span>';
+    }).join('');
     inner.innerHTML = html + html;
   } catch (e) {
     inner.innerHTML = '<span class="ticker-item">Ticker unavailable</span>';
@@ -336,10 +314,7 @@ async function activatePlanDemo(plan) {
   try {
     const res = await fetch(API_BASE + '/api/user/plan', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + token
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ plan })
     });
     const data = await res.json();
@@ -360,10 +335,7 @@ async function activatePlanDemo(plan) {
     closePricing();
     refreshAccountPage();
     refreshUsage();
-    alert(
-      currentPlan.toUpperCase() +
-        ' сохранён в аккаунте (демо до эквайринга).\nОбнови страницу — тариф останется.'
-    );
+    alert(currentPlan.toUpperCase() + ' сохранён (демо до эквайринга).');
   } catch (e) {
     alert('Ошибка сети');
   }
@@ -388,10 +360,9 @@ function closeAuthModal() {
   const modal = document.getElementById('auth-modal');
   if (modal) modal.style.display = 'none';
   const hint = document.getElementById('auth-hint');
-  if (hint) {
-    hint.textContent = '';
-    hint.style.display = 'none';
-  }
+  if (hint) { hint.textContent = ''; hint.style.display = 'none'; }
+  const err = document.getElementById('auth-error');
+  if (err) { err.textContent = ''; err.style.display = 'none'; }
 }
 
 async function handleAuth(e) {
@@ -399,14 +370,39 @@ async function handleAuth(e) {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const isLogin = document.querySelector('.auth-tab.active')?.dataset?.mode !== 'register';
+  const errEl = document.getElementById('auth-error');
+  const showErr = (msg) => {
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    } else alert(msg);
+  };
+  if (errEl) errEl.style.display = 'none';
+
+  if (!isLogin) {
+    const password2 = document.getElementById('auth-password2')?.value || '';
+    const acceptTerms = !!document.getElementById('auth-terms')?.checked;
+    if (password.length < 8) return showErr('Password: at least 8 characters');
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      return showErr('Password: at least one letter and one number');
+    }
+    if (password !== password2) return showErr('Passwords do not match');
+    if (!acceptTerms) return showErr('Please accept Terms and Privacy Policy');
+  }
+
   try {
+    const body = isLogin
+      ? { email, password }
+      : { email, password, acceptTerms: true };
+
     const res = await fetch(API_BASE + '/api/auth/' + (isLogin ? 'login' : 'register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify(body)
     });
     const data = await res.json();
-    if (!data.success) return alert(data.error || 'Error');
+    if (!data.success) return showErr(data.error || 'Error');
+
     token = data.token;
     user = data.user;
     currentPlan = data.user.plan || 'free';
@@ -416,13 +412,14 @@ async function handleAuth(e) {
     refreshUsage();
     loadHomeWidgets();
     refreshAccountPage();
+
     if (pendingPlan && pendingPlan !== 'free') {
       const p = pendingPlan;
       pendingPlan = null;
       await activatePlanDemo(p);
     }
   } catch (err) {
-    alert('Connection error');
+    showErr('Connection error');
   }
 }
 
@@ -689,10 +686,8 @@ async function startScan() {
       results.innerHTML =
         '<div class="error-card limit-upsell glass">' +
         '<h3>Ты упёрся в лимит Free</h3>' +
-        '<p>Полный разбор риска, Security и алерты в Telegram — на Premium. ' +
-        'Один вовремя пойманный скам обычно окупает подписку.</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button>' +
-        '</div>';
+        '<p>Полный разбор риска и алерты — на Premium.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>';
       refreshUsage();
       return;
     }
@@ -864,8 +859,7 @@ function renderTokenPage(data) {
     '</div></div>' +
     (reasons.length
       ? '<div class="glass panel" style="margin-bottom:1rem;"><div class="muted small">Факторы риска</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
-        reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') +
-        '</ul></div>'
+        reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
       : '') +
     '<div class="metrics-grid">' +
     '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
@@ -886,7 +880,7 @@ function renderTokenPage(data) {
         '<button type="button" class="tf-btn" data-tf="1D">1D</button>' +
         '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><p><strong>На Free виден только краткий вердикт.</strong><br>Полный AI-отчёт, график и Security — в Premium.</p>' +
+      : '<div class="locked-message glass"><p><strong>На Free — краткий вердикт.</strong><br>Полный AI и график — в Premium.</p>' +
         '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
@@ -904,8 +898,7 @@ function renderTokenPage(data) {
         '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
-      : '<div class="locked-message glass"><p><strong>Security скрыт на Free.</strong><br>Полный разбор контракта — в Premium.</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p>Security — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
@@ -920,7 +913,7 @@ function renderTokenPage(data) {
       : '') +
     '<div class="muted" style="margin-top:0.8rem;">Confidence: ' + safe(ai.confidence) + '%</div>' +
     (!isPrem
-      ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Полный AI-отчёт — Premium</button></div>'
+      ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Полный AI — Premium</button></div>'
       : '') +
     '</div></div>' +
     '<div class="tab-pane" id="links">' +
