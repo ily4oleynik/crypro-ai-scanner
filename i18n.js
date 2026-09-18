@@ -18,7 +18,10 @@ const I18N = {
     'trending': 'Trending',
     'auth.login': 'Войти',
     'auth.register': 'Регистрация',
-    'auth.hint': 'После регистрации — тариф Free. Оплата подключится позже.'
+    'auth.hint': 'После регистрации — тариф Free. Оплата подключится позже.',
+    'scanner.title': 'Token Scanner',
+    'scanner.sub': 'Вставь адрес контракта — AI оценит риск до покупки',
+    'scanner.btn': 'Проверить токен бесплатно'
   },
   en: {
     'btn.login': 'Login',
@@ -39,7 +42,10 @@ const I18N = {
     'trending': 'Trending',
     'auth.login': 'Login',
     'auth.register': 'Create account',
-    'auth.hint': 'After register — Free plan. Payments coming soon.'
+    'auth.hint': 'After register — Free plan. Payments coming soon.',
+    'scanner.title': 'Token Scanner',
+    'scanner.sub': 'Paste a contract address — AI estimates risk before you buy',
+    'scanner.btn': 'Check token free'
   }
 };
 
@@ -59,13 +65,16 @@ function setLanguage(lang) {
 
   const d = I18N[lang];
 
-  // 1) data-i18n
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
     if (d[key] != null) el.textContent = d[key];
   });
 
-  // 2) fallback — если data-i18n нет на проде
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (d[key] != null) el.setAttribute('placeholder', d[key]);
+  });
+
   const set = (sel, key) => {
     const el = document.querySelector(sel);
     if (el && d[key] != null) el.textContent = d[key];
@@ -78,23 +87,34 @@ function setLanguage(lang) {
   set('#example-report-btn', 'hero.report');
   set('.quick-start h3', 'how.title');
   set('.sell-strip h3', 'sell.title');
-  set('.sell-strip .muted', 'sell.text');
+  set('.sell-strip p.muted', 'sell.text');
   set('.sell-strip .upgrade-btn', 'sell.cta');
+  set('#scan-button', 'scanner.btn');
+  set('.scanner-hero h1', 'scanner.title');
+  set('.scanner-hero p', 'scanner.sub');
 
   const steps = document.querySelectorAll('.step-item span:last-child');
-  if (steps[0]) steps[0].textContent = d['how.1'];
-  if (steps[1]) steps[1].textContent = d['how.2'];
-  if (steps[2]) steps[2].textContent = d['how.3'];
+  if (steps[0] && d['how.1']) steps[0].textContent = d['how.1'];
+  if (steps[1] && d['how.2']) steps[1].textContent = d['how.2'];
+  if (steps[2] && d['how.3']) steps[2].textContent = d['how.3'];
 
   const authBtn = document.getElementById('auth-btn');
-  if (authBtn && !authBtn.dataset.user) {
-    // не трогаем Logout если залогинен — app.js updateAuthUI
+  if (authBtn) {
+    const loggedOut =
+      !authBtn.textContent ||
+      /login|войти/i.test(authBtn.textContent);
+    if (loggedOut) authBtn.textContent = d['btn.login'];
   }
 
-  if (typeof window.updateAuthUI === 'function') {
-    window.updateAuthUI();
-  } else if (authBtn && authBtn.textContent !== 'Logout' && authBtn.textContent !== 'Выйти') {
-    authBtn.textContent = d['btn.login'];
+  const authTitle = document.getElementById('auth-title');
+  const authSubmit = document.getElementById('auth-submit');
+  const mode = document.querySelector('.auth-tab.active')?.dataset?.mode;
+  if (mode === 'register') {
+    if (authTitle) authTitle.textContent = d['auth.register'];
+    if (authSubmit) authSubmit.textContent = d['auth.register'];
+  } else {
+    if (authTitle) authTitle.textContent = d['auth.login'];
+    if (authSubmit) authSubmit.textContent = d['auth.login'];
   }
 }
 
