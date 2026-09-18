@@ -1,17 +1,20 @@
 // backend/db.js
 const { Pool } = require('pg');
 
-const pool = new Pool(
-  process.env.DATABASE_URL
-    ? { connectionString: process.env.DATABASE_URL }
-    : {
-        host: process.env.PGHOST || '127.0.0.1',
-        port: Number(process.env.PGPORT || 5432),
-        user: process.env.PGUSER || 'postgres',
-        password: process.env.PGPASSWORD || '',
-        database: process.env.PGDATABASE || 'crypto_scanner'
-      }
-);
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes('localhost')
+        ? false
+        : { rejectUnauthorized: false }
+    })
+  : new Pool({
+      host: process.env.PGHOST || '127.0.0.1',
+      port: Number(process.env.PGPORT || 5432),
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || '',
+      database: process.env.PGDATABASE || 'crypto_scanner'
+    });
 
 async function query(text, params) {
   return pool.query(text, params);
@@ -24,6 +27,7 @@ async function initDb() {
       email TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       plan TEXT NOT NULL DEFAULT 'free',
+      telegram_chat_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
@@ -57,7 +61,7 @@ async function initDb() {
     );
 
     CREATE TABLE IF NOT EXISTS alerts (
-      id TEXT PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
       type TEXT NOT NULL,
       address TEXT NOT NULL,
@@ -67,11 +71,6 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS telegram_links (
-      user_id TEXT PRIMARY KEY,
-      chat_id TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS fired_alerts (
       user_id TEXT NOT NULL,
       alert_id TEXT NOT NULL,
@@ -79,19 +78,10 @@ async function initDb() {
     );
   `);
 
+  // на случай старой таблицы users без колонки
   await query(`
-    INSERT INTO users (id, email, password, plan) VALUES
-      (1, 'demo@test.com', 'demo123', 'free'),
-      (2, 'premium@test.com', 'premium123', 'premium'),
-      (3, 'pro@test.com', 'pro123', 'pro')
-    ON CONFLICT (email) DO NOTHING;
-  `);
-
-  await query(`
-    SELECT setval(
-      pg_get_serial_sequence('users', 'id'),
-      (SELECT COALESCE(MAX(id), 1) FROM users)
-    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';
   `);
 
   console.log('[DB] PostgreSQL ready');
