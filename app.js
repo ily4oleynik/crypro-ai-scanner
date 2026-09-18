@@ -72,8 +72,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const terms = document.getElementById('auth-terms-wrap');
       const err = document.getElementById('auth-error');
       if (err) { err.style.display = 'none'; err.textContent = ''; }
-      if (title) title.textContent = mode === 'login' ? 'Login' : 'Create account';
-      if (submit) submit.textContent = mode === 'login' ? 'Login' : 'Create account';
+      const loginLabel = typeof t === 'function' ? t('auth.login') : 'Login';
+      const regLabel = typeof t === 'function' ? t('auth.register') : 'Create account';
+      if (title) title.textContent = mode === 'login' ? loginLabel : regLabel;
+      if (submit) submit.textContent = mode === 'login' ? loginLabel : regLabel;
       if (pass2) pass2.style.display = mode === 'register' ? 'block' : 'none';
       if (terms) terms.style.display = mode === 'register' ? 'flex' : 'none';
       const p1 = document.getElementById('auth-password');
@@ -83,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('connect-wallet')?.addEventListener('click', connectWallet);
   document.getElementById('connect-bybit-btn')?.addEventListener('click', () => {
-    if (!user) return openAuthModal('Войдите, чтобы подключить Bybit');
+    if (!user) return openAuthModal('Sign in to connect Bybit');
     document.getElementById('bybit-modal').style.display = 'flex';
   });
   document.getElementById('bybit-modal-close')?.addEventListener('click', () => {
@@ -162,13 +164,13 @@ function showExampleReport() {
   if (!results) return;
   results.innerHTML =
     '<div class="example-report glass">' +
-    '<h3>Пример полного анализа (Premium)</h3>' +
-    '<p class="muted small">Демо-отчёт. Реальные цифры зависят от токена.</p>' +
+    '<h3>Premium analysis example</h3>' +
+    '<p class="muted small">Demo report. Real numbers depend on the token.</p>' +
     '<div class="ex-block"><div class="ex-label">Risk Score</div><div class="metric-value risk-MEDIUM">67 / 100 · MEDIUM</div></div>' +
     '<div class="ex-block"><div class="ex-label">Security</div>Contract: Verified · Scam probability: ~22%</div>' +
-    '<div class="ex-block"><div class="ex-label">AI Summary</div>Ликвидность умеренная, объём за 24ч не аномальный. DYOR.</div>' +
-    '<div class="ex-block"><div class="ex-label">Verdict</div><span class="verdict">Осторожный интерес</span></div>' +
-    '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Хочу такие отчёты — Premium</button>' +
+    '<div class="ex-block"><div class="ex-label">AI Summary</div>Liquidity is moderate, 24h volume is not anomalous. DYOR.</div>' +
+    '<div class="ex-block"><div class="ex-label">Verdict</div><span class="verdict">Cautious interest</span></div>' +
+    '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Get reports like this — Premium</button>' +
     '</div>';
 }
 
@@ -208,7 +210,7 @@ function initOnboarding() {
       s.classList.toggle('active', Number(s.dataset.step) === n);
     });
     const next = document.getElementById('ob-next');
-    if (next) next.textContent = n >= 3 ? 'Начать' : 'Далее';
+    if (next) next.textContent = n >= 3 ? 'Start' : 'Next';
   };
   document.getElementById('ob-next')?.addEventListener('click', () => {
     if (step >= 3) {
@@ -262,7 +264,7 @@ async function loadTrending() {
     const data = await res.json();
     const tokens = data.tokens || [];
     if (!tokens.length) {
-      grid.innerHTML = '<div class="empty-state-cta"><p>Нет trending</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
+      grid.innerHTML = '<div class="empty-state-cta"><p>No trending</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
       return;
     }
     grid.innerHTML = tokens.map(t => {
@@ -304,7 +306,7 @@ async function selectPlan(plan) {
   }
   if (!user) {
     closePricing();
-    openAuthModal('Войдите или создайте аккаунт, чтобы активировать ' + plan.toUpperCase());
+    openAuthModal('Sign in or create an account to activate ' + plan.toUpperCase());
     return;
   }
   await activatePlanDemo(plan);
@@ -319,7 +321,7 @@ async function activatePlanDemo(plan) {
     });
     const data = await res.json();
     if (!data.success) {
-      alert(data.error || 'Не удалось сменить тариф');
+      alert(data.error || 'Could not change plan');
       return;
     }
     if (data.token) {
@@ -335,9 +337,9 @@ async function activatePlanDemo(plan) {
     closePricing();
     refreshAccountPage();
     refreshUsage();
-    alert(currentPlan.toUpperCase() + ' сохранён (демо до эквайринга).');
+    alert(currentPlan.toUpperCase() + ' saved (demo until payments).');
   } catch (e) {
-    alert('Ошибка сети');
+    alert('Network error');
   }
 }
 
@@ -449,7 +451,7 @@ function updateAuthUI() {
   const planLabel = document.getElementById('user-plan');
   if (!authBtn) return;
   if (user) {
-    authBtn.textContent = 'Logout';
+    authBtn.textContent = typeof t === 'function' ? t('btn.logout') : 'Logout';
     if (planLabel) {
       planLabel.textContent = (user.plan || currentPlan || 'free').toUpperCase();
       planLabel.style.display = 'inline-block';
@@ -459,7 +461,7 @@ function updateAuthUI() {
     });
     currentPlan = user.plan || currentPlan || 'free';
   } else {
-    authBtn.textContent = 'Login';
+    authBtn.textContent = typeof t === 'function' ? t('btn.login') : 'Login';
     if (planLabel) planLabel.style.display = 'none';
   }
 }
@@ -526,7 +528,7 @@ async function loadHomeWatchlist() {
   const box = document.getElementById('home-watchlist');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Войдите, чтобы сохранять избранное</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Sign in to save favorites</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
     return;
   }
   try {
@@ -535,7 +537,7 @@ async function loadHomeWatchlist() {
     });
     const data = await res.json();
     if (!data.watchlist?.length) {
-      box.innerHTML = '<div class="empty-state-cta"><p>Список пуст</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>Empty</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
       return;
     }
     box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
@@ -550,7 +552,7 @@ async function loadHomeHistory() {
   const box = document.getElementById('home-history');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Войдите, чтобы видеть историю</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Sign in to see history</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
     return;
   }
   try {
@@ -559,7 +561,7 @@ async function loadHomeHistory() {
     });
     const data = await res.json();
     if (!data.history?.length) {
-      box.innerHTML = '<div class="empty-state-cta"><p>Пока нет сканов</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Сканировать</button></div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>No scans yet</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scan</button></div>';
       return;
     }
     box.innerHTML = data.history.slice(0, 5).map(h =>
@@ -624,7 +626,7 @@ async function connectBybit(e) {
     });
     const data = await res.json();
     if (res.status === 403) {
-      if (confirm((data.error || 'Нужен Pro') + '\n\nОткрыть тарифы?')) openPricing(data.upsell || 'pro');
+      if (confirm((data.error || 'Pro required') + '\n\nOpen plans?')) openPricing(data.upsell || 'pro');
       return;
     }
     if (!data.success) { alert(data.error || 'Error'); return; }
@@ -671,7 +673,7 @@ async function loadNews(source) {
 
 async function startScan() {
   const address = document.getElementById('token-input').value.trim();
-  if (!address) return alert('Введите адрес контракта');
+  if (!address) return alert('Enter contract address');
   const results = document.getElementById('results');
   results.innerHTML = '<div class="loading">Analyzing...</div>';
   const chatSec = document.getElementById('ai-chat-section');
@@ -682,12 +684,12 @@ async function startScan() {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
-    if (res.status === 429 || (data.error && String(data.error).includes('Лимит'))) {
+    if (res.status === 429 || (data.error && String(data.error).toLowerCase().includes('limit'))) {
       results.innerHTML =
         '<div class="error-card limit-upsell glass">' +
-        '<h3>Ты упёрся в лимит Free</h3>' +
-        '<p>Полный разбор риска и алерты — на Premium.</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>';
+        '<h3>Free scan limit reached</h3>' +
+        '<p>Full risk report and alerts are on Premium.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>';
       refreshUsage();
       return;
     }
@@ -858,7 +860,7 @@ function renderTokenPage(data) {
     '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
     '</div></div>' +
     (reasons.length
-      ? '<div class="glass panel" style="margin-bottom:1rem;"><div class="muted small">Факторы риска</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
+      ? '<div class="glass panel" style="margin-bottom:1rem;"><div class="muted small">Risk factors</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
         reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
       : '') +
     '<div class="metrics-grid">' +
@@ -880,8 +882,8 @@ function renderTokenPage(data) {
         '<button type="button" class="tf-btn" data-tf="1D">1D</button>' +
         '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><p><strong>На Free — краткий вердикт.</strong><br>Полный AI и график — в Premium.</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p><strong>Free shows a short verdict.</strong><br>Full AI + chart on Premium.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
         '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
@@ -889,7 +891,7 @@ function renderTokenPage(data) {
         '<div class="metric-card glass"><div class="metric-label">Volatility</div><div class="metric-value">' + safe(adv.volatility) + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">' + safe(adv.holderCount) + '</div></div></div>'
       : (isPrem
-        ? '<div class="locked-message glass" style="margin-top:1rem;"><p>Whale-метрики — в Pro</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Открыть Pro</button></div>'
+        ? '<div class="locked-message glass" style="margin-top:1rem;"><p>Whale metrics — Pro</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Open Pro</button></div>'
         : '')) +
     '</div>' +
     '<div class="tab-pane" id="security">' +
@@ -898,7 +900,7 @@ function renderTokenPage(data) {
         '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
-      : '<div class="locked-message glass"><p>Security — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p>Security — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
@@ -913,7 +915,7 @@ function renderTokenPage(data) {
       : '') +
     '<div class="muted" style="margin-top:0.8rem;">Confidence: ' + safe(ai.confidence) + '%</div>' +
     (!isPrem
-      ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Полный AI — Premium</button></div>'
+      ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Full AI — Premium</button></div>'
       : '') +
     '</div></div>' +
     '<div class="tab-pane" id="links">' +
@@ -923,7 +925,7 @@ function renderTokenPage(data) {
         (data.projectLinks.twitter ? '<a class="home-chip" href="' + data.projectLinks.twitter + '" target="_blank">Twitter</a>' : '') +
         (data.projectLinks.telegram ? '<a class="home-chip" href="' + data.projectLinks.telegram + '" target="_blank">Telegram</a>' : '') +
         '</div>'
-      : '<div class="locked-message glass"><p>Links — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>') +
+      : '<div class="locked-message glass"><p>Links — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>') +
     '</div></div>';
 
   document.querySelectorAll('.tab').forEach(tab => {
@@ -1028,7 +1030,7 @@ async function loadHistory() {
   const box = document.getElementById('history-content');
   if (!box) return;
   if (!user) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
     return;
   }
   try {
@@ -1060,7 +1062,7 @@ async function loadWatchlist() {
   const box = document.getElementById('watchlist-content');
   if (!box) return;
   if (!user) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
     return;
   }
   try {
@@ -1084,7 +1086,7 @@ async function loadWatchlist() {
 }
 
 async function addWatch(address, symbol, name) {
-  if (!user) return openAuthModal('Войдите, чтобы сохранять Watchlist');
+  if (!user) return openAuthModal('Sign in to save Watchlist');
   if (!address) return;
   try {
     const res = await fetch(API_BASE + '/api/watchlist', {
@@ -1094,7 +1096,7 @@ async function addWatch(address, symbol, name) {
     });
     const data = await res.json();
     if (res.status === 403) {
-      if (confirm((data.error || 'Лимит') + '\n\nОткрыть тарифы?')) openPricing(data.upsell || 'premium');
+      if (confirm((data.error || 'Limit') + '\n\nOpen plans?')) openPricing(data.upsell || 'premium');
       return;
     }
     if (!data.success) return alert(data.error || 'Error');
@@ -1118,7 +1120,7 @@ async function loadAlerts() {
   const box = document.getElementById('alerts-content');
   if (!box) return;
   if (!user) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Войти</button></div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>Login</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
     return;
   }
   try {
@@ -1142,7 +1144,7 @@ async function loadAlerts() {
 }
 
 async function createAlert() {
-  if (!user) return openAuthModal('Войдите, чтобы создавать алерты');
+  if (!user) return openAuthModal('Sign in to create alerts');
   const address = document.getElementById('alert-address').value.trim();
   const symbol = document.getElementById('alert-symbol').value.trim();
   const type = document.getElementById('alert-type').value;
@@ -1155,7 +1157,7 @@ async function createAlert() {
   });
   const data = await res.json();
   if (res.status === 403) {
-    if (confirm((data.error || 'Нужен Premium') + '\n\nОткрыть тарифы?')) openPricing(data.upsell || 'premium');
+    if (confirm((data.error || 'Premium required') + '\n\nOpen plans?')) openPricing(data.upsell || 'premium');
     return;
   }
   if (!data.success) return alert(data.error || 'Error');
@@ -1185,7 +1187,7 @@ async function refreshTelegramStatus() {
     const cta = document.getElementById('tg-channel-cta');
     if (cta) {
       cta.innerHTML =
-        'Каналы: <a class="link-more" href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">RU</a> · ' +
+        'Channels: <a class="link-more" href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">RU</a> · ' +
         '<a class="link-more" href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">EN</a>';
     }
     if (data.linked) {
@@ -1203,7 +1205,7 @@ async function refreshTelegramStatus() {
 }
 
 async function connectTelegram() {
-  if (!user) return openAuthModal('Войдите, чтобы подключить Telegram');
+  if (!user) return openAuthModal('Sign in to connect Telegram');
   try {
     const res = await fetch(API_BASE + '/api/telegram/link', {
       method: 'POST',
@@ -1257,9 +1259,9 @@ async function runCompare() {
     if (res.status === 403) {
       box.innerHTML =
         '<div class="error-card limit-upsell glass">' +
-        '<h3>Сравнение — Premium</h3>' +
+        '<h3>Compare — Premium</h3>' +
         '<p>' + (data.error || '') + '</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button></div>';
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>';
       return;
     }
     if (!data.success) {
