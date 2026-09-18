@@ -252,11 +252,17 @@
       <h2 id="auth-title">Login</h2>
       <p id="auth-hint" class="muted small" style="display:none;margin-bottom:0.6rem;"></p>
       <form id="auth-form">
-        <input type="email" id="auth-email" placeholder="Email" required />
-        <input type="password" id="auth-password" placeholder="Password" required minlength="6" />
+        <input type="email" id="auth-email" placeholder="Email" required autocomplete="email" />
+        <input type="password" id="auth-password" placeholder="Password" required minlength="8" autocomplete="current-password" />
+        <input type="password" id="auth-password2" placeholder="Confirm password" minlength="8" autocomplete="new-password" style="display:none;" />
+        <label id="auth-terms-wrap" class="auth-terms" style="display:none;">
+          <input type="checkbox" id="auth-terms" />
+          <span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a></span>
+        </label>
+        <p id="auth-error" class="auth-error" style="display:none;"></p>
         <button type="submit" id="auth-submit" class="upgrade-btn full">Login</button>
       </form>
-      <p class="muted small">После регистрации — тариф Free. Оплата подключится позже.</p>
+      <p class="muted small">After register — Free plan. Payments coming soon.</p>
     </div>
   </div>
 
