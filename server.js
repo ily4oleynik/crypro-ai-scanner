@@ -145,13 +145,38 @@ app.post(
   }),
   async (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password || password.length < 6) {
-        return res.status(400).json({ success: false, error: 'Минимум 6 символов в пароле' });
+      let { email, password, acceptTerms } = req.body || {};
+      email = String(email || '').trim().toLowerCase();
+      password = String(password || '');
+
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: 'Укажите email и пароль' });
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, error: 'Некорректный email' });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, error: 'Пароль не короче 8 символов' });
+      }
+      if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Пароль: хотя бы одна буква и одна цифра'
+        });
+      }
+      if (!acceptTerms) {
+        return res.status(400).json({
+          success: false,
+          error: 'Нужно принять условия использования'
+        });
       }
       if (await store.findUserByEmail(email)) {
-        return res.status(400).json({ success: false, error: 'Email уже зарегистрирован' });
+        return res.status(400).json({
+          success: false,
+          error: 'Аккаунт с таким email уже есть. Войдите.'
+        });
       }
+
       const user = await store.createUser(email, password, 'free');
       const token = jwt.sign(
         { id: user.id, email: user.email, plan: 'free' },
@@ -346,14 +371,16 @@ app.get(
         },
         advanced: {
           whaleConcentration: 'n/a',
-          buySellRatio:
-            pair.txns?.h24
-              ? (
-                  (Number(pair.txns.h24.buys || 0) + 1) /
-                  (Number(pair.txns.h24.sells || 0) + 1)
-                ).toFixed(2)
+          buySellRatio: pair.txns?.h24
+            ? (
+                (Number(pair.txns.h24.buys || 0) + 1) /
+                (Number(pair.txns.h24.sells || 0) + 1)
+              ).toFixed(2)
+            : '—',
+          volatility:
+            pair.priceChange?.h24 != null
+              ? Number(pair.priceChange.h24).toFixed(1) + '%'
               : '—',
-          volatility: pair.priceChange?.h24 != null ? Number(pair.priceChange.h24).toFixed(1) + '%' : '—',
           holderCount: '—'
         },
         usage: currentUsage
