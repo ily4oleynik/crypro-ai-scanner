@@ -774,3 +774,87 @@ body.theme-light .hero h1 {
   text-align: left;
   margin: 0;
 }
+
+/* ===== AUTH ===== */
+.auth-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.75rem 0 1rem;
+  font-size: 0.85rem;
+  color: #a0a0b8;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.auth-terms input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.auth-error {
+  color: #ff4d6a;
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+  min-height: 1.2em;
+}
+
+#auth-modal input[type="email"],
+#auth-modal input[type="password"] {
+  width: 100%;
+  margin-bottom: 0.65rem;
+}
+
+/* ===== PRICING / PLANS — mobile scroll fix ===== */
+.pricing-modal,
+.plans-modal,
+#pricing-modal,
+.upgrade-modal,
+.modal-overlay.plans-open {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2000 !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom)) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+.pricing-modal .modal-content,
+.plans-modal .modal-content,
+#pricing-modal .modal-content,
+.upgrade-modal .modal-content,
+.pricing-cards,
+.plans-list {
+  max-height: none !important;
+  overflow: visible !important;
+  margin: 1rem auto 2rem !important;
+  width: 100%;
+  max-width: 420px;
+}
+
+.plan-card {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 600px) {
+  body.modal-open {
+    overflow: hidden !important;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+
+  .pricing-modal,
+  .plans-modal,
+  #pricing-modal,
+  .upgrade-modal {
+    align-items: stretch !important;
+    padding: 0.75rem !important;
+  }
+}
