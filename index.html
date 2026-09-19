@@ -8,10 +8,9 @@
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-  <!-- Ticker -->
-  <div class="ticker-wrap" id="ticker">
-    <div class="ticker-track" id="ticker-track">
-      <span>BTC $—</span><span>ETH $—</span><span>SOL $—</span>
+  <div class="ticker" id="ticker">
+    <div class="ticker-inner" id="ticker-inner">
+      <span class="ticker-item">Loading markets…</span>
     </div>
   </div>
 
@@ -19,28 +18,29 @@
     <header class="top-nav">
       <div class="logo">Crypto AI Scanner</div>
       <nav class="nav-links" id="nav-links">
-        <a href="#" data-page="home" class="active">Home</a>
-        <a href="#" data-page="scanner">Scanner</a>
-        <a href="#" data-page="watchlist">Watchlist</a>
-        <a href="#" data-page="history">History</a>
-        <a href="#" data-page="alerts">Alerts</a>
-        <a href="#" data-page="compare">Compare</a>
-        <a href="#" data-page="account">Account</a>
+        <a href="#" id="nav-home" class="active">Home</a>
+        <a href="#" id="nav-scanner">Scanner</a>
+        <a href="#" id="nav-watchlist">Watchlist</a>
+        <a href="#" id="nav-history">History</a>
+        <a href="#" id="nav-alerts">Alerts</a>
+        <a href="#" id="nav-compare">Compare</a>
+        <a href="#" id="nav-account">Account</a>
       </nav>
       <div class="nav-actions">
         <div class="lang-switch">
-          <button type="button" class="lang-btn active" data-lang="ru">RU</button>
-          <button type="button" class="lang-btn" data-lang="en">EN</button>
+          <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
+          <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
         </div>
-        <span class="usage-badge" id="usage-badge">Scans: 0/5</span>
-        <button type="button" class="upgrade-btn" id="upgrade-btn">Upgrade</button>
+        <button type="button" class="theme-toggle" id="theme-toggle" title="Theme">☾</button>
+        <span class="usage-badge" id="scan-usage">Scans: 0/5</span>
+        <span class="plan-badge" id="user-plan" style="display:none">FREE</span>
+        <button type="button" class="plan-btn" data-plan="premium">Upgrade</button>
         <button type="button" class="connect-btn" id="auth-btn">Login</button>
         <button type="button" class="nav-burger" id="nav-burger" aria-label="Menu">☰</button>
       </div>
     </header>
 
-    <!-- HOME -->
-    <section id="page-home" class="page active">
+    <section id="page-home" class="page" style="display:block">
       <div class="hero">
         <h1>Institutional-grade Crypto Intelligence</h1>
         <p class="hero-sub">Риск смарт-контракта + AI-вердикт + алерты — чтобы не потерять деньги на очередном rug.</p>
@@ -64,7 +64,7 @@
       <div class="glass sell-strip">
         <h3>После 1–2 сканов обычно не хватает глубины</h3>
         <p class="muted">Free — быстро пощупать риск. Premium — полный разбор, алерты и watchlist.</p>
-        <button type="button" class="upgrade-btn" id="sell-plans-btn">Смотреть тарифы</button>
+        <button type="button" class="upgrade-btn plan-btn" data-plan="premium">Смотреть тарифы</button>
       </div>
 
       <div class="section-head">
@@ -73,82 +73,132 @@
       </div>
       <div class="trending-grid" id="trending-grid"></div>
 
-      <div class="section-head" style="margin-top:2rem">
+      <div class="home-grid">
+        <div class="glass">
+          <div class="section-head">
+            <h3>Watchlist</h3>
+            <a href="#" id="home-watchlist-all" class="link-more">All</a>
+          </div>
+          <div id="home-watchlist"></div>
+        </div>
+        <div class="glass">
+          <div class="section-head">
+            <h3>History</h3>
+            <a href="#" id="home-history-all" class="link-more">All</a>
+          </div>
+          <div id="home-history"></div>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:1.5rem">
         <h2>News</h2>
+        <div id="news-filters" class="tf-row">
+          <button type="button" class="tf-btn active" data-source="all">All</button>
+          <button type="button" class="tf-btn" data-source="twitter">X</button>
+          <button type="button" class="tf-btn" data-source="crypto">Crypto</button>
+        </div>
       </div>
       <div class="news-grid" id="news-grid"></div>
     </section>
 
-    <!-- SCANNER -->
-    <section id="page-scanner" class="page">
+    <section id="page-scanner" class="page" style="display:none">
       <div class="scanner-hero">
         <h1>Token Scanner</h1>
         <p>Вставь адрес контракта — AI оценит риск до покупки</p>
       </div>
       <div class="search-bar">
-        <input type="text" id="token-input" placeholder="0x... or symbol" autocomplete="off" />
-        <button type="button" id="scan-button">Проверить токен бесплатно</button>
+        <input type="text" id="token-input" placeholder="0x... contract address" autocomplete="off" />
+        <button type="button" id="scan-button" class="upgrade-btn">Проверить токен бесплатно</button>
       </div>
-      <div id="scan-result"></div>
+      <div id="results"></div>
+      <div id="ai-chat-section" class="glass" style="display:none;margin-top:1rem">
+        <div class="section-head">
+          <h3>AI Chat (Pro)</h3>
+          <button type="button" class="link-btn" id="toggle-chat">Open chat</button>
+        </div>
+        <div id="chat-window" style="display:none;flex-direction:column;gap:0.5rem">
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="search-bar">
+            <input type="text" id="chat-input" placeholder="Ask about this token…" />
+            <button type="button" id="chat-send" class="connect-btn">Send</button>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <!-- WATCHLIST -->
-    <section id="page-watchlist" class="page">
+    <section id="page-watchlist" class="page" style="display:none">
       <h2>Watchlist</h2>
-      <div id="watchlist-box" class="glass">Войдите, чтобы видеть избранное</div>
+      <div id="watchlist-content" class="glass"></div>
     </section>
 
-    <!-- HISTORY -->
-    <section id="page-history" class="page">
+    <section id="page-history" class="page" style="display:none">
       <h2>History</h2>
-      <div id="history-box" class="glass">Войдите, чтобы видеть историю</div>
+      <div id="history-content" class="glass"></div>
     </section>
 
-    <!-- ALERTS -->
-    <section id="page-alerts" class="page">
+    <section id="page-alerts" class="page" style="display:none">
       <h2>Alerts</h2>
       <div class="glass">
-        <p id="tg-status">Telegram: не подключено</p>
-        <button type="button" class="connect-btn" id="tg-connect-btn">Подключить Telegram</button>
-        <button type="button" class="connect-btn" id="tg-disconnect-btn" style="display:none">Отключить</button>
+        <p id="tg-status">Telegram: not connected</p>
+        <p id="tg-channel-cta" class="muted small"></p>
+        <button type="button" class="connect-btn" id="tg-connect-btn">Connect Telegram</button>
+        <div id="tg-link-area" style="display:none;margin-top:0.75rem">
+          <p>Code: <strong id="tg-code"></strong></p>
+          <a id="tg-deep-link" href="#" target="_blank" rel="noopener">Open bot</a>
+        </div>
       </div>
       <div class="glass" style="margin-top:1rem">
-        <h3>Создать алерт</h3>
-        <input type="text" id="alert-address" placeholder="0x... address" />
-        <input type="text" id="alert-symbol" placeholder="Symbol e.g. LINK" />
+        <h3>Create alert</h3>
+        <input type="text" id="alert-address" placeholder="0x address" />
+        <input type="text" id="alert-symbol" placeholder="Symbol" />
         <select id="alert-type">
           <option value="price_above">Price above</option>
           <option value="price_below">Price below</option>
         </select>
         <input type="number" id="alert-value" placeholder="Value" step="any" />
-        <button type="button" class="upgrade-btn" id="alert-create-btn">Create</button>
+        <button type="button" class="upgrade-btn" id="alert-create">Create</button>
       </div>
-      <div id="alerts-list" class="glass" style="margin-top:1rem"></div>
+      <div id="alerts-content" class="glass" style="margin-top:1rem"></div>
     </section>
 
-    <!-- COMPARE -->
-    <section id="page-compare" class="page">
+    <section id="page-compare" class="page" style="display:none">
       <h2>Compare</h2>
       <div class="glass">
-        <textarea id="compare-input" rows="3" placeholder="0xaddr1&#10;0xaddr2&#10;0xaddr3"></textarea>
-        <button type="button" class="upgrade-btn" id="compare-btn">Compare</button>
+        <input type="text" id="cmp-1" placeholder="Address 1" />
+        <input type="text" id="cmp-2" placeholder="Address 2" />
+        <input type="text" id="cmp-3" placeholder="Address 3 (optional)" />
+        <button type="button" class="upgrade-btn" id="cmp-btn">Compare</button>
       </div>
-      <div id="compare-result"></div>
+      <div id="compare-content" style="margin-top:1rem"></div>
     </section>
 
-    <!-- ACCOUNT -->
-    <section id="page-account" class="page">
+    <section id="page-account" class="page" style="display:none">
       <h2>Account</h2>
-      <div class="glass" id="account-box">
-        <p class="muted">Войдите, чтобы видеть профиль и тариф</p>
+      <div class="glass">
+        <p><strong>Email:</strong> <span id="acc-email">—</span></p>
+        <p><strong>Plan:</strong> <span id="acc-plan">FREE</span></p>
+        <p><strong>Scans today:</strong> <span id="acc-scans">—</span></p>
+        <button type="button" class="upgrade-btn plan-btn" data-plan="premium">Upgrade</button>
+        <button type="button" class="connect-btn" id="acc-logout">Logout</button>
+      </div>
+      <div class="glass" style="margin-top:1rem">
+        <h3>Wallet</h3>
+        <button type="button" class="connect-btn" id="connect-wallet">Connect MetaMask</button>
+        <div id="portfolio-section" style="display:none;margin-top:1rem">
+          <div id="portfolio-content"></div>
+        </div>
+      </div>
+      <div class="glass" style="margin-top:1rem">
+        <h3>Exchanges</h3>
+        <div id="connected-exchanges"><p class="muted">Nothing connected</p></div>
+        <button type="button" class="connect-btn" id="connect-bybit-btn" style="margin-top:0.75rem">+ Connect Bybit</button>
       </div>
     </section>
   </div>
 
-  <!-- AUTH MODAL -->
   <div class="modal-overlay" id="auth-modal" style="display:none">
     <div class="modal-content glass">
-      <button type="button" class="modal-close" id="auth-close">&times;</button>
+      <button type="button" class="modal-close" id="modal-close">&times;</button>
       <div class="auth-tabs">
         <button type="button" class="auth-tab active" data-mode="login">Login</button>
         <button type="button" class="auth-tab" data-mode="register">Register</button>
@@ -162,63 +212,95 @@
           <input type="checkbox" id="auth-terms" />
           <span data-i18n="auth.terms">I agree to the Terms and Privacy Policy</span>
         </label>
-        <p class="auth-error" id="auth-error"></p>
+        <p class="auth-error" id="auth-error" style="display:none"></p>
         <button type="submit" class="upgrade-btn" id="auth-submit">Login</button>
       </form>
-      <p class="muted small auth-hint">После регистрации — тариф Free. Оплата подключится позже.</p>
+      <p class="muted small" id="auth-hint" style="display:none"></p>
     </div>
   </div>
 
-  <!-- PLANS MODAL -->
-  <div class="modal-overlay pricing-modal" id="pricing-modal" style="display:none">
+  <div class="modal-overlay" id="pricing-modal" style="display:none">
     <div class="modal-content plans-list">
-      <button type="button" class="modal-close" id="plans-close">&times;</button>
-      <button type="button" class="connect-btn" id="stay-free-btn" style="width:100%;margin-bottom:1rem">Остаться на Free</button>
+      <button type="button" class="modal-close" id="pricing-close">&times;</button>
+      <button type="button" class="connect-btn pricing-pick" data-plan="free" style="width:100%;margin-bottom:1rem">Stay on Free</button>
 
-      <div class="plan-card">
+      <div class="price-card" data-plan="free">
         <h3>Free</h3>
         <p class="plan-price">$0</p>
-        <p class="muted">5 сканов / день · базовый risk</p>
+        <p class="muted">5 scans / day · basic risk</p>
       </div>
 
-      <div class="plan-card recommended">
-        <span class="badge">Рекомендуем</span>
+      <div class="price-card recommended" data-plan="premium">
+        <span class="badge">Recommended</span>
         <h3>Premium</h3>
-        <p class="plan-price">$29<span>/мес</span></p>
-        <p class="plan-pitch">Один вовремя пойманный скам обычно окупает месяц</p>
+        <p class="plan-price">$29<span>/mo</span></p>
+        <p class="plan-pitch">One caught scam usually pays for a month</p>
         <ul>
-          <li>50 сканов / день</li>
-          <li>Полный Risk + Security</li>
-          <li>Развёрнутый AI-отчёт</li>
-          <li>Алерты в Telegram</li>
-          <li>Сравнение до 3 токенов</li>
-          <li>Полная история</li>
-          <li>Watchlist до 30</li>
-          <li>График (свечи)</li>
+          <li>50 scans / day</li>
+          <li>Full Risk + Security</li>
+          <li>Full AI report</li>
+          <li>Telegram alerts</li>
+          <li>Compare up to 3</li>
+          <li>Full history</li>
+          <li>Watchlist up to 30</li>
+          <li>Candlestick chart</li>
         </ul>
-        <button type="button" class="upgrade-btn plan-buy" data-plan="premium">Открыть Premium</button>
+        <button type="button" class="upgrade-btn pricing-pick" data-plan="premium">Open Premium</button>
       </div>
 
-      <div class="plan-card">
+      <div class="price-card" data-plan="pro">
         <h3>Pro</h3>
-        <p class="plan-price">$79<span>/мес</span></p>
-        <p class="plan-pitch">Для тех, кто проверяет токены каждый день</p>
+        <p class="plan-price">$79<span>/mo</span></p>
+        <p class="plan-pitch">For daily token research</p>
         <ul>
-          <li>Безлимит сканов</li>
-          <li>Всё из Premium</li>
-          <li>AI-чат по токену</li>
-          <li>Приоритет алертов</li>
-          <li>Watchlist безлимит</li>
+          <li>Unlimited scans</li>
+          <li>Everything in Premium</li>
+          <li>AI chat on token</li>
+          <li>Priority alerts</li>
+          <li>Unlimited watchlist</li>
+          <li>Bybit connection</li>
         </ul>
-        <button type="button" class="upgrade-btn plan-buy" data-plan="pro">Открыть Pro</button>
+        <button type="button" class="upgrade-btn pricing-pick" data-plan="pro">Open Pro</button>
       </div>
-      <p class="muted small" style="text-align:center;margin-top:1rem">Оплата подключится после ИП (скоро). Сейчас — демо-активация после входа.</p>
+      <p class="muted small" style="text-align:center;margin-top:1rem">Payments coming soon. Demo plan switch after login.</p>
     </div>
   </div>
 
-  <script>
-    window.API_BASE = window.location.origin;
-  </script>
+  <div class="modal-overlay" id="bybit-modal" style="display:none">
+    <div class="modal-content glass">
+      <button type="button" class="modal-close" id="bybit-modal-close">&times;</button>
+      <h2>Connect Bybit</h2>
+      <p class="muted small">API key with read-only permissions. Pro plan required.</p>
+      <form id="bybit-form">
+        <input type="text" id="bybit-api-key" placeholder="API Key" required />
+        <input type="password" id="bybit-api-secret" placeholder="API Secret" required />
+        <button type="submit" class="upgrade-btn">Connect</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="onboarding-modal" style="display:none">
+    <div class="modal-content glass">
+      <div class="ob-step active" data-step="1">
+        <h2>Welcome</h2>
+        <p>Check token risk in seconds before you buy.</p>
+      </div>
+      <div class="ob-step" data-step="2">
+        <h2>Watchlist & Alerts</h2>
+        <p>Save tokens and get Telegram alerts.</p>
+      </div>
+      <div class="ob-step" data-step="3">
+        <h2>Ready</h2>
+        <p>Start with a free scan. Upgrade when you need depth.</p>
+      </div>
+      <div class="hero-actions">
+        <button type="button" class="connect-btn" id="ob-skip">Skip</button>
+        <button type="button" class="upgrade-btn" id="ob-next">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <script>window.API_BASE = window.location.origin;</script>
   <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
