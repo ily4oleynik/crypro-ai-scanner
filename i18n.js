@@ -10,28 +10,32 @@ const I18N = {
     'nav.login': 'Войти',
     'nav.logout': 'Выйти',
     'btn.upgrade': 'Upgrade',
+
     'hero.sub': 'Риск смарт-контракта + AI-вердикт + алерты — чтобы не потерять деньги на очередном rug.',
     'hero.proof': 'Сделано для тех, кто уже обжигался на скамах',
     'hero.cta': 'Проверить токен бесплатно',
     'hero.example': 'Пример: LINK',
     'hero.report': 'Посмотреть пример полного анализа',
+
     'home.how': 'Как это работает',
     'home.step1': 'Вставь адрес контракта',
     'home.step2': 'Получи риск + AI-вердикт',
     'home.step3': 'Следи через Watchlist и Telegram',
+
     'sell.title': 'После 1–2 сканов обычно не хватает глубины',
     'sell.text': 'Free — быстро пощупать риск. Premium — полный разбор, алерты и watchlist.',
     'sell.cta': 'Смотреть тарифы',
-    'home.watchlist': 'Your Watchlist',
-    'home.openAll': 'Open all',
-    'home.continue': 'Continue',
-    'home.history': 'History',
-    'home.news': 'Latest News',
+
     'scanner.title': 'Token Scanner',
     'scanner.subtitle': 'Вставь адрес контракта — AI оценит риск до покупки',
     'scanner.analyze': 'Проверить токен бесплатно',
+
     'auth.login': 'Вход',
     'auth.register': 'Регистрация',
+    'auth.email': 'Email',
+    'auth.password': 'Пароль',
+    'auth.password2': 'Повторите пароль',
+    'auth.terms': 'Согласен с условиями и политикой конфиденциальности',
     'auth.submitLogin': 'Войти',
     'auth.submitRegister': 'Создать аккаунт',
     'auth.hint': 'После регистрации — тариф Free. Оплата подключится позже.'
@@ -47,28 +51,32 @@ const I18N = {
     'nav.login': 'Login',
     'nav.logout': 'Logout',
     'btn.upgrade': 'Upgrade',
+
     'hero.sub': 'Smart-contract risk + AI verdict + alerts — so you do not lose money on the next rug.',
     'hero.proof': 'Built for people who already got burned by scams',
     'hero.cta': 'Check a token free',
     'hero.example': 'Example: LINK',
     'hero.report': 'See a full analysis example',
+
     'home.how': 'How it works',
     'home.step1': 'Paste the contract address',
     'home.step2': 'Get risk + AI verdict',
     'home.step3': 'Track via Watchlist and Telegram',
+
     'sell.title': 'After 1–2 scans you usually need more depth',
     'sell.text': 'Free — quick risk check. Premium — full report, alerts and watchlist.',
     'sell.cta': 'View plans',
-    'home.watchlist': 'Your Watchlist',
-    'home.openAll': 'Open all',
-    'home.continue': 'Continue',
-    'home.history': 'History',
-    'home.news': 'Latest News',
+
     'scanner.title': 'Token Scanner',
     'scanner.subtitle': 'Paste a contract address — AI estimates risk before you buy',
     'scanner.analyze': 'Check token free',
+
     'auth.login': 'Login',
     'auth.register': 'Register',
+    'auth.email': 'Email',
+    'auth.password': 'Password',
+    'auth.password2': 'Confirm password',
+    'auth.terms': 'I agree to the Terms and Privacy Policy',
     'auth.submitLogin': 'Login',
     'auth.submitRegister': 'Create Account',
     'auth.hint': 'After register — Free plan. Payments coming soon.'
@@ -87,18 +95,19 @@ function setText(sel, key) {
 }
 
 function applyTranslations() {
-  // 1) если когда-нибудь появятся data-i18n
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
     const val = t(key);
     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
     else el.textContent = val;
   });
+
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
-    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.placeholder = t(key);
   });
 
-  // 2) fallback — твоя реальная вёрстка (data-i18n = 0)
+  // fallback для главной (когда data-i18n = 0)
   setText('.hero-sub', 'hero.sub');
   setText('.hero-proof', 'hero.proof');
   setText('#try-link-btn', 'hero.cta');
@@ -117,10 +126,13 @@ function applyTranslations() {
   if (steps[1]) steps[1].textContent = t('home.step2');
   if (steps[2]) steps[2].textContent = t('home.step3');
 
+  // лейбл terms (если span рядом с checkbox)
+  const termsLabel = document.querySelector('label[for="auth-terms"], .auth-terms span, #auth-terms-wrap span');
+  if (termsLabel) termsLabel.textContent = t('auth.terms');
+
   const authBtn = document.getElementById('auth-btn');
   if (authBtn) {
-    const loggedIn =
-      typeof user !== 'undefined' && user;
+    const loggedIn = typeof user !== 'undefined' && user;
     authBtn.textContent = loggedIn ? t('nav.logout') : t('nav.login');
   }
 
@@ -135,8 +147,8 @@ function applyTranslations() {
       mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister');
   }
 
-  const hint = document.querySelector('#auth-modal .muted.small');
-  if (hint && !hint.id) hint.textContent = t('auth.hint');
+  const hint = document.querySelector('#auth-modal .muted.small, #auth-modal .auth-hint');
+  if (hint) hint.textContent = t('auth.hint');
 }
 
 function setLanguage(lang) {
@@ -155,3 +167,7 @@ window.t = t;
 window.setLanguage = setLanguage;
 window.applyTranslations = applyTranslations;
 window.I18N = I18N;
+
+document.addEventListener('DOMContentLoaded', () => {
+  setLanguage(localStorage.getItem('lang') || 'ru');
+});
