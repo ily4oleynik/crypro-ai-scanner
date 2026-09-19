@@ -41,8 +41,11 @@ function verifyPasswordHash(stored, password) {
   return stored === password;
 }
 
+/** Всегда строка: user_id в alerts/scan_usage/watchlist — TEXT, users.id — integer */
 function uid(user) {
-  return user?.id || user?.userId || null;
+  const id = user?.id ?? user?.userId ?? null;
+  if (id == null || id === '') return null;
+  return String(id);
 }
 
 async function query(text, params) {
@@ -85,7 +88,7 @@ async function updateUserPlan(user, plan) {
   const id = uid(user);
   if (!id) return null;
   const r = await query(
-    `UPDATE users SET plan = $1 WHERE id = $2
+    `UPDATE users SET plan = $1 WHERE id = $2::integer
      RETURNING id, email, plan`,
     [plan, id]
   );
@@ -171,9 +174,9 @@ async function getWatchlist(user) {
   const id = uid(user);
   if (!id) return [];
   const r = await query(
-    `SELECT address, symbol, name, created_at AS "createdAt"
+    `SELECT address, symbol, name, COALESCE(added_at, created_at) AS "createdAt"
      FROM watchlist WHERE user_id = $1
-     ORDER BY created_at DESC`,
+     ORDER BY COALESCE(added_at, created_at) DESC NULLS LAST`,
     [id]
   );
   return r.rows;
@@ -230,21 +233,27 @@ async function addAlert(user, item) {
 async function removeAlert(user, alertId) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`DELETE FROM alerts WHERE user_id = $1 AND id = $2`, [id, alertId]);
+  await query(`DELETE FROM alerts WHERE user_id = $1 AND id = $2`, [
+    id,
+    alertId
+  ]);
   return { success: true };
 }
 
 async function getTelegramChatId(user) {
   const id = uid(user);
   if (!id) return null;
-  const r = await query(`SELECT telegram_chat_id FROM users WHERE id = $1`, [id]);
+  const r = await query(
+    `SELECT telegram_chat_id FROM users WHERE id = $1::integer`,
+    [id]
+  );
   return r.rows[0]?.telegram_chat_id || null;
 }
 
 async function linkTelegram(user, chatId) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`UPDATE users SET telegram_chat_id = $1 WHERE id = $2`, [
+  await query(`UPDATE users SET telegram_chat_id = $1 WHERE id = $2::integer`, [
     String(chatId),
     id
   ]);
@@ -254,7 +263,7 @@ async function linkTelegram(user, chatId) {
 async function unlinkTelegram(user) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`UPDATE users SET telegram_chat_id = NULL WHERE id = $1`, [id]);
+  await query(`UPDATE users SET telegram_chat_id = NULL WHERE id = $1::integer`, [id]);
   return { success: true };
 }
 
@@ -274,10 +283,11 @@ async function getUsersWithTelegram() {
 
 async function getAllAlertUsers() {
   try {
+    // users.id = integer, alerts.user_id = text → явный cast
     const r = await query(
       `SELECT DISTINCT u.id, u.email, u.plan, u.telegram_chat_id AS "telegramChatId"
        FROM users u
-       INNER JOIN alerts a ON a.user_id = u.id
+       INNER JOIN alerts a ON a.user_id = u.id::text
        WHERE u.telegram_chat_id IS NOT NULL
          AND u.telegram_chat_id <> ''`
     );
@@ -286,7 +296,7 @@ async function getAllAlertUsers() {
       const alertsRes = await query(
         `SELECT id, type, address, symbol, value
          FROM alerts WHERE user_id = $1`,
-        [row.id]
+        [String(row.id)]
       );
       users.push({
         id: row.id,
