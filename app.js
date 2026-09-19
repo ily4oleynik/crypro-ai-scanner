@@ -284,6 +284,7 @@ function openPricing(highlightPlan) {
   const modal = document.getElementById('pricing-modal');
   if (!modal) return;
   modal.style.display = 'flex';
+  document.body.classList.add('modal-open');
   document.querySelectorAll('.price-card').forEach(card => {
     card.classList.toggle('featured', !!highlightPlan && card.dataset.plan === highlightPlan);
   });
@@ -292,6 +293,7 @@ function openPricing(highlightPlan) {
 function closePricing() {
   const modal = document.getElementById('pricing-modal');
   if (modal) modal.style.display = 'none';
+  document.body.classList.remove('modal-open');
 }
 
 async function selectPlan(plan) {
@@ -350,21 +352,33 @@ function openAuthModal(hintText) {
     if (hintText) {
       hint.textContent = hintText;
       hint.style.display = 'block';
+      hint.dataset.custom = '1';
     } else {
-      hint.textContent = '';
-      hint.style.display = 'none';
+      hint.textContent = typeof t === 'function' ? t('auth.hint') : '';
+      hint.style.display = hint.textContent ? 'block' : 'none';
+      delete hint.dataset.custom;
     }
   }
   if (modal) modal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+  if (typeof applyTranslations === 'function') applyTranslations();
 }
 
 function closeAuthModal() {
   const modal = document.getElementById('auth-modal');
   if (modal) modal.style.display = 'none';
+  document.body.classList.remove('modal-open');
   const hint = document.getElementById('auth-hint');
-  if (hint) { hint.textContent = ''; hint.style.display = 'none'; }
+  if (hint) {
+    hint.textContent = '';
+    hint.style.display = 'none';
+    delete hint.dataset.custom;
+  }
   const err = document.getElementById('auth-error');
-  if (err) { err.textContent = ''; err.style.display = 'none'; }
+  if (err) {
+    err.textContent = '';
+    err.style.display = 'none';
+  }
 }
 
 async function handleAuth(e) {
