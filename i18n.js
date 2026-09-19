@@ -1,14 +1,7 @@
 const I18N = {
   ru: {
-    'nav.home': 'Home',
-    'nav.scanner': 'Scanner',
-    'nav.watchlist': 'Watchlist',
-    'nav.history': 'History',
-    'nav.alerts': 'Alerts',
-    'nav.compare': 'Compare',
-    'nav.account': 'Account',
-    'nav.login': 'Войти',
-    'nav.logout': 'Выйти',
+    'btn.login': 'Войти',
+    'btn.logout': 'Выйти',
     'btn.upgrade': 'Upgrade',
 
     'hero.sub': 'Риск смарт-контракта + AI-вердикт + алерты — чтобы не потерять деньги на очередном rug.',
@@ -41,15 +34,8 @@ const I18N = {
     'auth.hint': 'После регистрации — тариф Free. Оплата подключится позже.'
   },
   en: {
-    'nav.home': 'Home',
-    'nav.scanner': 'Scanner',
-    'nav.watchlist': 'Watchlist',
-    'nav.history': 'History',
-    'nav.alerts': 'Alerts',
-    'nav.compare': 'Compare',
-    'nav.account': 'Account',
-    'nav.login': 'Login',
-    'nav.logout': 'Logout',
+    'btn.login': 'Login',
+    'btn.logout': 'Logout',
     'btn.upgrade': 'Upgrade',
 
     'hero.sub': 'Smart-contract risk + AI verdict + alerts — so you do not lose money on the next rug.',
@@ -72,7 +58,7 @@ const I18N = {
     'scanner.analyze': 'Check token free',
 
     'auth.login': 'Login',
-    'auth.register': 'Register',
+    'auth.register': 'Create account',
     'auth.email': 'Email',
     'auth.password': 'Password',
     'auth.password2': 'Confirm password',
@@ -103,11 +89,9 @@ function applyTranslations() {
   });
 
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-placeholder');
-    el.placeholder = t(key);
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
   });
 
-  // fallback для главной (когда data-i18n = 0)
   setText('.hero-sub', 'hero.sub');
   setText('.hero-proof', 'hero.proof');
   setText('#try-link-btn', 'hero.cta');
@@ -126,14 +110,15 @@ function applyTranslations() {
   if (steps[1]) steps[1].textContent = t('home.step2');
   if (steps[2]) steps[2].textContent = t('home.step3');
 
-  // лейбл terms (если span рядом с checkbox)
-  const termsLabel = document.querySelector('label[for="auth-terms"], .auth-terms span, #auth-terms-wrap span');
+  const termsLabel = document.querySelector(
+    '#auth-terms-wrap span, label[for="auth-terms"] span, .auth-terms span'
+  );
   if (termsLabel) termsLabel.textContent = t('auth.terms');
 
   const authBtn = document.getElementById('auth-btn');
   if (authBtn) {
     const loggedIn = typeof user !== 'undefined' && user;
-    authBtn.textContent = loggedIn ? t('nav.logout') : t('nav.login');
+    authBtn.textContent = loggedIn ? t('btn.logout') : t('btn.login');
   }
 
   const mode = document.querySelector('.auth-tab.active')?.dataset?.mode || 'login';
@@ -147,8 +132,10 @@ function applyTranslations() {
       mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister');
   }
 
-  const hint = document.querySelector('#auth-modal .muted.small, #auth-modal .auth-hint');
-  if (hint) hint.textContent = t('auth.hint');
+  const hint = document.getElementById('auth-hint');
+  if (hint && !hint.dataset.custom) {
+    /* hint can be set by openAuthModal */
+  }
 }
 
 function setLanguage(lang) {
@@ -161,13 +148,10 @@ function setLanguage(lang) {
   });
   applyTranslations();
   if (typeof loadHomeWidgets === 'function') loadHomeWidgets();
+  if (typeof updateAuthUI === 'function') updateAuthUI();
 }
 
 window.t = t;
 window.setLanguage = setLanguage;
 window.applyTranslations = applyTranslations;
 window.I18N = I18N;
-
-document.addEventListener('DOMContentLoaded', () => {
-  setLanguage(localStorage.getItem('lang') || 'ru');
-});
