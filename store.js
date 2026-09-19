@@ -41,7 +41,7 @@ function verifyPasswordHash(stored, password) {
   return stored === password;
 }
 
-/** Всегда строка: user_id в alerts/scan_usage/watchlist — TEXT, users.id — integer */
+/** user_id в alerts/scan_* — TEXT; users.id — integer */
 function uid(user) {
   const id = user?.id ?? user?.userId ?? null;
   if (id == null || id === '') return null;
@@ -79,7 +79,10 @@ async function verifyPassword(user, password) {
   const ok = verifyPasswordHash(user.password, password);
   if (ok && user.password === password) {
     const hash = hashPassword(password);
-    await query(`UPDATE users SET password = $1 WHERE id = $2`, [hash, user.id]);
+    await query(`UPDATE users SET password = $1 WHERE id = $2::integer`, [
+      hash,
+      uid(user)
+    ]);
   }
   return ok;
 }
@@ -173,13 +176,27 @@ async function getHistory(user) {
 async function getWatchlist(user) {
   const id = uid(user);
   if (!id) return [];
-  const r = await query(
-    `SELECT address, symbol, name, COALESCE(added_at, created_at) AS "createdAt"
-     FROM watchlist WHERE user_id = $1
-     ORDER BY COALESCE(added_at, created_at) DESC NULLS LAST`,
-    [id]
-  );
-  return r.rows;
+  try {
+    const r = await query(
+      `SELECT address, symbol, name,
+              COALESCE(added_at, NOW()) AS "createdAt"
+       FROM watchlist WHERE user_id = $1
+       ORDER BY id DESC`,
+      [id]
+    );
+    return r.rows;
+  } catch (e) {
+    try {
+      const r = await query(
+        `SELECT address, symbol, name FROM watchlist WHERE user_id = $1 ORDER BY id DESC`,
+        [id]
+      );
+      return r.rows;
+    } catch (e2) {
+      console.error('[store] getWatchlist:', e2.message);
+      return [];
+    }
+  }
 }
 
 async function addToWatchlist(user, item) {
@@ -202,7 +219,10 @@ async function addToWatchlist(user, item) {
 async function removeFromWatchlist(user, address) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`DELETE FROM watchlist WHERE user_id = $1 AND address = $2`, [id, address]);
+  await query(`DELETE FROM watchlist WHERE user_id = $1 AND address = $2`, [
+    id,
+    address
+  ]);
   return { success: true };
 }
 
@@ -233,10 +253,10 @@ async function addAlert(user, item) {
 async function removeAlert(user, alertId) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`DELETE FROM alerts WHERE user_id = $1 AND id = $2`, [
-    id,
-    alertId
-  ]);
+  await query(
+    `DELETE FROM alerts WHERE user_id = $1 AND id::text = $2::text`,
+    [id, String(alertId)]
+  );
   return { success: true };
 }
 
@@ -253,17 +273,19 @@ async function getTelegramChatId(user) {
 async function linkTelegram(user, chatId) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`UPDATE users SET telegram_chat_id = $1 WHERE id = $2::integer`, [
-    String(chatId),
-    id
-  ]);
+  await query(
+    `UPDATE users SET telegram_chat_id = $1 WHERE id = $2::integer`,
+    [String(chatId), id]
+  );
   return { success: true };
 }
 
 async function unlinkTelegram(user) {
   const id = uid(user);
   if (!id) return { success: false };
-  await query(`UPDATE users SET telegram_chat_id = NULL WHERE id = $1::integer`, [id]);
+  await query(`UPDATE users SET telegram_chat_id = NULL WHERE id = $1::integer`, [
+    id
+  ]);
   return { success: true };
 }
 
@@ -283,11 +305,11 @@ async function getUsersWithTelegram() {
 
 async function getAllAlertUsers() {
   try {
-    // users.id = integer, alerts.user_id = text → явный cast
+    // users.id integer, alerts.user_id text (или integer) — сравниваем как text
     const r = await query(
       `SELECT DISTINCT u.id, u.email, u.plan, u.telegram_chat_id AS "telegramChatId"
        FROM users u
-       INNER JOIN alerts a ON a.user_id = u.id::text
+       INNER JOIN alerts a ON a.user_id::text = u.id::text
        WHERE u.telegram_chat_id IS NOT NULL
          AND u.telegram_chat_id <> ''`
     );
@@ -295,7 +317,7 @@ async function getAllAlertUsers() {
     for (const row of r.rows) {
       const alertsRes = await query(
         `SELECT id, type, address, symbol, value
-         FROM alerts WHERE user_id = $1`,
+         FROM alerts WHERE user_id::text = $1`,
         [String(row.id)]
       );
       users.push({
