@@ -261,10 +261,12 @@ async function loadTicker() {
       inner.innerHTML = filled;
     }
     inner.innerHTML = filled + filled;
-    // restart animation cleanly
+    // Speed ~40px/sec — slow professional tape (not frantic)
+    const half = inner.scrollWidth / 2;
+    const sec = Math.max(100, Math.min(200, half / 18));
     inner.style.animation = 'none';
     void inner.offsetWidth;
-    inner.style.animation = '';
+    inner.style.animation = 'ticker-marquee ' + sec.toFixed(1) + 's linear infinite';
   } catch (e) {
     inner.innerHTML = '<span class="ticker-item">Ticker unavailable</span>';
   }
