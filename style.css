@@ -1615,3 +1615,106 @@ body.theme-light .community-cta {
 .empty-state .connect-btn {
   margin-top: 1rem;
 }
+
+
+/* ===== ACCOUNT density + FOOTER pricing no box ===== */
+#page-account {
+  min-height: auto;
+  padding-bottom: 1.5rem;
+}
+#page-account .account-grid {
+  margin-bottom: 0;
+}
+#page-account .panel-block,
+#page-account .glass {
+  min-height: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.container,
+main,
+#app,
+.app-main {
+  flex: 1 0 auto;
+}
+.site-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+.footer-cols a {
+  display: block;
+  padding: 0.25rem 0;
+  color: var(--muted);
+  text-decoration: none;
+  border: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  font-size: 0.9rem;
+}
+.footer-cols a:hover {
+  color: var(--accent, #00f0a0);
+}
+#footer-pricing {
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 0.25rem 0 !important;
+  display: block;
+  width: auto;
+  max-width: none;
+}
+.footer-cols a:focus,
+.footer-cols a:focus-visible {
+  outline: none;
+  color: var(--accent, #00f0a0);
+}
+
+
+/* ===== RISK BAR + denser scanner ===== */
+.risk-bar-wrap { margin-top: 0.35rem; }
+.risk-bar-track {
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
+.risk-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+.risk-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+#page-scanner .scanner-hero {
+  margin-bottom: 1rem;
+}
+#page-scanner #results:empty::before {
+  content: 'Paste a contract address above. Free scan includes Risk Score, market metrics and a first-pass AI verdict.';
+  display: block;
+  text-align: center;
+  color: var(--muted);
+  padding: 2rem 1rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+#demo-report-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.7);
+}
