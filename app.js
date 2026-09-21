@@ -770,10 +770,20 @@ async function startScan() {
   if (chatSec) chatSec.style.display = 'none';
   chatHistory = [];
   try {
-    const res = await fetch(API_BASE + '/api/scan/' + address + '?plan=' + currentPlan, {
+    const res = await fetch(API_BASE + '/api/scan/' + encodeURIComponent(address) + '?plan=' + encodeURIComponent(currentPlan || 'free'), {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      results.innerHTML = '<div class="error-card glass">Server returned non-JSON (HTTP ' + res.status + '). Check backend logs.</div>';
+      return;
+    }
+    if (!res.ok && !data.token) {
+      results.innerHTML = '<div class="error-card glass">' + (data.error || data.message || ('HTTP ' + res.status)) + '</div>';
+      return;
+    }
     if (res.status === 429 || (data.error && String(data.error).toLowerCase().includes('limit'))) {
       results.innerHTML =
         '<div class="error-card limit-upsell glass">' +
@@ -798,7 +808,7 @@ async function startScan() {
     renderTokenPage(data);
     refreshUsage();
   } catch (e) {
-    results.innerHTML = '<div class="error-card">Connection error</div>';
+    results.innerHTML = '<div class="error-card glass">Connection error. Check network / API. ' + (e && e.message ? e.message : '') + '</div>';
   }
 }
 
@@ -809,11 +819,23 @@ function safe(v, fb) {
 }
 
 function formatNum(n) {
-  if (!n || isNaN(n)) return '—';
-  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-  return '$' + Number(n).toFixed(4);
+  if (n === null || n === undefined || n === '') return '—';
+  const v = Number(n);
+  if (!isFinite(v) || v === 0) return '—';
+  if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+  if (v >= 1) return '$' + v.toFixed(2);
+  return '$' + v.toFixed(6);
+}
+
+function riskBarHtml(score) {
+  const s = Math.max(0, Math.min(100, Number(score) || 0));
+  let color = '#00f0a0';
+  if (s >= 70) color = '#ff4d6a';
+  else if (s >= 40) color = '#f5a623';
+  return '<div class="risk-bar-wrap"><div class="risk-bar-track"><div class="risk-bar-fill" style="width:' + s + '%;background:' + color + '"></div></div>' +
+    '<div class="risk-bar-labels"><span>Low</span><span>Med</span><span>High</span></div></div>';
 }
 
 function generateCandleAndVolumeData(currentPrice, timeframe) {
