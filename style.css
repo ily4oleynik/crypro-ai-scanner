@@ -62,20 +62,20 @@ a:hover { opacity: 0.9; }
   width: 100%;
   position: relative;
   font-size: 0.8rem;
-  line-height: 34px;
+  line-height: 32px;
 }
 body.theme-light .ticker { background: #e8ebf2; }
 .ticker-inner {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 2.25rem;
+  gap: 2.75rem;
   width: max-content;
   max-width: none;
   white-space: nowrap;
   will-change: transform;
   transform: translate3d(0, 0, 0);
-  animation: ticker-marquee 40s linear infinite;
+  animation: ticker-marquee 90s linear infinite;
 }
 .ticker-inner:hover { animation-play-state: paused; }
 .ticker-item {
@@ -92,48 +92,126 @@ body.theme-light .ticker { background: #e8ebf2; }
 /* -50% only works when content is duplicated AND wider than viewport */
 @keyframes ticker-marquee {
   from { transform: translate3d(0, 0, 0); }
+
+/* ===== TG STRIP — soft, secondary (does not fight ticker) ===== */
+.tg-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.4rem 1rem;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+.tg-strip:hover { opacity: 1; }
+.tg-strip-ico {
+  display: inline-flex;
+  color: #5b9fd4;
+  opacity: 0.9;
+  line-height: 0;
+}
+.tg-strip-label {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+.tg-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(91, 159, 212, 0.08);
+  color: #8eb8e0 !important;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.tg-chip:hover {
+  background: rgba(91, 159, 212, 0.18);
+  border-color: rgba(91, 159, 212, 0.35);
+  color: #c5dff5 !important;
+}
+.tg-strip-hint { display: none; }
+.tg-channel-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+body.theme-light .tg-chip {
+  background: rgba(37, 99, 150, 0.08);
+  color: #3a6d9b !important;
+}
+body.theme-light .tg-chip:hover {
+  background: rgba(37, 99, 150, 0.14);
+  color: #1e4a6e !important;
+}
+
   to { transform: translate3d(-50%, 0, 0); }
 }
   to { transform: translate3d(-50%, 0, 0); }
 }
 
-/* ===== TG STRIP ===== */
+/* ===== TG STRIP hidden ===== */
+
+/* old styles kept inactive: */
+/*
 .tg-strip {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.65rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  padding: 0.45rem 1rem;
-  background: linear-gradient(90deg, rgba(0, 240, 160, 0.06), rgba(0, 212, 255, 0.06));
+  padding: 0.35rem 1rem;
+  background: var(--bg2);
   border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  min-height: 28px;
 }
 .tg-strip-label {
   color: var(--muted);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+  opacity: 0.7;
 }
 .tg-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.65rem;
+  padding: 0.15rem 0.55rem;
   border-radius: 999px;
-  border: 1px solid var(--border2);
-  background: var(--bg2);
-  color: var(--text) !important;
-  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted) !important;
+  font-size: 0.72rem;
   font-weight: 600;
   transition: 0.15s;
+  text-decoration: none;
 }
 .tg-chip:hover {
   border-color: var(--accent);
   color: var(--accent) !important;
 }
-.tg-strip-hint { color: var(--muted); font-size: 0.78rem; }
-.tg-channel-links { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.tg-strip-hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+.tg-channel-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
 
 /* ===== NAV ===== */
 .top-nav {
