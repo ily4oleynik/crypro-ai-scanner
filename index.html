@@ -378,6 +378,7 @@
       <form id="auth-form" autocomplete="on">
         <input type="email" id="auth-email" data-i18n-placeholder="auth.email" placeholder="Email" autocomplete="email" required />
         <input type="password" id="auth-password" data-i18n-placeholder="auth.password" placeholder="Password" autocomplete="current-password" required />
+        <div id="auth-pass-hint" class="auth-pass-hint muted small" style="display:none;margin:-0.3rem 0 0.5rem;">Min 8 chars, letter + number</div>
         <input type="password" id="auth-password2" data-i18n-placeholder="auth.password2" placeholder="Confirm password" style="display:none" autocomplete="new-password" />
         <label class="auth-terms" id="auth-terms-wrap" style="display:none">
           <input type="checkbox" id="auth-terms" />
@@ -385,6 +386,7 @@
         </label>
         <p class="auth-error" id="auth-error" style="display:none"></p>
         <button type="submit" class="upgrade-btn full" id="auth-submit">Login</button>
+      <p id="forgot-wrap" class="muted small" style="margin-top:0.5rem;text-align:center;"><a href="#" id="forgot-password">Forgot password?</a></p>
       </form>
       <p class="muted small" id="auth-hint" style="display:none"></p>
     </div>
