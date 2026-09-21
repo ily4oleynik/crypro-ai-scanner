@@ -5,7 +5,8 @@ class AIService {
     this.groqKey = process.env.GROQ_API_KEY || '';
     this.openRouterKey = process.env.OPENROUTER_API_KEY || '';
     this.groqURL = 'https://api.groq.com/openai/v1';
-    this.groqModel = 'llama-3.3-70b-versatile';
+    this.groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
+    this.groqModel = this.groqModels[0];
     this.orURL = 'https://openrouter.ai/api/v1';
     console.log('[AI] GROQ_API_KEY loaded:', this.groqKey ? 'YES' : 'NO');
   }
@@ -53,13 +54,26 @@ Market Cap/FDV: $${td.marketCap || td.fdv || 'n/a'}
   }
 
   async callGroq(messages) {
-    const response = await axios.post(
-      this.groqURL + '/chat/completions',
-      { model: this.groqModel, messages, temperature: 0.5, max_tokens: 700 },
-      { headers: { Authorization: 'Bearer ' + this.groqKey, 'Content-Type': 'application/json' } }
-    );
-    let text = response.data.choices[0].message.content.trim();
-    return text.replace(/[#*_`]/g, '').replace(/\n{3,}/g, '\n\n');
+    const models = this.groqModels || [this.groqModel || 'llama-3.1-8b-instant'];
+    let lastErr = null;
+    for (const model of models) {
+      try {
+        const response = await axios.post(
+          this.groqURL + '/chat/completions',
+          { model: model, messages: messages, temperature: 0.5, max_tokens: 700 },
+          { headers: { Authorization: 'Bearer ' + this.groqKey, 'Content-Type': 'application/json' } }
+        );
+        this.groqModel = model;
+        let text = response.data.choices[0].message.content.trim();
+        return text.replace(/[#*_`]/g, '').replace(/\n{3,}/g, '\n\n');
+      } catch (e) {
+        lastErr = e;
+        const status = e.response && e.response.status;
+        console.error('[AI] Groq', model, status || e.message);
+        if (status && status !== 404 && status !== 400) break;
+      }
+    }
+    throw lastErr || new Error('Groq failed');
   }
 
   async callOpenRouter(prompt) {
