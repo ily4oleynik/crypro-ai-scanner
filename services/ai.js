@@ -3,229 +3,178 @@ const axios = require('axios');
 class AIService {
   constructor() {
     this.groqKey = process.env.GROQ_API_KEY || '';
+    this.openRouterKey = process.env.OPENROUTER_API_KEY || '';
     this.groqURL = 'https://api.groq.com/openai/v1';
-    this.groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    this.groqModel = 'llama-3.3-70b-versatile';
+    this.orURL = 'https://openrouter.ai/api/v1';
     console.log('[AI] GROQ_API_KEY loaded:', this.groqKey ? 'YES' : 'NO');
   }
 
-  /**
-   * @param {object} tokenData
-   * @param {object} riskReport
-   * @param {string} plan - free | premium | pro
-   */
-  async analyzeToken(tokenData, riskReport, plan = 'free') {
-    const p = String(plan || 'free').toLowerCase();
-    const symbol = tokenData?.symbol || 'TOKEN';
-    const name = tokenData?.name || '';
-    const price = tokenData?.price ?? '—';
-    const liq = tokenData?.liquidity ?? '—';
-    const vol = tokenData?.volume24h ?? '—';
-    const fdv = tokenData?.fdv ?? tokenData?.marketCap ?? '—';
-    const riskScore = riskReport?.riskScore ?? 50;
-    const riskLevel = riskReport?.riskLevel || 'MEDIUM';
-
-    if (!this.groqKey) {
-      return this.fallbackAnalysis(symbol, riskScore, riskLevel, p);
-    }
-
+  async analyzeToken(tokenData, riskReport) {
+    const td = tokenData || {};
+    const rr = riskReport || {};
     try {
-      const prompt =
-        p === 'free'
-          ? this.buildFreePrompt(symbol, name, price, riskScore, riskLevel)
-          : this.buildPremiumPrompt(symbol, name, price, liq, vol, fdv, riskScore, riskLevel, p);
-
-      const reply = await this.callGroq([{ role: 'user', content: prompt }]);
-      return this.parseAnalysis(reply, riskScore, riskLevel, p);
+      const prompt = this.buildPrompt(td, rr);
+      let text = null;
+      if (this.groqKey) {
+        text = await this.callGroq([{ role: 'user', content: prompt }]);
+      } else if (this.openRouterKey && this.openRouterKey !== 'dummy-key-for-dev') {
+        text = await this.callOpenRouter(prompt);
+      }
+      if (text) {
+        return {
+          text,
+          confidence: 78,
+          risks: this.pickRisks(td, rr),
+          positives: this.pickPositives(td, rr),
+          verdict: this.verdictFromScore(rr.riskScore)
+        };
+      }
     } catch (e) {
-      console.error('Groq analyze error:', e.response?.data || e.message);
-      return this.fallbackAnalysis(symbol, riskScore, riskLevel, p);
+      console.error('AI analyze error:', e.message);
     }
+    return this.generateFallbackAnalysis(td, rr);
   }
 
-  buildFreePrompt(symbol, name, price, riskScore, riskLevel) {
-    return (
-      `Ты крипто-аналитик. Коротко на русском, без markdown, без списков из 10 пунктов.\n` +
-      `Токен: ${symbol} ${name ? '(' + name + ')' : ''}, цена $${price}, ` +
-      `риск ${riskScore}/100 (${riskLevel}).\n` +
-      `Дай 2–3 предложения: общий тон риска и одну главную осторожность. ` +
-      `В конце одна фраза-вердикт. Не финансовый совет, DYOR.`
-    );
-  }
-
-  buildPremiumPrompt(symbol, name, price, liq, vol, fdv, riskScore, riskLevel, plan) {
-    const depth =
-      plan === 'pro'
-        ? `Добавь блок «Что проверить дальше» (3 пункта: холдеры, локи ликвидности, активность деплоера — как гипотезы, не факты).`
-        : `Без воды, по делу.`;
-
-    return (
-      `Ты senior on-chain / token risk аналитик. Ответ СТРОГО на русском. Без markdown (# * \`).\n\n` +
-      `Данные токена:\n` +
-      `- Символ: ${symbol}\n` +
-      `- Название: ${name || '—'}\n` +
-      `- Цена: $${price}\n` +
-      `- Ликвидность: ${liq}\n` +
-      `- Объём 24ч: ${vol}\n` +
-      `- FDV/Market Cap: ${fdv}\n` +
-      `- Risk score: ${riskScore}/100 (${riskLevel})\n\n` +
-      `Структура ответа (соблюдай порядок, заголовки обычным текстом):\n` +
-      `1) Краткий вывод — 2 предложения\n` +
-      `2) Ключевые риски — 3–5 коротких пунктов с дефисом\n` +
-      `3) Позитивные сигналы — 2–4 пункта с дефисом\n` +
-      `4) На что смотреть перед входом — 2–3 пункта\n` +
-      `5) Вердикт — одна фраза\n\n` +
-      `${depth}\n` +
-      `Не выдумывай аудит, team wallet и lock, если их нет в данных. ` +
-      `Не давай прямых указаний «покупай/продавай». Упомяни DYOR.`
-    );
-  }
-
-  parseAnalysis(text, riskScore, riskLevel, plan) {
-    const clean = String(text || '')
-      .replace(/[#*`]/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-
-    const risks = [];
-    const positives = [];
-    const lines = clean.split('\n').map((l) => l.trim()).filter(Boolean);
-
-    let section = '';
-    for (const line of lines) {
-      const low = line.toLowerCase();
-      if (low.includes('ключев') && low.includes('риск')) {
-        section = 'risks';
-        continue;
-      }
-      if (low.includes('позитив')) {
-        section = 'positives';
-        continue;
-      }
-      if (low.includes('вердикт')) {
-        section = 'verdict';
-        continue;
-      }
-      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('–')) {
-        const item = line.replace(/^[-•–]\s*/, '');
-        if (section === 'risks') risks.push(item);
-        if (section === 'positives') positives.push(item);
-      }
-    }
-
-    let verdict = 'Нейтрально · DYOR';
-    const vLine = lines.find((l) => l.toLowerCase().includes('вердикт'));
-    if (vLine) {
-      verdict = vLine.replace(/вердикт\s*:?\s*/i, '').trim() || verdict;
-    } else if (lines.length) {
-      verdict = lines[lines.length - 1].slice(0, 160);
-    }
-
-    const confidence =
-      plan === 'pro' ? 88 : plan === 'premium' ? 78 : 58;
-
-    return {
-      text: clean,
-      confidence,
-      risks: risks.slice(0, 6),
-      positives: positives.slice(0, 6),
-      verdict,
-      plan
-    };
-  }
-
-  fallbackAnalysis(symbol, riskScore, riskLevel, plan) {
-    if (plan === 'free') {
-      return {
-        text:
-          `Краткий взгляд на ${symbol}: риск около ${riskScore}/100 (${riskLevel}). ` +
-          `На Free доступен сжатый вердикт; полный разбор Security и AI — в Premium. DYOR.`,
-        confidence: 55,
-        risks: ['Ограниченные данные на тарифе Free'],
-        positives: [],
-        verdict: 'Нужен более глубокий разбор',
-        plan
-      };
-    }
-    return {
-      text:
-        `Анализ ${symbol}: предварительный риск ${riskScore}/100 (${riskLevel}). ` +
-        `AI временно недоступен (нет ключа или сбой провайдера). ` +
-        `Проверь ликвидность, объём и контракт вручную. DYOR.`,
-      confidence: 50,
-      risks: ['AI fallback — данные ограничены'],
-      positives: [],
-      verdict: 'Нейтрально · проверь вручную',
-      plan
-    };
-  }
-
-  async chat(messages, context = {}) {
-    context = context || {};
-    const last = (messages || []).filter((m) => m.role === 'user').pop();
-    const lastText = last ? last.content : '';
-
-    if (!this.groqKey) {
-      return {
-        reply:
-          'Демо-режим AI. Ключ GROQ_API_KEY не найден.\n' +
-          'Вы написали: «' +
-          lastText +
-          '»\nТокен: ' +
-          ((context.token && context.token.symbol) || 'не выбран') +
-          '\nДобавь GROQ_API_KEY в переменные окружения.',
-        demo: true
-      };
-    }
-
-    try {
-      const symbol = (context.token && context.token.symbol) || 'не выбран';
-      const risk = (context.risk && context.risk.riskScore) || '—';
-      const systemPrompt =
-        'Ты крипто-аналитик в продукте Crypto AI Scanner. Отвечай на русском просто, без markdown. ' +
-        'Токен в контексте: ' +
-        symbol +
-        ', Risk: ' +
-        risk +
-        '. Не давай прямых финансовых советов (не говори «покупай/продавай»). ' +
-        'Если данных мало — скажи об этом. Всегда напоминай DYOR коротко.';
-
-      const reply = await this.callGroq(
-        [{ role: 'system', content: systemPrompt }].concat((messages || []).slice(-10))
-      );
-      return { reply, demo: false };
-    } catch (e) {
-      console.error('Groq chat error:', e.response?.data || e.message);
-      return {
-        reply:
-          'Ошибка Groq: ' +
-          ((e.response && e.response.data && e.response.data.error && e.response.data.error.message) ||
-            e.message) +
-          '\nПопробуйте позже.',
-        demo: true
-      };
-    }
+  buildPrompt(td, rr) {
+    return `Ты крипто-риск аналитик. Ответь на русском, без markdown, 180-280 слов.
+Токен: ${td.symbol || '?'} (${td.name || ''})
+Цена: $${td.price || 'n/a'}
+Риск-скор: ${rr.riskScore || '?'}/100 (${rr.riskLevel || ''})
+Ликвидность: $${td.liquidity || 0}
+Объём 24ч: $${td.volume24h || 0}
+Market Cap/FDV: $${td.marketCap || td.fdv || 'n/a'}
+Структура ответа:
+1) Короткий вердикт одной фразой
+2) Почему такой risk score (2-4 конкретные причины)
+3) Что проверить до покупки
+4) Чего не хватает в данных
+Не давай финансовых советов "покупай/продавай". DYOR.`;
   }
 
   async callGroq(messages) {
     const response = await axios.post(
       this.groqURL + '/chat/completions',
+      { model: this.groqModel, messages, temperature: 0.5, max_tokens: 700 },
+      { headers: { Authorization: 'Bearer ' + this.groqKey, 'Content-Type': 'application/json' } }
+    );
+    let text = response.data.choices[0].message.content.trim();
+    return text.replace(/[#*_`]/g, '').replace(/\n{3,}/g, '\n\n');
+  }
+
+  async callOpenRouter(prompt) {
+    const response = await axios.post(
+      this.orURL + '/chat/completions',
       {
-        model: this.groqModel,
-        messages,
-        temperature: 0.55,
-        max_tokens: 900
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.5,
+        max_tokens: 700
       },
       {
         headers: {
-          Authorization: 'Bearer ' + this.groqKey,
-          'Content-Type': 'application/json'
-        },
-        timeout: 45000
+          Authorization: 'Bearer ' + this.openRouterKey,
+          'HTTP-Referer': 'https://crypto-ai-scanner.app',
+          'X-Title': 'Crypto AI Scanner'
+        }
       }
     );
-    let text = response.data.choices[0].message.content.trim();
-    text = text.replace(/[#*`_]/g, '').replace(/\n{3,}/g, '\n\n');
-    return text;
+    return response.data.choices[0].message.content.trim().replace(/[#*_`]/g, '');
+  }
+
+  verdictFromScore(score) {
+    const s = Number(score) || 50;
+    if (s >= 70) return 'High risk';
+    if (s >= 40) return 'Cautious OK';
+    return 'Lower risk';
+  }
+
+  pickRisks(td, rr) {
+    const risks = [];
+    const liq = Number(td.liquidity) || 0;
+    const vol = Number(td.volume24h) || 0;
+    if (liq < 50000) risks.push('Thin liquidity — exits may slip heavily');
+    if (vol < 10000) risks.push('Low 24h volume — price discovery is weak');
+    if ((Number(rr.riskScore) || 0) >= 60) risks.push('Elevated composite risk score');
+    if (!risks.length) risks.push('Residual smart-contract and market risk always remains');
+    return risks.slice(0, 4);
+  }
+
+  pickPositives(td, rr) {
+    const pos = [];
+    const liq = Number(td.liquidity) || 0;
+    const vol = Number(td.volume24h) || 0;
+    if (liq >= 100000) pos.push('Liquidity supports reasonable trade size');
+    if (vol >= 50000) pos.push('Active 24h trading volume');
+    if ((Number(rr.riskScore) || 100) < 45) pos.push('Composite score in a milder band');
+    if (!pos.length) pos.push('Pair data available from the market feed');
+    return pos.slice(0, 4);
+  }
+
+  generateFallbackAnalysis(tokenData, riskReport) {
+    const td = tokenData || {};
+    const rr = riskReport || {};
+    const score = Number(rr.riskScore) || 50;
+    const liq = Number(td.liquidity) || 0;
+    const vol = Number(td.volume24h) || 0;
+    const symbol = td.symbol || 'Token';
+    const verdict = this.verdictFromScore(score);
+
+    let why = [];
+    if (liq < 50000) why.push('ликвидность ниже комфортного уровня для спокойного выхода');
+    else if (liq < 500000) why.push('ликвидность средняя — крупные ордера могут двигать цену');
+    else why.push('ликвидность выглядит достаточной для обычных размеров позиции');
+
+    if (vol < 20000) why.push('объём 24ч слабый — рынок может быть «тонким»');
+    else why.push('есть заметный объём за сутки');
+
+    if (score >= 70) why.push('итоговый risk score в высокой зоне');
+    else if (score >= 40) why.push('итоговый risk score в средней зоне');
+    else why.push('итоговый risk score ближе к нижней зоне риска');
+
+    const text =
+      `${symbol}: ${verdict} (score ${score}/100). ` +
+      `Почему так: ${why.join('; ')}. ` +
+      `До покупки имеет смысл сверить контракт в эксплорере, проверить, не менялся ли recently ownership/mint, и сравнить ликвидность с объёмом. ` +
+      `Этого хватает для первого фильтра. Глубже (holders, honeypot heuristics, ownership) — в полном отчёте. Это не инвестсовет, DYOR.`;
+
+    return {
+      text,
+      confidence: 62,
+      risks: this.pickRisks(td, rr),
+      positives: this.pickPositives(td, rr),
+      verdict
+    };
+  }
+
+  async chat(messages, context) {
+    context = context || {};
+    const last = (messages || []).filter(m => m.role === 'user').pop();
+    const lastText = last ? last.content : '';
+    if (!this.groqKey && !this.openRouterKey) {
+      return {
+        reply:
+          'Демо-режим чата. Ключ API не найден.\nВы написали: «' +
+          lastText +
+          '»\nТокен: ' +
+          ((context.token && context.token.symbol) || 'не выбран') +
+          '\nДобавьте GROQ_API_KEY в env.',
+        demo: true
+      };
+    }
+    try {
+      const systemPrompt =
+        'Ты крипто-аналитик. Отвечай на русском коротко, без markdown. Не давай прямых финансовых советов. Токен: ' +
+        ((context.token && context.token.symbol) || 'n/a') +
+        ', Risk: ' +
+        ((context.risk && context.risk.riskScore) || '—');
+      const msgs = [{ role: 'system', content: systemPrompt }].concat((messages || []).slice(-10));
+      const reply = this.groqKey ? await this.callGroq(msgs) : await this.callOpenRouter(systemPrompt + '\n\n' + lastText);
+      return { reply, demo: false };
+    } catch (e) {
+      console.error('AI chat error:', e.message);
+      return { reply: 'Ошибка AI: ' + e.message, demo: true };
+    }
   }
 }
 
