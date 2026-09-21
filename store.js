@@ -289,6 +289,10 @@ async function unlinkTelegram(user) {
   return { success: true };
 }
 
+async function getDigestUsers() {
+  return getUsersWithTelegram();
+}
+
 async function getUsersWithTelegram() {
   try {
     const r = await query(
@@ -354,5 +358,6 @@ module.exports = {
   linkTelegram,
   unlinkTelegram,
   getUsersWithTelegram,
-  getAllAlertUsers
+  getAllAlertUsers,
+  getDigestUsers
 };
