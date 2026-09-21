@@ -1010,3 +1010,56 @@ body.theme-light .site-footer { background: #e8ebf2; }
   .modal-content { margin: 0.75rem auto 2rem; }
   .footer-cols { gap: 1.5rem; }
 }
+
+
+/* ===== FINAL: ticker speed + visible TG bar ===== */
+.ticker-inner {
+  animation: ticker-marquee 120s linear infinite !important;
+}
+.tg-strip {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, rgba(37, 99, 150, 0.12), rgba(0, 240, 160, 0.06), rgba(37, 99, 150, 0.12));
+  border-bottom: 1px solid rgba(91, 159, 212, 0.2);
+  font-size: 0.8rem;
+  opacity: 1 !important;
+}
+.tg-strip-ico {
+  display: inline-flex;
+  color: #5b9fd4;
+  line-height: 0;
+}
+.tg-strip-label {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.tg-chip {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  padding: 0.28rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(91, 159, 212, 0.35);
+  background: rgba(91, 159, 212, 0.15);
+  color: #b8d9f5 !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: 0.15s;
+}
+.tg-chip:hover {
+  background: rgba(91, 159, 212, 0.28);
+  border-color: #5b9fd4;
+  color: #fff !important;
+}
+.tg-strip-cta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-left: 0.25rem;
+}
