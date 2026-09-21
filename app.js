@@ -159,19 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showExampleReport() {
-  showPage('scanner');
-  const results = document.getElementById('results');
-  if (!results) return;
-  results.innerHTML =
-    '<div class="example-report glass">' +
-    '<h3>Premium analysis example</h3>' +
-    '<p class="muted small">Demo report. Real numbers depend on the token.</p>' +
-    '<div class="ex-block"><div class="ex-label">Risk Score</div><div class="metric-value risk-MEDIUM">67 / 100 · MEDIUM</div></div>' +
-    '<div class="ex-block"><div class="ex-label">Security</div>Contract: Verified · Scam probability: ~22%</div>' +
-    '<div class="ex-block"><div class="ex-label">AI Summary</div>Liquidity is moderate, 24h volume is not anomalous. DYOR.</div>' +
-    '<div class="ex-block"><div class="ex-label">Verdict</div><span class="verdict">Cautious interest</span></div>' +
-    '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Get reports like this — Premium</button>' +
-    '</div>';
+  if (typeof openDemoReport === "function") openDemoReport();
 }
 
 function initTheme() {
@@ -984,8 +972,14 @@ function renderTokenPage(data) {
         '<button type="button" class="tf-btn" data-tf="1D">1D</button>' +
         '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
-      : '<div class="locked-message glass"><p><strong>Free shows a short verdict.</strong><br>Full AI + chart on Premium.</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>') +
+      : '<div class="glass panel" style="margin-bottom:1rem;">' +
+        '<div class="muted small" style="margin-bottom:0.5rem;">Risk scale</div>' +
+        riskBarHtml(r.riskScore) +
+        '<p style="margin-top:0.85rem;line-height:1.55;color:var(--text);">' +
+        (safe(ai.text) || 'Risk score ' + safe(r.riskScore) + '/100. Check Security and AI tabs for details.') +
+        '</p>' +
+        '<p class="muted small" style="margin-top:0.6rem;">Candles and deep security checks unlock on Premium.</p>' +
+        '<button type="button" class="connect-btn" style="margin-top:0.6rem;" onclick="openPricing(\'premium\')">See Premium report</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
         '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
@@ -1002,7 +996,13 @@ function renderTokenPage(data) {
         '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
         '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
-      : '<div class="locked-message glass"><p>Security — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>') +
+      : '<div class="metrics-grid">' +
+        '<div class="metric-card glass"><div class="metric-label">Risk level</div><div class="metric-value risk-' + (r.riskLevel || 'medium').toLowerCase() + '">' + safe(r.riskLevel || 'MEDIUM') + '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Score</div><div class="metric-value">' + safe(r.riskScore) + '/100</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Scam signal</div><div class="metric-value">' + safe(data.security?.scamProbability || '—') + (data.security?.scamProbability != null ? '%' : '') + '</div></div>' +
+        '</div>' +
+        '<p class="muted small" style="margin-top:0.75rem;">Verified contract, honeypot and ownership checks — Premium.</p>' +
+        '<button type="button" class="connect-btn" onclick="openPricing(\'premium\')">Unlock full security</button>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
@@ -1017,7 +1017,10 @@ function renderTokenPage(data) {
       : '') +
     '<div class="muted" style="margin-top:0.8rem;">Confidence: ' + safe(ai.confidence) + '%</div>' +
     (!isPrem
-      ? '<div style="margin-top:1rem;"><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Full AI — Premium</button></div>'
+      ? '<div class="glass panel" style="margin-top:1rem;padding:1rem;border-color:rgba(0,240,160,0.25);">' +
+        '<p style="margin:0 0 0.5rem;font-size:0.9rem;">Free AI is a solid first pass. Premium adds contract findings, holder concentration and actionable recommendations.</p>' +
+        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">See full AI report</button>' +
+        '<button type="button" class="connect-btn" style="margin-left:0.5rem;" onclick="openDemoReport()">View sample Premium report</button></div>'
       : '') +
     '</div></div>' +
     '<div class="tab-pane" id="links">' +
@@ -1027,7 +1030,10 @@ function renderTokenPage(data) {
         (data.projectLinks.twitter ? '<a class="home-chip" href="' + data.projectLinks.twitter + '" target="_blank">Twitter</a>' : '') +
         (data.projectLinks.telegram ? '<a class="home-chip" href="' + data.projectLinks.telegram + '" target="_blank">Telegram</a>' : '') +
         '</div>'
-      : '<div class="locked-message glass"><p>Links — Premium</p><button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>') +
+      : '<div class="home-chip-row">' +
+        (addr ? '<a class="home-chip" href="https://dexscreener.com/search?q=' + encodeURIComponent(addr) + '" target="_blank" rel="noopener">DexScreener</a>' : '') +
+        (addr ? '<a class="home-chip" href="https://etherscan.io/token/' + encodeURIComponent(addr) + '" target="_blank" rel="noopener">Explorer</a>' : '') +
+        '</div><p class="muted small" style="margin-top:0.6rem;">Official website / socials — Premium when available from the pair.</p>') +
     '</div></div>';
 
   document.querySelectorAll('.tab').forEach(tab => {
@@ -1389,3 +1395,35 @@ document.getElementById('footer-pricing')?.addEventListener('click', function (e
   else if (typeof showPlans === 'function') showPlans();
   else document.querySelector('.plan-btn[data-plan="premium"]')?.click();
 });
+
+function openDemoReport() {
+  let modal = document.getElementById('demo-report-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'demo-report-modal';
+    modal.className = 'pricing-modal';
+    modal.innerHTML =
+      '<div class="modal-content glass" style="max-width:560px;max-height:85vh;overflow-y:auto;">' +
+      '<button type="button" class="modal-close" id="demo-report-close">&times;</button>' +
+      '<h2 style="margin-bottom:0.5rem;">Sample Premium report</h2>' +
+      '<p class="muted small" style="margin-bottom:1rem;">Example of what a full analysis looks like (illustrative, not a live token).</p>' +
+      '<div class="risk-pill risk-medium" style="display:inline-block;margin-bottom:0.8rem;">Risk 38 / 100 · MEDIUM</div>' +
+      '<div class="metrics-grid" style="margin-bottom:1rem;">' +
+      '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">$4.2B</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">$48M</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">~680k</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Top 10</div><div class="metric-value">22%</div></div></div>' +
+      '<h3 style="margin:0.5rem 0;">AI verdict: Cautious OK</h3>' +
+      '<p style="line-height:1.65;margin-bottom:0.8rem;">Liquidity is deep enough for mid-size orders. Contract is verified; no obvious mint/honeypot flags in the scanned pair. Concentration in the top wallets is moderate for a large-cap token. Volatility over 24h is within normal range for the sector.</p>' +
+      '<p style="line-height:1.65;margin-bottom:0.8rem;"><strong>Why the score is not lower:</strong> residual smart-contract and oracle risk always remains; large holder moves can still move the book. This is risk scoring, not investment advice.</p>' +
+      '<div class="muted small">Key risks</div><ul style="margin:0.3rem 0 0.8rem 1.1rem;color:var(--muted);"><li>Market-wide drawdowns</li><li>Bridge / L2 dependency if applicable</li><li>Always DYOR on latest contract changes</li></ul>' +
+      '<div class="muted small">Positive signals</div><ul style="margin:0.3rem 0 1rem 1.1rem;color:var(--muted);"><li>Verified contract</li><li>Healthy 24h volume vs liquidity</li><li>No honeypot heuristics triggered</li></ul>' +
+      '<button type="button" class="upgrade-btn" onclick="document.getElementById(\'demo-report-modal\').remove();openPricing(\'premium\');">Get reports like this</button>' +
+      '</div>';
+    document.body.appendChild(modal);
+    document.getElementById('demo-report-close').onclick = () => modal.remove();
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  }
+  document.body.classList.add('modal-open');
+  modal.style.display = 'flex';
+}
