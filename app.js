@@ -566,6 +566,9 @@ function showPage(page) {
   document.getElementById('nav-links')?.classList.remove('open');
   if (page === 'home') loadHomeWidgets();
   if (page === 'account') refreshAccountPage();
+  if (page === 'history') loadHistory();
+  if (page === 'watchlist') typeof loadWatchlist === 'function' && loadWatchlist();
+  if (page === 'scanner') typeof renderScannerEmpty === 'function' && renderScannerEmpty();
 }
 
 async function refreshUsage() {
@@ -765,7 +768,20 @@ async function startScan() {
   const address = document.getElementById('token-input').value.trim();
   if (!address) return alert('Enter contract address');
   const results = document.getElementById('results');
-  results.innerHTML = '<div class="loading">Analyzing...</div>';
+  results.innerHTML = '<div class="scan-progress glass">' +
+    '<div class="scan-step active" id="sp1">On-chain</div>' +
+    '<div class="scan-step" id="sp2">Liquidity</div>' +
+    '<div class="scan-step" id="sp3">Security</div>' +
+    '<div class="scan-step" id="sp4">AI</div>' +
+    '</div>';
+  let sp = 1;
+  const spTimer = setInterval(function () {
+    sp += 1;
+    const el = document.getElementById('sp' + sp);
+    if (el) el.classList.add('active');
+    if (sp >= 4) clearInterval(spTimer);
+  }, 700);
+  window._scanProgressTimer = spTimer;
   const chatSec = document.getElementById('ai-chat-section');
   if (chatSec) chatSec.style.display = 'none';
   chatHistory = [];
@@ -805,10 +821,47 @@ async function startScan() {
       pairAddress: data.token?.pairAddress || null,
       chainId: data.token?.chainId || 'ethereum'
     };
-    renderTokenPage(data);
-    refreshUsage();
+    if (window._scanProgressTimer) clearInterval(window._scanProgressTimer);
+    try {
+      data = await enrichTokenMarket(data, address);
+    } catch (enr) { console.warn(enr); }
+    try {
+      renderTokenPage(data);
+    } catch (renderErr) {
+      console.error(renderErr);
+      results.innerHTML = '<div class="error-card glass">Render error: ' + (renderErr.message || renderErr) + '</div>';
+      return;
+    }
+    if (token && data.token) {
+      try {
+        await fetch(API_BASE + '/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({
+            address: address,
+            symbol: data.token.symbol,
+            name: data.token.name,
+            price: data.token.price,
+            riskScore: data.risk && data.risk.riskScore,
+            plan: data.plan || currentPlan || 'free'
+          })
+        });
+      } catch (hErr) { console.warn(hErr); }
+    }
+    await refreshUsage();
+    if (typeof refreshAccountPage === 'function') refreshAccountPage();
+    results.insertAdjacentHTML('beforeend',
+      '<div style="text-align:center;margin-top:1rem;">' +
+      '<button type="button" class="connect-btn" id="scan-another-btn">Scan another token</button></div>');
+    document.getElementById('scan-another-btn')?.addEventListener('click', function () {
+      const input = document.getElementById('token-input');
+      if (input) { input.value = ''; input.focus(); }
+      results.innerHTML = '';
+      if (typeof renderScannerEmpty === 'function') renderScannerEmpty();
+    });
   } catch (e) {
-    results.innerHTML = '<div class="error-card glass">Connection error. Check network / API. ' + (e && e.message ? e.message : '') + '</div>';
+    console.error(e);
+    results.innerHTML = '<div class="error-card glass">Connection error: ' + (e && e.message ? e.message : 'network') + '</div>';
   }
 }
 
@@ -1215,7 +1268,7 @@ async function loadWatchlist() {
   }
 }
 
-async function addWatch(address, symbol, name) {
+async async function addWatch(address, symbol, name) {
   if (!user) return openAuthModal('Sign in to save Watchlist');
   if (!address) return;
   try {
@@ -1230,8 +1283,10 @@ async function addWatch(address, symbol, name) {
       return;
     }
     if (!data.success) return alert(data.error || 'Error');
-    alert('Added to watchlist');
+    if (typeof showToast === 'function') showToast('Added to Watchlist');
+    else alert('Added to watchlist');
     loadHomeWatchlist();
+    if (typeof loadWatchlist === 'function') loadWatchlist();
   } catch (e) {
     alert('Failed');
   }
@@ -1449,3 +1504,83 @@ function openDemoReport() {
   document.body.classList.add('modal-open');
   modal.style.display = 'flex';
 }
+
+async function enrichTokenMarket(data, address) {
+  if (!data || !data.token) return data;
+  const tok = data.token;
+  const need = (tok.marketCap == null || tok.marketCap === '' || Number(tok.marketCap) === 0) &&
+               (tok.fdv == null || tok.fdv === '' || Number(tok.fdv) === 0);
+  if (!need && tok.liquidity) return data;
+  try {
+    const url = 'https://api.dexscreener.com/latest/dex/tokens/' + encodeURIComponent(address);
+    const res = await fetch(url);
+    const j = await res.json();
+    const pairs = Array.isArray(j.pairs) ? j.pairs : [];
+    if (!pairs.length) return data;
+    pairs.sort((a, b) => (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0));
+    const p = pairs[0];
+    tok.marketCap = tok.marketCap || p.marketCap || p.fdv || null;
+    tok.fdv = tok.fdv || p.fdv || p.marketCap || null;
+    tok.liquidity = tok.liquidity || p.liquidity?.usd || null;
+    tok.volume24h = tok.volume24h || p.volume?.h24 || null;
+    tok.price = tok.price || p.priceUsd || null;
+    tok.pairAddress = tok.pairAddress || p.pairAddress || null;
+    tok.chainId = tok.chainId || p.chainId || 'ethereum';
+    data.token = tok;
+  } catch (e) {}
+  return data;
+}
+
+function renderScannerEmpty() {
+  const results = document.getElementById('results');
+  if (!results || results.innerHTML.trim()) return;
+  results.innerHTML =
+    '<div class="scanner-empty glass">' +
+    '<p class="muted" style="margin-bottom:0.75rem;">Paste a contract address or try an example:</p>' +
+    '<div class="home-chip-row" style="justify-content:center;flex-wrap:wrap;gap:0.5rem;">' +
+    '<button type="button" class="home-chip example-token" data-addr="0x514910771AF9Ca656af840dff83E8264EcF986CA">LINK</button>' +
+    '<button type="button" class="home-chip example-token" data-addr="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48">USDC</button>' +
+    '<button type="button" class="home-chip example-token" data-addr="0xdAC17F958D2ee523a2206206994597C13D831ec7">USDT</button>' +
+    '<button type="button" class="home-chip example-token" data-addr="0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984">UNI</button>' +
+    '</div>' +
+    '<p class="muted small" style="margin-top:0.75rem;text-align:center;">Free includes Risk Score, market metrics and a first-pass AI verdict.</p>' +
+    '</div>';
+  results.querySelectorAll('.example-token').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const input = document.getElementById('token-input');
+      if (input) input.value = btn.getAttribute('data-addr');
+      startScan();
+    });
+  });
+}
+
+function showToast(msg) {
+  let t = document.getElementById('app-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'app-toast';
+    t.className = 'app-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._tm);
+  showToast._tm = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+document.getElementById('forgot-password')?.addEventListener('click', function (e) {
+  e.preventDefault();
+  alert('Password reset will be available soon. For now contact support via Telegram channel.');
+});
+document.getElementById('auth-password')?.addEventListener('input', function () {
+  const hint = document.getElementById('auth-pass-hint');
+  const mode = document.querySelector('.auth-tab.active')?.dataset?.mode;
+  if (!hint) return;
+  if (mode !== 'register') { hint.style.display = 'none'; return; }
+  hint.style.display = 'block';
+  const v = this.value || '';
+  const okLen = v.length >= 8;
+  const okMix = /[A-Za-z]/.test(v) && /[0-9]/.test(v);
+  hint.textContent = (!okLen ? 'Min 8 characters. ' : '') + (!okMix ? 'Need letter + number.' : (okLen ? 'Password looks ok.' : ''));
+  hint.style.color = okLen && okMix ? 'var(--accent, #00f0a0)' : 'var(--muted)';
+});
