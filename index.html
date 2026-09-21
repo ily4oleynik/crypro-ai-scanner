@@ -1,516 +1,1674 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="description" content="AI crypto token risk scanner — smart-contract risk, AI verdict, alerts. Check before you buy." />
-  <title>Crypto AI Scanner — Institutional Token Intelligence</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-</head>
-<body>
-  <!-- Live ticker -->
-  <div class="ticker" id="ticker">
-    <div class="ticker-inner" id="ticker-inner">
-      <span class="ticker-item">Loading markets…</span>
-    </div>
-  
-  <!-- TG channels — soft secondary bar -->
-  <div class="tg-strip" role="navigation" aria-label="Telegram channels">
-    <span class="tg-strip-ico" aria-hidden="true">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06-.01.24 0 .38z"/></svg>
-    </span>
-    <span class="tg-strip-label">Telegram</span>
-    <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener" class="tg-chip">RU-канал</a>
-    <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener" class="tg-chip">EN channel</a>
-    <span class="tg-strip-cta">алерты · дайджесты · разборы</span>
-  </div>
+/* Crypto AI Scanner — institutional UI (Bybit / TradingView inspired) */
+:root {
+  --bg: #0b0e11;
+  --bg2: #12161c;
+  --bg3: #181d27;
+  --border: #1e2530;
+  --border2: #2a3344;
+  --text: #e8eaed;
+  --muted: #8b93a7;
+  --accent: #00f0a0;
+  --accent2: #00d4ff;
+  --danger: #ff5c7a;
+  --warn: #ffb020;
+  --card: rgba(18, 22, 28, 0.92);
+  --glow: 0 0 24px rgba(0, 240, 160, 0.18);
+  --radius: 12px;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+}
+body.theme-light {
+  --bg: #f3f5f9;
+  --bg2: #ffffff;
+  --bg3: #eef1f6;
+  --border: #dde2ec;
+  --border2: #c5cddc;
+  --text: #12141c;
+  --muted: #5c6578;
+  --card: rgba(255, 255, 255, 0.96);
+  --glow: 0 0 20px rgba(0, 200, 140, 0.12);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { opacity: 0.9; }
 
-</div>
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 1.25rem 2.5rem;
+}
 
-<div class="container">
-    <header class="top-nav">
-      <div class="nav-brand">
-        <div class="logo">Crypto AI Scanner</div>
-        <button type="button" class="nav-burger" id="nav-burger" aria-label="Menu" aria-expanded="false" aria-controls="nav-drawer">☰</button>
-      </div>
-      <!-- Desktop links -->
-      <nav class="nav-links nav-links-desktop" id="nav-links">
-        <a href="#" id="nav-home" class="active">Home</a>
-        <a href="#" id="nav-scanner">Scanner</a>
-        <a href="#" id="nav-watchlist">Watchlist</a>
-        <a href="#" id="nav-history">History</a>
-        <a href="#" id="nav-alerts">Alerts</a>
-        <a href="#" id="nav-compare">Compare</a>
-        <a href="#" id="nav-account">Account</a>
-      </nav>
-      <div class="nav-actions">
-        <div class="lang-switch desktop-only">
-          <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
-          <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
-        </div>
-        <button type="button" class="theme-toggle desktop-only" id="theme-toggle" title="Theme">☾</button>
-        <span class="usage-badge desktop-only" id="scan-usage">Scans: 0/5</span>
-        <span class="plan-badge" id="user-plan" style="display:none">FREE</span>
-        <button type="button" class="plan-btn desktop-only" data-plan="premium">Upgrade</button>
-        <button type="button" class="connect-btn" id="auth-btn">Login</button>
-        <button type="button" class="upgrade-btn nav-cta desktop-only" id="nav-scan-cta">Check token</button>
-      </div>
-    </header>
+.glass {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px);
+}
 
-    <!-- Full-screen mobile drawer (TradingView-style) -->
-    <div class="nav-drawer-overlay" id="nav-drawer-overlay" hidden></div>
-    <aside class="nav-drawer" id="nav-drawer" aria-hidden="true">
-      <div class="nav-drawer-head">
-        <div class="logo">Crypto AI Scanner</div>
-        <button type="button" class="nav-drawer-close" id="nav-drawer-close" aria-label="Close">✕</button>
-      </div>
-      <nav class="nav-drawer-links">
-        <a href="#" class="drawer-link" data-page="home" id="drawer-home"><span class="d-ico">⌂</span> Home</a>
-        <a href="#" class="drawer-link" data-page="scanner" id="drawer-scanner"><span class="d-ico">◎</span> Scanner</a>
-        <a href="#" class="drawer-link" data-page="watchlist" id="drawer-watchlist"><span class="d-ico">★</span> Watchlist</a>
-        <a href="#" class="drawer-link" data-page="history" id="drawer-history"><span class="d-ico">◷</span> History</a>
-        <a href="#" class="drawer-link" data-page="alerts" id="drawer-alerts"><span class="d-ico">🔔</span> Alerts</a>
-        <a href="#" class="drawer-link" data-page="compare" id="drawer-compare"><span class="d-ico">⇄</span> Compare</a>
-        <a href="#" class="drawer-link" data-page="account" id="drawer-account"><span class="d-ico">👤</span> Account</a>
-      </nav>
-      <div class="nav-drawer-section">
-        <div class="nav-drawer-label">Language</div>
-        <div class="lang-switch drawer-lang">
-          <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
-          <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
-        </div>
-      </div>
-      <div class="nav-drawer-section">
-        <button type="button" class="connect-btn full" id="drawer-theme">Toggle theme</button>
-        <button type="button" class="upgrade-btn full plan-btn" data-plan="premium" id="drawer-upgrade">Upgrade</button>
-        <button type="button" class="connect-btn full" id="drawer-auth">Login</button>
-      </div>
-      <div class="nav-drawer-foot">
-        <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">TG RU</a>
-        <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">TG EN</a>
-        <a href="/privacy.html">Privacy</a>
-      </div>
-    </aside>
+/* ===== TICKER — seamless full-width marquee ===== */
+.ticker {
+  background: #07090c;
+  border-bottom: 1px solid var(--border);
+  height: 34px;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  font-size: 0.8rem;
+  line-height: 32px;
+}
+body.theme-light .ticker { background: #e8ebf2; }
+.ticker-inner {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2.75rem;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  animation: ticker-marquee 90s linear infinite;
+}
+.ticker-inner:hover { animation-play-state: paused; }
+.ticker-item {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ticker-item strong { color: var(--text); font-weight: 600; }
+.ticker-up { color: var(--accent); }
+.ticker-down { color: var(--danger); }
+/* -50% only works when content is duplicated AND wider than viewport */
+@keyframes ticker-marquee {
+  from { transform: translate3d(0, 0, 0); }
 
-    <!-- ===== HOME ===== -->
-    <section id="page-home" class="page" style="display:block">
-      <div class="hero">
-        <div class="hero-badge">Institutional AI · On-chain risk</div>
-        <h1>Institutional-grade Crypto Intelligence</h1>
-        <p class="hero-sub">Риск смарт-контракта + AI-вердикт + алерты — чтобы не потерять деньги на очередном rug.</p>
-        <p class="hero-proof">Сделано для тех, кто уже обжигался на скамах</p>
+/* ===== TG STRIP — soft, secondary (does not fight ticker) ===== */
+.tg-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.4rem 1rem;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+.tg-strip:hover { opacity: 1; }
+.tg-strip-ico {
+  display: inline-flex;
+  color: #5b9fd4;
+  opacity: 0.9;
+  line-height: 0;
+}
+.tg-strip-label {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+.tg-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(91, 159, 212, 0.08);
+  color: #8eb8e0 !important;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.tg-chip:hover {
+  background: rgba(91, 159, 212, 0.18);
+  border-color: rgba(91, 159, 212, 0.35);
+  color: #c5dff5 !important;
+}
+.tg-strip-hint { display: none; }
+.tg-channel-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+body.theme-light .tg-chip {
+  background: rgba(37, 99, 150, 0.08);
+  color: #3a6d9b !important;
+}
+body.theme-light .tg-chip:hover {
+  background: rgba(37, 99, 150, 0.14);
+  color: #1e4a6e !important;
+}
 
-        <!-- Inline scan = conversion focus -->
-        <div class="hero-scan glass">
-          <div class="hero-scan-row">
-            <input type="text" id="home-token-input" placeholder="0x… contract address" autocomplete="off" />
-            <button type="button" class="upgrade-btn" id="home-scan-btn">Сканировать бесплатно</button>
-          </div>
-          <div class="hero-scan-meta">
-            <button type="button" class="text-link" id="go-scanner-btn">Пример: LINK</button>
-            <span class="dot">·</span>
-            <button type="button" class="text-link" id="example-report-btn">Посмотреть пример полного анализа</button>
-            <span class="dot">·</span>
-            <button type="button" class="text-link" id="try-link-btn">Открыть сканер</button>
-          </div>
-        </div>
+  to { transform: translate3d(-50%, 0, 0); }
+}
+  to { transform: translate3d(-50%, 0, 0); }
+}
 
-        <div class="hero-preview glass" id="hero-preview">
-          <div class="hp-label">Preview · sample</div>
-          <div class="hp-row">
-            <div>
-              <div class="hp-sym">LINK</div>
-              <div class="hp-name">Chainlink</div>
-            </div>
-            <div class="risk-pill risk-MEDIUM">Risk 42 · MEDIUM</div>
-          </div>
-          <div class="hp-metrics">
-            <div><span>Liquidity</span><strong>Healthy</strong></div>
-            <div><span>AI</span><strong class="ok">Cautious OK</strong></div>
-            <div><span>Scam prob.</span><strong>~12%</strong></div>
-          </div>
-        </div>
-      </div>
+/* ===== TG STRIP hidden ===== */
 
-      <div class="how-grid">
-        <div class="how-card glass">
-          <div class="how-num">01</div>
-          <h3>Вставь адрес</h3>
-          <p>Контракт токена — за секунды, без регистрации для базового риска.</p>
-        </div>
-        <div class="how-card glass">
-          <div class="how-num">02</div>
-          <h3>Риск + AI</h3>
-          <p>Скор, liquidity, pressure и вердикт модели — до покупки.</p>
-        </div>
-        <div class="how-card glass">
-          <div class="how-num">03</div>
-          <h3>Watchlist + TG</h3>
-          <p>Избранное и алерты в Telegram, когда цена или риск меняются.</p>
-        </div>
-      </div>
+/* old styles kept inactive: */
+/*
+.tg-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.35rem 1rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  min-height: 28px;
+}
+.tg-strip-label {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+.tg-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted) !important;
+  font-size: 0.72rem;
+  font-weight: 600;
+  transition: 0.15s;
+  text-decoration: none;
+}
+.tg-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent) !important;
+}
+.tg-strip-hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+.tg-channel-links {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
 
-      <div class="sell-strip glass">
-        <div class="sell-copy">
-          <h3>После 1–2 сканов обычно не хватает глубины</h3>
-          <p class="muted">Free — быстрый риск. Premium — полный разбор, алерты, история и сравнение.</p>
-        </div>
-        <button type="button" class="upgrade-btn plan-btn" data-plan="premium">Смотреть тарифы</button>
-      </div>
+/* ===== NAV ===== */
+.top-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+  position: relative;
+}
+.nav-brand { display: flex; align-items: center; gap: 0.75rem; }
+.logo {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(100deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+}
+.nav-links {
+  display: flex;
+  gap: 0.15rem 1.1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.nav-links a {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 0.25rem 0;
+  border-bottom: 2px solid transparent;
+}
+.nav-links a:hover,
+.nav-links a.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.nav-burger {
+  display: none;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+.lang-switch {
+  display: flex;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.lang-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lang-btn.active {
+  background: rgba(0, 240, 160, 0.14);
+  color: var(--accent);
+}
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.usage-badge {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.plan-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(0, 240, 160, 0.14);
+  color: var(--accent);
+}
+.nav-cta { display: none; }
+@media (min-width: 1100px) {
+  .nav-cta { display: inline-flex; }
+}
 
-      <div class="section-head">
-        <h2>Trending markets</h2>
-        <button type="button" class="link-btn" id="refresh-trending">Refresh</button>
-      </div>
-      <div class="trending-grid" id="trending-grid"></div>
+/* ===== BUTTONS / INPUTS ===== */
+input, select, textarea {
+  width: 100%;
+  background: var(--bg3) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border2) !important;
+  border-radius: 10px;
+  padding: 0.72rem 1rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+input::placeholder { color: var(--muted) !important; }
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(0, 240, 160, 0.12);
+}
+.upgrade-btn, .connect-btn, .plan-btn, .btn-sm, .link-btn, .text-link {
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.upgrade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.55rem 1.25rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #04140f;
+  background: linear-gradient(105deg, #00f0a0, #00d4ff);
+  box-shadow: var(--glow);
+}
+.upgrade-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.upgrade-btn.full { width: 100%; }
+.connect-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.45rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.connect-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plan-btn {
+  min-height: 38px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.plan-btn:hover, .plan-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-sm {
+  min-height: 32px;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+.btn-sm.danger:hover { border-color: var(--danger); color: var(--danger); }
+.link-btn, .link-more, .text-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+}
+.text-link { font-size: 0.85rem; color: var(--muted); }
+.text-link:hover { color: var(--accent); }
 
-      <div class="home-grid">
-        <div class="glass panel-block">
-          <div class="section-head">
-            <h3>Watchlist</h3>
-            <a href="#" id="home-watchlist-all" class="link-more">All</a>
-          </div>
-          <div id="home-watchlist"></div>
-        </div>
-        <div class="glass panel-block">
-          <div class="section-head">
-            <h3>History</h3>
-            <a href="#" id="home-history-all" class="link-more">All</a>
-          </div>
-          <div id="home-history"></div>
-        </div>
-      </div>
+/* ===== HERO ===== */
+.hero {
+  text-align: center;
+  padding: 0.5rem 0 1.5rem;
+}
+.hero-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(0, 240, 160, 0.1);
+  border: 1px solid rgba(0, 240, 160, 0.25);
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+.hero h1 {
+  font-size: clamp(1.55rem, 4.2vw, 2.35rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin-bottom: 0.65rem;
+  background: linear-gradient(105deg, #ffffff 30%, #9aa3b8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+body.theme-light .hero h1 {
+  background: linear-gradient(105deg, #12141c, #5a6578);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.hero-sub {
+  max-width: 560px;
+  margin: 0 auto 0.5rem;
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+.hero-proof {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+.hero-scan {
+  max-width: 640px;
+  margin: 0 auto 1.25rem;
+  padding: 1rem;
+  text-align: left;
+}
+.hero-scan-row {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.hero-scan-row input { flex: 1; min-width: 200px; }
+.hero-scan-row .upgrade-btn { white-space: nowrap; }
+.hero-scan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  justify-content: center;
+}
+.hero-scan-meta .dot { color: var(--border2); }
 
-      <div class="section-head" style="margin-top:1.75rem">
-        <h2>News</h2>
-        <div id="news-filters" class="tf-row">
-          <button type="button" class="tf-btn active" data-source="all">All</button>
-          <button type="button" class="tf-btn" data-source="twitter">X</button>
-          <button type="button" class="tf-btn" data-source="crypto">Crypto</button>
-        </div>
-      </div>
-      <div class="news-grid" id="news-grid"></div>
-    
+.hero-preview {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 1rem 1.15rem;
+  text-align: left;
+}
+.hp-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.55rem;
+}
+.hp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.hp-sym { font-weight: 800; font-size: 1.1rem; }
+.hp-name { color: var(--muted); font-size: 0.82rem; }
+.hp-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.hp-metrics span {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.hp-metrics strong { font-size: 0.85rem; }
+.hp-metrics .ok { color: var(--accent); }
 
-      <!-- Community / Telegram channels -->
-  <section class="community-block" id="community-block">
-    <div class="community-inner glass">
-      <div class="community-head">
-        <h2>Telegram</h2>
-        <p class="muted">Алерты, разборы токенов и дайджесты — без спама</p>
-      </div>
-      <div class="community-grid">
-        <a class="community-card" href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">
-          <div class="community-flag">RU</div>
-          <h3>Crypto AI Scanner</h3>
-          <p>Риск-скоры, разборы контрактов, дайджест рынка</p>
-          <span class="community-cta">Открыть канал →</span>
-        </a>
-        <a class="community-card" href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">
-          <div class="community-flag">EN</div>
-          <h3>Crypto AI Scanner EN</h3>
-          <p>Token risk alerts, contract checks, market notes</p>
-          <span class="community-cta">Open channel →</span>
-        </a>
-      </div>
-    </div>
-  </section>
+.risk-pill {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.65rem;
+  border-radius: 8px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+}
+.risk-LOW, .risk-low { color: var(--accent); border-color: rgba(0, 240, 160, 0.35); }
+.risk-MEDIUM, .risk-medium { color: var(--warn); border-color: rgba(255, 176, 32, 0.35); }
+.risk-HIGH, .risk-high { color: var(--danger); border-color: rgba(255, 92, 122, 0.35); }
 
-    </section>
+.how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+  margin: 1.75rem 0;
+}
+.how-card {
+  padding: 1.15rem 1.2rem;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.how-card:hover {
+  border-color: rgba(0, 240, 160, 0.35);
+  transform: translateY(-2px);
+}
+.how-num {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  margin-bottom: 0.45rem;
+}
+.how-card h3 { font-size: 1rem; margin-bottom: 0.35rem; }
+.how-card p { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
 
-    <!-- ===== SCANNER ===== -->
-    <section id="page-scanner" class="page" style="display:none">
-      <div class="scanner-hero">
-        <h1>Token Scanner</h1>
-        <p>Вставь адрес контракта — AI оценит риск до покупки</p>
-      </div>
-      <div class="search-bar glass">
-        <input type="text" id="token-input" placeholder="0x… contract address" autocomplete="off" />
-        <button type="button" id="scan-button" class="upgrade-btn">Проверить токен бесплатно</button>
-      </div>
-      <div id="results"></div>
-      <div id="ai-chat-section" class="glass" style="display:none;margin-top:1rem">
-        <div class="section-head">
-          <h3>AI Chat (Pro)</h3>
-          <button type="button" class="link-btn" id="toggle-chat">Open chat</button>
-        </div>
-        <div id="chat-window" style="display:none;flex-direction:column;gap:0.5rem">
-          <div id="chat-messages" class="chat-messages"></div>
-          <div class="search-bar">
-            <input type="text" id="chat-input" placeholder="Ask about this token…" />
-            <button type="button" id="chat-send" class="connect-btn">Send</button>
-          </div>
-        </div>
-      </div>
-    </section>
+.sell-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem;
+  margin: 1.25rem 0 1.75rem;
+  flex-wrap: wrap;
+}
+.sell-copy h3 { font-size: 1.05rem; margin-bottom: 0.35rem; }
+.sell-copy .muted { margin: 0; }
 
-    <section id="page-watchlist" class="page" style="display:none">
-      <h2 class="page-title">Watchlist</h2>
-      <div id="watchlist-content" class="glass panel-block"></div>
-    </section>
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.9rem;
+  flex-wrap: wrap;
+}
+.section-head h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.section-head h3 { font-size: 1rem; font-weight: 700; }
+.page-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
 
-    <section id="page-history" class="page" style="display:none">
-      <h2 class="page-title">History</h2>
-      <div id="history-content" class="glass panel-block"></div>
-    </section>
+.trending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+.trend-card {
+  padding: 0.95rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  cursor: pointer;
+  transition: 0.15s;
+}
+.trend-card:hover {
+  border-color: rgba(0, 240, 160, 0.4);
+  transform: translateY(-2px);
+  box-shadow: var(--glow);
+}
+.trend-sym { font-weight: 700; margin-bottom: 0.2rem; }
+.trend-price { color: var(--accent); font-size: 0.92rem; font-weight: 600; }
+.trend-meta { color: var(--muted); font-size: 0.72rem; margin-top: 0.3rem; }
 
-    <section id="page-alerts" class="page" style="display:none">
-      <h2 class="page-title">Alerts</h2>
-      <div class="glass panel-block">
-        <p id="tg-status">Telegram: not connected</p>
-        <p id="tg-channel-cta" class="muted small"></p>
-        <div class="tg-channel-links">
-          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener" class="tg-chip">RU channel</a>
-          <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener" class="tg-chip">EN channel</a>
-        </div>
-        <button type="button" class="connect-btn" id="tg-connect-btn" style="margin-top:0.75rem">Connect Telegram</button>
-        <div id="tg-link-area" style="display:none;margin-top:0.75rem">
-          <p>Code: <strong id="tg-code"></strong></p>
-          <a id="tg-deep-link" href="#" target="_blank" rel="noopener">Open bot</a>
-        </div>
-      </div>
-      <div class="glass panel-block" style="margin-top:1rem">
-        <h3>Create alert</h3>
-        <div class="form-stack">
-          <input type="text" id="alert-address" placeholder="0x address" />
-          <input type="text" id="alert-symbol" placeholder="Symbol" />
-          <select id="alert-type">
-            <option value="price_above">Price above</option>
-            <option value="price_below">Price below</option>
-          </select>
-          <input type="number" id="alert-value" placeholder="Value" step="any" />
-          <button type="button" class="upgrade-btn" id="alert-create">Create</button>
-        </div>
-      </div>
-      <div id="alerts-content" class="glass panel-block" style="margin-top:1rem"></div>
-    </section>
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+  margin-top: 0.5rem;
+}
+.panel-block { padding: 1.15rem; }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.muted.small, .small { font-size: 0.82rem; color: var(--muted); }
 
-    <section id="page-compare" class="page" style="display:none">
-      <h2 class="page-title">Compare</h2>
-      <div class="glass panel-block">
-        <div class="form-stack">
-          <input type="text" id="cmp-1" placeholder="Address 1" />
-          <input type="text" id="cmp-2" placeholder="Address 2" />
-          <input type="text" id="cmp-3" placeholder="Address 3 (optional)" />
-          <button type="button" class="upgrade-btn" id="cmp-btn">Compare</button>
-        </div>
-      </div>
-      <div id="compare-content" style="margin-top:1rem"></div>
-    </section>
+.empty-state-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--muted);
+}
+.skeleton {
+  height: 88px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--bg2) 25%, var(--border) 50%, var(--bg2) 75%);
+  background-size: 200% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+}
+@keyframes sk {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
-    <section id="page-account" class="page" style="display:none">
-      <h2 class="page-title">Account</h2>
-      <div class="account-grid">
-        <div class="glass panel-block">
-          <h3>Profile</h3>
-          <div class="account-row"><span>Email</span><strong id="acc-email">—</strong></div>
-          <div class="account-row"><span>Plan</span><strong id="acc-plan">FREE</strong></div>
-          <div class="account-row"><span>Scans today</span><strong id="acc-scans">—</strong></div>
-          <div class="btn-row">
-            <button type="button" class="upgrade-btn plan-btn" data-plan="premium">Upgrade</button>
-            <button type="button" class="connect-btn" id="acc-logout">Logout</button>
-          </div>
-        </div>
-        <div class="glass panel-block">
-          <h3>Wallet</h3>
-          <button type="button" class="connect-btn" id="connect-wallet">Connect MetaMask</button>
-          <div id="portfolio-section" style="display:none;margin-top:1rem">
-            <div id="portfolio-content"></div>
-          </div>
-        </div>
-        <div class="glass panel-block">
-          <h3>Exchanges</h3>
-          <div id="connected-exchanges"><p class="muted">Nothing connected</p></div>
-          <button type="button" class="connect-btn" id="connect-bybit-btn" style="margin-top:0.75rem">+ Connect Bybit</button>
-        </div>
-      </div>
-    </section>
-  </div>
-<!-- Footer: TG + Privacy + Terms -->
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-brand">
-        <div class="logo">Crypto AI Scanner</div>
-        <p class="muted small">AI token risk · alerts · watchlist. Not financial advice. DYOR.</p>
-        <div class="footer-social">
-          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener" class="soc-btn" title="Telegram RU">TG RU</a>
-          <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener" class="soc-btn" title="Telegram EN">TG EN</a>
-        </div>
-      </div>
-      <div class="footer-cols">
-        <div>
-          <h4>Product</h4>
-          <a href="#" id="footer-scanner">Scanner</a>
-          <a href="#" id="footer-pricing" data-plan="premium">Pricing</a>
-          <a href="#" id="footer-alerts">Alerts</a>
-        </div>
-        <div>
-          <h4>Telegram</h4>
-          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">Канал RU</a>
-          <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">Channel EN</a>
-        </div>
-        <div>
-          <h4>Legal</h4>
-          <a href="/privacy.html">Privacy Policy</a>
-          <a href="/terms.html">Terms of Use</a>
-        </div>
-      </div>
-    </div>
-    <div class="footer-bottom">
-      <span>© 2026 Crypto AI Scanner</span>
-      <span class="muted small">Payments coming soon · Demo plans after login</span>
-    </div>
-  </footer>
+.tf-row, .news-filters, .timeframe-switcher, .tabs {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.tf-btn, .tab {
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tf-btn.active, .tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 240, 160, 0.08);
+}
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+.news-card {
+  display: block;
+  padding: 1rem;
+  color: inherit;
+  transition: 0.15s;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg2);
+}
+.news-card:hover {
+  border-color: rgba(0, 240, 160, 0.3);
+  transform: translateY(-2px);
+}
+.news-title { font-size: 0.9rem; margin-top: 0.3rem; font-weight: 500; }
+.news-meta { color: var(--muted); font-size: 0.75rem; }
 
-  <!-- Auth modal -->
-  <div class="modal-overlay" id="auth-modal" style="display:none">
-    <div class="modal-content glass">
-      <button type="button" class="modal-close" id="modal-close">&times;</button>
-      <div class="auth-tabs">
-        <button type="button" class="auth-tab active" data-mode="login">Login</button>
-        <button type="button" class="auth-tab" data-mode="register">Register</button>
-      </div>
-      <h2 id="auth-title">Login</h2>
-      <form id="auth-form" autocomplete="on">
-        <input type="email" id="auth-email" data-i18n-placeholder="auth.email" placeholder="Email" autocomplete="email" required />
-        <input type="password" id="auth-password" data-i18n-placeholder="auth.password" placeholder="Password" autocomplete="current-password" required />
-        <input type="password" id="auth-password2" data-i18n-placeholder="auth.password2" placeholder="Confirm password" style="display:none" autocomplete="new-password" />
-        <label class="auth-terms" id="auth-terms-wrap" style="display:none">
-          <input type="checkbox" id="auth-terms" />
-          <span data-i18n="auth.terms">I agree to the <a href="/terms.html" target="_blank">Terms</a> and <a href="/privacy.html" target="_blank">Privacy Policy</a></span>
-        </label>
-        <p class="auth-error" id="auth-error" style="display:none"></p>
-        <button type="submit" class="upgrade-btn full" id="auth-submit">Login</button>
-      </form>
-      <p class="muted small" id="auth-hint" style="display:none"></p>
-    </div>
-  </div>
+.scanner-hero { text-align: center; margin-bottom: 1.25rem; }
+.scanner-hero h1 { font-size: 1.65rem; font-weight: 800; margin-bottom: 0.35rem; }
+.scanner-hero p { color: var(--muted); }
+.search-bar {
+  display: flex;
+  gap: 0.55rem;
+  max-width: 680px;
+  margin: 0 auto 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.75rem;
+}
+.search-bar input { flex: 1; min-width: 180px; }
+.form-stack { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
+.list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.list-row:last-child { border-bottom: none; }
+.list-info strong { display: block; }
+.list-info small { color: var(--muted); font-size: 0.75rem; word-break: break-all; }
+.list-actions { display: flex; gap: 0.35rem; }
 
-  <!-- Pricing modal -->
-  <div class="modal-overlay" id="pricing-modal" style="display:none">
-    <div class="modal-content plans-list plans-horizontal">
-      <button type="button" class="modal-close" id="pricing-close">&times;</button>
-      <h2 class="plans-title">Choose plan</h2>
-      <p class="muted small plans-sub">Payments coming soon · demo switch after login</p>
+.metrics-grid, .advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+.metric-card { padding: 0.9rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg2); }
+.metric-label { color: var(--muted); font-size: 0.75rem; }
+.metric-value { font-size: 1.05rem; font-weight: 700; margin-top: 0.2rem; }
+.token-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.token-left { display: flex; align-items: center; gap: 0.85rem; }
+.token-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  background: rgba(0, 240, 160, 0.12); color: var(--accent);
+  display: flex; align-items: center; justify-content: center; font-weight: 800;
+}
+.chart-wrapper { padding: 0.85rem; margin-bottom: 1rem; }
+.candle-chart { height: 360px; width: 100%; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+.ai-card { padding: 1.1rem; }
+.verdict { color: var(--accent); font-weight: 700; }
 
-      
-      <div class="pricing-grid">
-<div class="price-card" data-plan="free">
-        <h3>Free</h3>
-        <p class="plan-price">$0</p>
-        <p class="muted">5 scans / day · basic risk</p>
-        <button type="button" class="connect-btn full pricing-pick" data-plan="free">Stay on Free</button>
-      </div>
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.9rem;
+}
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.account-row strong { color: var(--text); }
+.btn-row { display: flex; gap: 0.5rem; margin-top: 0.9rem; flex-wrap: wrap; }
 
-      <div class="price-card recommended" data-plan="premium">
-        <span class="badge">Recommended</span>
-        <h3>Premium</h3>
-        <p class="plan-price">$29<span>/mo</span></p>
-        <p class="plan-pitch">One caught scam usually pays for a month</p>
-        <ul>
-          <li>50 scans / day</li>
-          <li>Full Risk + Security</li>
-          <li>Full AI report</li>
-          <li>Telegram alerts</li>
-          <li>Compare up to 3</li>
-          <li>Full history</li>
-          <li>Watchlist up to 30</li>
-          <li>Candlestick chart</li>
-        </ul>
-        <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Open Premium</button>
-      </div>
+/* ===== MODALS ===== */
+.modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 4000 !important;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.75) !important;
+}
+.modal-overlay[style*="flex"] { display: flex !important; }
+.modal-content {
+  width: 100%;
+  max-width: 420px;
+  margin: 1.5rem auto 2.5rem;
+  padding: 1.4rem;
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+.modal-close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  z-index: 2;
+}
+.modal-close:hover { color: var(--text); }
+.auth-tabs { display: flex; gap: 0.45rem; margin-bottom: 1rem; }
+.auth-tab {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 240, 160, 0.08);
+}
+.modal-content form,
+.modal-content .form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+.auth-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: left;
+  line-height: 1.35;
+}
+.auth-terms input {
+  width: auto !important;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.auth-error { color: var(--danger); font-size: 0.85rem; text-align: left; }
 
-      <div class="price-card" data-plan="pro">
-        <h3>Pro</h3>
-        <p class="plan-price">$79<span>/mo</span></p>
-        <p class="plan-pitch">For daily token research</p>
-        <ul>
-          <li>Unlimited scans</li>
-          <li>Everything in Premium</li>
-          <li>AI chat on token</li>
-          <li>Priority alerts</li>
-          <li>Unlimited watchlist</li>
-          <li>Bybit connection</li>
-        </ul>
-        <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Open Pro</button>
-      </div>
-          </div>
-</div>
-  </div>
+.plans-list { max-width: 440px; }
+.plans-title { font-size: 1.25rem; margin-bottom: 0.25rem; }
+.plans-sub { margin-bottom: 1rem; }
+.price-card {
+  position: relative;
+  padding: 1.15rem;
+  margin-bottom: 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.price-card.recommended {
+  border-color: rgba(0, 240, 160, 0.45);
+  box-shadow: var(--glow);
+}
+.price-card h3 { font-weight: 800; margin-bottom: 0.2rem; }
+.plan-price {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--accent);
+  margin: 0.25rem 0;
+}
+.plan-price span { font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+.plan-pitch { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+.price-card ul {
+  list-style: none;
+  margin: 0.5rem 0 0.9rem;
+  padding: 0;
+}
+.price-card li {
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.badge {
+  position: absolute;
+  top: -10px;
+  right: 12px;
+  background: var(--accent);
+  color: #04140f;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+}
 
-  <div class="modal-overlay" id="bybit-modal" style="display:none">
-    <div class="modal-content glass">
-      <button type="button" class="modal-close" id="bybit-modal-close">&times;</button>
-      <h2>Connect Bybit</h2>
-      <p class="muted small">API key with read-only permissions. Pro plan required.</p>
-      <form id="bybit-form" class="form-stack">
-        <input type="text" id="bybit-api-key" placeholder="API Key" required />
-        <input type="password" id="bybit-api-secret" placeholder="API Secret" required />
-        <button type="submit" class="upgrade-btn full">Connect</button>
-      </form>
-    </div>
-  </div>
+body.modal-open {
+  overflow: hidden !important;
+}
 
-  <div class="modal-overlay" id="onboarding-modal" style="display:none">
-    <div class="modal-content glass">
-      <div class="ob-step active" data-step="1">
-        <h2>Welcome</h2>
-        <p>Check token risk in seconds before you buy.</p>
-      </div>
-      <div class="ob-step" data-step="2">
-        <h2>Watchlist & Alerts</h2>
-        <p>Save tokens and get Telegram alerts.</p>
-      </div>
-      <div class="ob-step" data-step="3">
-        <h2>Ready</h2>
-        <p>Start with a free scan. Upgrade when you need depth.</p>
-      </div>
-      <div class="ob-actions">
-        <button type="button" class="connect-btn" id="ob-skip">Skip</button>
-        <button type="button" class="upgrade-btn" id="ob-next">Next</button>
-      </div>
-    </div>
-  </div>
+.ob-step { display: none; text-align: center; }
+.ob-step.active { display: block; }
+.ob-actions { display: flex; gap: 0.55rem; margin-top: 1.1rem; }
+.ob-actions button { flex: 1; }
 
-  <script>window.API_BASE = window.location.origin;</script>
-  <script src="i18n.js"></script>
-  <script src="app.js"></script>
-  <script>
-    // Hero inline scan → scanner page
-    (function () {
-      function goScan(addr) {
-        if (typeof showPage === 'function') showPage('scanner');
-        var input = document.getElementById('token-input');
-        if (input && addr) input.value = addr;
-        if (addr && typeof startScan === 'function') startScan();
-      }
-      document.getElementById('home-scan-btn')?.addEventListener('click', function () {
-        var v = document.getElementById('home-token-input')?.value.trim() || '';
-        goScan(v);
-      });
-      document.getElementById('home-token-input')?.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-          var v = e.target.value.trim();
-          goScan(v);
-        }
-      });
-      document.getElementById('nav-scan-cta')?.addEventListener('click', function () {
-        if (typeof showPage === 'function') showPage('scanner');
-        document.getElementById('token-input')?.focus();
-      });
-      document.getElementById('footer-scanner')?.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (typeof showPage === 'function') showPage('scanner');
-      });
-      document.getElementById('footer-alerts')?.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (typeof showPage === 'function') showPage('alerts');
-      });
-    })();
-  </script>
-</body>
-</html>
+.chat-messages { max-height: 260px; overflow-y: auto; margin-bottom: 0.5rem; }
+.chat-msg { margin-bottom: 0.5rem; }
+.chat-msg.user { text-align: right; }
+.msg-bubble {
+  display: inline-block;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  background: var(--bg3);
+  max-width: 88%;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.chat-msg.user .msg-bubble { background: rgba(0, 240, 160, 0.12); }
+
+.limit-upsell {
+  text-align: center;
+  padding: 1.75rem 1.25rem;
+}
+.limit-upsell h3 { margin-bottom: 0.5rem; }
+.limit-upsell p {
+  color: var(--muted);
+  max-width: 420px;
+  margin: 0 auto 1rem;
+}
+
+/* ===== FOOTER ===== */
+.site-footer {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--border);
+  background: #07090c;
+  padding: 2rem 1.25rem 1.5rem;
+}
+body.theme-light .site-footer { background: #e8ebf2; }
+.footer-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.footer-brand { max-width: 280px; }
+.footer-brand .logo { margin-bottom: 0.5rem; }
+.footer-cols {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+}
+.footer-cols h4 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+}
+.footer-cols a {
+  display: block;
+  color: var(--text);
+  font-size: 0.88rem;
+  margin-bottom: 0.4rem;
+  opacity: 0.85;
+}
+.footer-cols a:hover { color: var(--accent); opacity: 1; }
+.footer-bottom {
+  max-width: 1120px;
+  margin: 1.5rem auto 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 900px) {
+  .top-nav {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.5rem;
+  }
+  .nav-burger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    z-index: 260;
+    position: relative;
+  }
+  .nav-links {
+    display: none !important;
+    position: absolute;
+    top: calc(100% - 2px);
+    left: 0;
+    right: 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    flex-direction: column;
+    padding: 0.75rem 1rem;
+    z-index: 250;
+    gap: 0;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  }
+  .nav-links.open {
+    display: flex !important;
+  }
+  .nav-links a {
+    border-bottom: 1px solid var(--border);
+    padding: 0.85rem 0.25rem;
+    font-size: 1rem;
+    color: var(--text);
+  }
+  .nav-links a:last-child { border-bottom: none; }
+  .nav-links a.active {
+    color: var(--accent);
+    border-bottom-color: var(--border);
+  }
+  .nav-actions {
+    width: 100%;
+    margin-left: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  /* declutter mobile header */
+  .nav-cta,
+  .nav-actions .plan-btn,
+  .usage-badge {
+    display: none !important;
+  }
+  .nav-actions .connect-btn,
+  .nav-actions #auth-btn {
+    flex: 1;
+    min-width: 0;
+  }
+  .how-grid { grid-template-columns: 1fr; }
+  .home-grid { grid-template-columns: 1fr; }
+  .hero-scan-row { flex-direction: column; }
+  .hero-scan-row .upgrade-btn { width: 100%; }
+  .search-bar { flex-direction: column; }
+  .search-bar .upgrade-btn,
+  .search-bar .connect-btn { width: 100%; }
+  .sell-strip { flex-direction: column; align-items: stretch; text-align: center; }
+  .sell-strip .upgrade-btn { width: 100%; }
+}
+
+@media (max-width: 600px) {
+  .container { padding: 0 0.9rem 2rem; }
+  .trending-grid { grid-template-columns: repeat(2, 1fr); }
+  .hp-metrics { grid-template-columns: 1fr; }
+  .candle-chart { height: 280px; }
+  .modal-content { margin: 0.75rem auto 2rem; }
+  .footer-cols { gap: 1.5rem; }
+}
+
+
+/* ===== FINAL: ticker speed + visible TG bar ===== */
+.ticker-inner {
+  animation: ticker-marquee 120s linear infinite !important;
+}
+.tg-strip {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, rgba(37, 99, 150, 0.12), rgba(0, 240, 160, 0.06), rgba(37, 99, 150, 0.12));
+  border-bottom: 1px solid rgba(91, 159, 212, 0.2);
+  font-size: 0.8rem;
+  opacity: 1 !important;
+}
+.tg-strip-ico {
+  display: inline-flex;
+  color: #5b9fd4;
+  line-height: 0;
+}
+.tg-strip-label {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.tg-chip {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  padding: 0.28rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(91, 159, 212, 0.35);
+  background: rgba(91, 159, 212, 0.15);
+  color: #b8d9f5 !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: 0.15s;
+}
+.tg-chip:hover {
+  background: rgba(91, 159, 212, 0.28);
+  border-color: #5b9fd4;
+  color: #fff !important;
+}
+.tg-strip-cta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-left: 0.25rem;
+}
+
+
+/* ===== PRICING HORIZONTAL (ChatGPT-style) ===== */
+.modal-content.plans-list,
+.modal-content.plans-horizontal {
+  max-width: 920px !important;
+  width: min(920px, 96vw) !important;
+  margin: 1.25rem auto 2.5rem !important;
+}
+.plans-title {
+  text-align: center;
+  font-size: 1.35rem;
+  margin-bottom: 0.25rem;
+}
+.plans-sub {
+  text-align: center;
+  margin-bottom: 1.25rem !important;
+}
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+  align-items: stretch;
+}
+.pricing-grid .price-card,
+.plans-horizontal .price-card {
+  margin-bottom: 0 !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1.25rem 1.15rem;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.pricing-grid .price-card:hover,
+.plans-horizontal .price-card:hover {
+  transform: translateY(-2px);
+}
+.pricing-grid .price-card ul {
+  flex: 1;
+  margin-bottom: 1rem;
+}
+.pricing-grid .price-card .upgrade-btn,
+.pricing-grid .price-card .connect-btn,
+.pricing-grid .price-card .pricing-pick {
+  width: 100%;
+  margin-top: auto;
+}
+.price-card.recommended {
+  border-color: rgba(0, 240, 160, 0.5) !important;
+  box-shadow: 0 0 28px rgba(0, 240, 160, 0.12);
+  background: linear-gradient(180deg, rgba(0, 240, 160, 0.06), var(--bg3));
+}
+.price-card .badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  .modal-content.plans-list,
+  .modal-content.plans-horizontal {
+    max-width: 440px !important;
+  }
+}
+
+
+/* ===== FULL-SCREEN DRAWER (TradingView-style) ===== */
+.nav-drawer-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 3000;
+  backdrop-filter: blur(2px);
+}
+.nav-drawer-overlay.open {
+  display: block;
+}
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(320px, 88vw);
+  height: 100%;
+  height: 100dvh;
+  background: var(--bg2, #12161c);
+  border-left: 1px solid var(--border);
+  z-index: 3010;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.nav-drawer.open {
+  transform: translateX(0);
+}
+.nav-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.nav-drawer-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.nav-drawer-links {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
+}
+.drawer-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1.25rem;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 1.05rem;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s, color 0.15s;
+}
+.drawer-link:hover,
+.drawer-link:active {
+  background: rgba(0, 240, 160, 0.06);
+  color: var(--accent, #00f0a0);
+}
+.d-ico {
+  width: 1.4rem;
+  text-align: center;
+  opacity: 0.75;
+  font-size: 0.95rem;
+}
+.nav-drawer-section {
+  padding: 0.85rem 1.1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.nav-drawer-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+.drawer-lang {
+  display: flex;
+  gap: 0.4rem;
+}
+.nav-drawer-foot {
+  margin-top: auto;
+  padding: 1rem 1.25rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.nav-drawer-foot a {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+.nav-drawer-foot a:hover { color: var(--accent); }
+body.drawer-open {
+  overflow: hidden !important;
+}
+
+/* Desktop: hide drawer chrome; mobile: hide desktop-only */
+.nav-drawer,
+.nav-drawer-overlay {
+  /* visible only when JS opens on any size — but we primarily use on mobile */
+}
+@media (min-width: 901px) {
+  .nav-burger { display: none !important; }
+  .nav-drawer,
+  .nav-drawer-overlay { display: none !important; }
+}
+@media (max-width: 900px) {
+  .nav-links-desktop { display: none !important; }
+  .desktop-only { display: none !important; }
+  .nav-burger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .top-nav {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+    gap: 0.5rem;
+  }
+  .nav-actions {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+  .nav-actions .connect-btn {
+    padding: 0.45rem 0.9rem;
+  }
+}
+
+/* ===== PRICING MOBILE: vertical stack ===== */
+@media (max-width: 800px) {
+  .pricing-grid {
+    grid-template-columns: 1fr !important;
+    max-width: 400px;
+    margin: 0 auto;
+    gap: 1rem;
+  }
+  .modal-content.plans-list,
+  .modal-content.plans-horizontal {
+    max-width: 440px !important;
+    width: 94vw !important;
+    margin: 0.75rem auto 2rem !important;
+  }
+  .pricing-grid .price-card {
+    padding: 1.35rem 1.2rem;
+  }
+  .price-card.recommended {
+    order: -1; /* Premium first on mobile */
+  }
+}
+
+
+/* ===== FOOTER ===== */
+.site-footer {
+  margin-top: 2rem;
+  padding: 2rem 0 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.footer-inner {
+  display: grid;
+  grid-template-columns: 1.4fr 2fr;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.footer-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.footer-cols h4 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.55rem;
+}
+.footer-cols a {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 0.2rem 0;
+  opacity: 0.85;
+}
+.footer-cols a:hover { color: var(--accent); opacity: 1; }
+.footer-social {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.soc-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(91, 159, 212, 0.35);
+  background: rgba(91, 159, 212, 0.1);
+  color: #b8d9f5 !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.soc-btn:hover {
+  background: rgba(91, 159, 212, 0.22);
+}
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+@media (max-width: 700px) {
+  .footer-inner {
+    grid-template-columns: 1fr;
+  }
+  .footer-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+
+/* ===== ACCOUNT + COMMUNITY — desktop polish ===== */
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: stretch;
+}
+.account-grid .panel-block,
+.account-grid .glass {
+  padding: 1.25rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.account-row:last-of-type {
+  border-bottom: none;
+}
+.account-row span { color: var(--muted); }
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+}
+
+.community-block {
+  margin: 2rem auto 1.5rem;
+  max-width: 1100px;
+  padding: 0 1.5rem;
+}
+.community-inner {
+  padding: 1.75rem 1.5rem;
+  border-radius: 16px;
+}
+.community-head {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+.community-head h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+.community-head .muted {
+  font-size: 0.9rem;
+}
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.community-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.2rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(20, 24, 37, 0.6);
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+  min-height: 140px;
+}
+.community-card:hover {
+  border-color: rgba(0, 240, 160, 0.35);
+  background: rgba(0, 240, 160, 0.04);
+  transform: translateY(-2px);
+}
+.community-flag {
+  display: inline-flex;
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(91, 159, 212, 0.18);
+  color: #9ec9ef;
+  margin-bottom: 0.6rem;
+}
+.community-card h3 {
+  font-size: 1.05rem;
+  margin-bottom: 0.4rem;
+}
+.community-card p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.4;
+  flex: 1;
+  margin-bottom: 0.75rem;
+}
+.community-cta {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent, #00f0a0);
+}
+
+/* hide sample posts if any leftover */
+.community-samples,
+.sample-posts,
+.sample-post {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .account-grid {
+    grid-template-columns: 1fr;
+  }
+  .community-grid {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+  .community-block {
+    padding: 0 0.5rem;
+  }
+}
+
+
+/* ===== LIGHT THEME fixes for community + empty pages ===== */
+body.theme-light .community-card {
+  background: #fff !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+body.theme-light .community-card:hover {
+  border-color: rgba(0, 180, 140, 0.45) !important;
+  background: #f7fffc !important;
+}
+body.theme-light .community-card p {
+  color: var(--muted) !important;
+}
+body.theme-light .community-flag {
+  background: rgba(0, 120, 200, 0.12) !important;
+  color: #1a6bb5 !important;
+}
+body.theme-light .community-inner.glass,
+body.theme-light .glass {
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+body.theme-light .community-cta {
+  color: #00a87a !important;
+}
+
+/* Scanner / empty pages: less dead space */
+#page-scanner .scanner-hero,
+.scanner-wrap {
+  max-width: 640px;
+  margin: 0 auto 2rem;
+}
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  color: var(--muted);
+}
+.empty-state .upgrade-btn,
+.empty-state .connect-btn {
+  margin-top: 1rem;
+}
+
+
+/* ===== ACCOUNT density + FOOTER pricing no box ===== */
+#page-account {
+  min-height: auto;
+  padding-bottom: 1.5rem;
+}
+#page-account .account-grid {
+  margin-bottom: 0;
+}
+#page-account .panel-block,
+#page-account .glass {
+  min-height: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.container,
+main,
+#app,
+.app-main {
+  flex: 1 0 auto;
+}
+.site-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+.footer-cols a {
+  display: block;
+  padding: 0.25rem 0;
+  color: var(--muted);
+  text-decoration: none;
+  border: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  font-size: 0.9rem;
+}
+.footer-cols a:hover {
+  color: var(--accent, #00f0a0);
+}
+#footer-pricing {
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 0.25rem 0 !important;
+  display: block;
+  width: auto;
+  max-width: none;
+}
+.footer-cols a:focus,
+.footer-cols a:focus-visible {
+  outline: none;
+  color: var(--accent, #00f0a0);
+}
