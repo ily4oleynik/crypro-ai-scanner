@@ -1573,3 +1573,45 @@ body.drawer-open {
     padding: 0 0.5rem;
   }
 }
+
+
+/* ===== LIGHT THEME fixes for community + empty pages ===== */
+body.theme-light .community-card {
+  background: #fff !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+body.theme-light .community-card:hover {
+  border-color: rgba(0, 180, 140, 0.45) !important;
+  background: #f7fffc !important;
+}
+body.theme-light .community-card p {
+  color: var(--muted) !important;
+}
+body.theme-light .community-flag {
+  background: rgba(0, 120, 200, 0.12) !important;
+  color: #1a6bb5 !important;
+}
+body.theme-light .community-inner.glass,
+body.theme-light .glass {
+  background: rgba(255, 255, 255, 0.95) !important;
+}
+body.theme-light .community-cta {
+  color: #00a87a !important;
+}
+
+/* Scanner / empty pages: less dead space */
+#page-scanner .scanner-hero,
+.scanner-wrap {
+  max-width: 640px;
+  margin: 0 auto 2rem;
+}
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  color: var(--muted);
+}
+.empty-state .upgrade-btn,
+.empty-state .connect-btn {
+  margin-top: 1rem;
+}
