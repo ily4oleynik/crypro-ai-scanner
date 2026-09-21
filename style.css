@@ -1718,3 +1718,63 @@ body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
   overflow-y: auto;
   background: rgba(0,0,0,0.7);
 }
+
+/* toast + scan progress + auth links */
+.app-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(120%);
+  background: #12161c;
+  border: 1px solid rgba(0, 240, 160, 0.35);
+  color: var(--text, #e4e4f0);
+  padding: 0.7rem 1.2rem;
+  border-radius: 10px;
+  z-index: 3000;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: transform 0.25s, opacity 0.25s;
+  pointer-events: none;
+}
+.app-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.scan-progress {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.scan-step {
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.scan-step.active {
+  color: var(--accent, #00f0a0);
+  border-color: rgba(0, 240, 160, 0.4);
+  background: rgba(0, 240, 160, 0.08);
+}
+.scanner-empty {
+  padding: 1.5rem;
+  text-align: center;
+  margin-top: 1rem;
+}
+.auth-terms a {
+  color: var(--accent, #00f0a0);
+  text-decoration: underline;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+}
+#auth-terms-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: default;
+}
