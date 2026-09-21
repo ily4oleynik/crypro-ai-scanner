@@ -237,9 +237,10 @@ async function loadTicker() {
     const items = data.ticker || [];
     if (!items.length) {
       inner.innerHTML = '<span class="ticker-item">Markets unavailable</span>';
+      inner.style.animation = 'none';
       return;
     }
-    const html = items.map((t) => {
+    const block = items.map((t) => {
       const ch = t.change24h;
       const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
       const sign = ch > 0 ? '+' : '';
@@ -247,9 +248,23 @@ async function loadTicker() {
         ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
         : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
       const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
-      return '<span class="ticker-item"><strong>' + t.symbol + '</strong><span>$' + price + '</span>' + chStr + '</span>';
+      return '<span class="ticker-item"><strong>' + (t.symbol || '') + '</strong><span>$' + price + '</span>' + chStr + '</span>';
     }).join('');
-    inner.innerHTML = html + html;
+
+    // Fill until at least ~2 screen widths, then double for seamless -50% loop
+    let filled = block;
+    inner.innerHTML = filled;
+    let guard = 0;
+    const target = Math.max(window.innerWidth * 2, 800);
+    while (inner.scrollWidth < target && guard++ < 30) {
+      filled += block;
+      inner.innerHTML = filled;
+    }
+    inner.innerHTML = filled + filled;
+    // restart animation cleanly
+    inner.style.animation = 'none';
+    void inner.offsetWidth;
+    inner.style.animation = '';
   } catch (e) {
     inner.innerHTML = '<span class="ticker-item">Ticker unavailable</span>';
   }
