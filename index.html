@@ -327,12 +327,14 @@
 
   <!-- Pricing modal -->
   <div class="modal-overlay" id="pricing-modal" style="display:none">
-    <div class="modal-content plans-list">
+    <div class="modal-content plans-list plans-horizontal">
       <button type="button" class="modal-close" id="pricing-close">&times;</button>
       <h2 class="plans-title">Choose plan</h2>
       <p class="muted small plans-sub">Payments coming soon · demo switch after login</p>
 
-      <div class="price-card" data-plan="free">
+      
+      <div class="pricing-grid">
+<div class="price-card" data-plan="free">
         <h3>Free</h3>
         <p class="plan-price">$0</p>
         <p class="muted">5 scans / day · basic risk</p>
@@ -371,7 +373,8 @@
         </ul>
         <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Open Pro</button>
       </div>
-    </div>
+          </div>
+</div>
   </div>
 
   <div class="modal-overlay" id="bybit-modal" style="display:none">
