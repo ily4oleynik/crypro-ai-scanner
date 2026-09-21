@@ -215,6 +215,7 @@ body.theme-light .tg-chip:hover {
 
 /* ===== NAV ===== */
 .top-nav {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -968,31 +969,80 @@ body.theme-light .site-footer { background: #e8ebf2; }
 
 /* ===== MOBILE ===== */
 @media (max-width: 900px) {
-  .nav-burger { display: inline-flex; align-items: center; justify-content: center; }
+  .top-nav {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+  }
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.5rem;
+  }
+  .nav-burger {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    z-index: 260;
+    position: relative;
+  }
   .nav-links {
-    display: none;
+    display: none !important;
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% - 2px);
     left: 0;
     right: 0;
     background: var(--bg2);
     border: 1px solid var(--border);
     border-radius: 12px;
     flex-direction: column;
-    padding: 0.9rem 1rem;
-    z-index: 200;
-    gap: 0.55rem;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    padding: 0.75rem 1rem;
+    z-index: 250;
+    gap: 0;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   }
-  .nav-links.open { display: flex; }
-  .nav-links a { border-bottom: none; padding: 0.35rem 0; }
-  .how-grid { grid-template-columns: 1fr; }
-  .home-grid { grid-template-columns: 1fr; }
-  .top-nav { align-items: flex-start; }
+  .nav-links.open {
+    display: flex !important;
+  }
+  .nav-links a {
+    border-bottom: 1px solid var(--border);
+    padding: 0.85rem 0.25rem;
+    font-size: 1rem;
+    color: var(--text);
+  }
+  .nav-links a:last-child { border-bottom: none; }
+  .nav-links a.active {
+    color: var(--accent);
+    border-bottom-color: var(--border);
+  }
   .nav-actions {
     width: 100%;
     margin-left: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
   }
+  /* declutter mobile header */
+  .nav-cta,
+  .nav-actions .plan-btn,
+  .usage-badge {
+    display: none !important;
+  }
+  .nav-actions .connect-btn,
+  .nav-actions #auth-btn {
+    flex: 1;
+    min-width: 0;
+  }
+  .how-grid { grid-template-columns: 1fr; }
+  .home-grid { grid-template-columns: 1fr; }
   .hero-scan-row { flex-direction: column; }
   .hero-scan-row .upgrade-btn { width: 100%; }
   .search-bar { flex-direction: column; }
