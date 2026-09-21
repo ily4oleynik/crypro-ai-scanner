@@ -1382,3 +1382,10 @@ async function runCompare() {
     box.innerHTML = '<div class="error-card">Compare failed</div>';
   }
 }
+
+document.getElementById('footer-pricing')?.addEventListener('click', function (e) {
+  e.preventDefault();
+  if (typeof openPricing === 'function') openPricing();
+  else if (typeof showPlans === 'function') showPlans();
+  else document.querySelector('.plan-btn[data-plan="premium"]')?.click();
+});
