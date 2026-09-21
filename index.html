@@ -35,9 +35,10 @@
     <header class="top-nav">
       <div class="nav-brand">
         <div class="logo">Crypto AI Scanner</div>
-        <button type="button" class="nav-burger" id="nav-burger" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">☰</button>
+        <button type="button" class="nav-burger" id="nav-burger" aria-label="Menu" aria-expanded="false" aria-controls="nav-drawer">☰</button>
       </div>
-      <nav class="nav-links" id="nav-links">
+      <!-- Desktop links -->
+      <nav class="nav-links nav-links-desktop" id="nav-links">
         <a href="#" id="nav-home" class="active">Home</a>
         <a href="#" id="nav-scanner">Scanner</a>
         <a href="#" id="nav-watchlist">Watchlist</a>
@@ -47,18 +48,53 @@
         <a href="#" id="nav-account">Account</a>
       </nav>
       <div class="nav-actions">
-        <div class="lang-switch">
+        <div class="lang-switch desktop-only">
           <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
           <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
         </div>
-        <button type="button" class="theme-toggle" id="theme-toggle" title="Theme">☾</button>
-        <span class="usage-badge" id="scan-usage">Scans: 0/5</span>
+        <button type="button" class="theme-toggle desktop-only" id="theme-toggle" title="Theme">☾</button>
+        <span class="usage-badge desktop-only" id="scan-usage">Scans: 0/5</span>
         <span class="plan-badge" id="user-plan" style="display:none">FREE</span>
-        <button type="button" class="plan-btn" data-plan="premium">Upgrade</button>
+        <button type="button" class="plan-btn desktop-only" data-plan="premium">Upgrade</button>
         <button type="button" class="connect-btn" id="auth-btn">Login</button>
-        <button type="button" class="upgrade-btn nav-cta" id="nav-scan-cta">Check token</button>
+        <button type="button" class="upgrade-btn nav-cta desktop-only" id="nav-scan-cta">Check token</button>
       </div>
     </header>
+
+    <!-- Full-screen mobile drawer (TradingView-style) -->
+    <div class="nav-drawer-overlay" id="nav-drawer-overlay" hidden></div>
+    <aside class="nav-drawer" id="nav-drawer" aria-hidden="true">
+      <div class="nav-drawer-head">
+        <div class="logo">Crypto AI Scanner</div>
+        <button type="button" class="nav-drawer-close" id="nav-drawer-close" aria-label="Close">✕</button>
+      </div>
+      <nav class="nav-drawer-links">
+        <a href="#" class="drawer-link" data-page="home" id="drawer-home"><span class="d-ico">⌂</span> Home</a>
+        <a href="#" class="drawer-link" data-page="scanner" id="drawer-scanner"><span class="d-ico">◎</span> Scanner</a>
+        <a href="#" class="drawer-link" data-page="watchlist" id="drawer-watchlist"><span class="d-ico">★</span> Watchlist</a>
+        <a href="#" class="drawer-link" data-page="history" id="drawer-history"><span class="d-ico">◷</span> History</a>
+        <a href="#" class="drawer-link" data-page="alerts" id="drawer-alerts"><span class="d-ico">🔔</span> Alerts</a>
+        <a href="#" class="drawer-link" data-page="compare" id="drawer-compare"><span class="d-ico">⇄</span> Compare</a>
+        <a href="#" class="drawer-link" data-page="account" id="drawer-account"><span class="d-ico">👤</span> Account</a>
+      </nav>
+      <div class="nav-drawer-section">
+        <div class="nav-drawer-label">Language</div>
+        <div class="lang-switch drawer-lang">
+          <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
+          <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
+        </div>
+      </div>
+      <div class="nav-drawer-section">
+        <button type="button" class="connect-btn full" id="drawer-theme">Toggle theme</button>
+        <button type="button" class="upgrade-btn full plan-btn" data-plan="premium" id="drawer-upgrade">Upgrade</button>
+        <button type="button" class="connect-btn full" id="drawer-auth">Login</button>
+      </div>
+      <div class="nav-drawer-foot">
+        <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">TG RU</a>
+        <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">TG EN</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
 
     <!-- ===== HOME ===== -->
     <section id="page-home" class="page" style="display:block">
@@ -269,12 +305,52 @@
     </section>
   </div>
 
+
+  <!-- Community / Telegram channels -->
+  <section class="community-block glass" id="community-block">
+    <div class="community-head">
+      <h2>Telegram</h2>
+      <p class="muted">Алерты, разборы токенов и дайджесты — без спама</p>
+    </div>
+    <div class="community-grid">
+      <a class="community-card" href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">
+        <div class="community-flag">RU</div>
+        <h3>Crypto AI Scanner</h3>
+        <p>Риск-скоры, разборы контрактов, дайджест рынка</p>
+        <span class="community-cta">Открыть канал →</span>
+      </a>
+      <a class="community-card" href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">
+        <div class="community-flag">EN</div>
+        <h3>Crypto AI Scanner EN</h3>
+        <p>Token risk alerts, contract checks, market notes</p>
+        <span class="community-cta">Open channel →</span>
+      </a>
+    </div>
+    <div class="community-samples">
+      <div class="muted small">Примеры постов для каналов (скопируй и опубликуй):</div>
+      <div class="sample-posts">
+        <div class="sample-post">
+          <strong>RU · ежедневно</strong>
+          <p>🔍 Скан дня: проверь токен до покупки — Risk Score + AI-вердикт за 10 сек.<br>→ https://crypro-ai-scanner-production-6ecd.up.railway.app/</p>
+        </div>
+        <div class="sample-post">
+          <strong>EN · weekly</strong>
+          <p>📊 Weekend digest: top risk flags we saw this week. Free scan on the site — first checks free.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Footer: TG + Privacy + Terms -->
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-brand">
         <div class="logo">Crypto AI Scanner</div>
         <p class="muted small">AI token risk · alerts · watchlist. Not financial advice. DYOR.</p>
+        <div class="footer-social">
+          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener" class="soc-btn" title="Telegram RU">TG RU</a>
+          <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener" class="soc-btn" title="Telegram EN">TG EN</a>
+        </div>
       </div>
       <div class="footer-cols">
         <div>
@@ -285,7 +361,7 @@
         </div>
         <div>
           <h4>Telegram</h4>
-          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">Channel RU</a>
+          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">Канал RU</a>
           <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">Channel EN</a>
         </div>
         <div>
