@@ -1063,3 +1063,75 @@ body.theme-light .site-footer { background: #e8ebf2; }
   font-size: 0.78rem;
   margin-left: 0.25rem;
 }
+
+
+/* ===== PRICING HORIZONTAL (ChatGPT-style) ===== */
+.modal-content.plans-list,
+.modal-content.plans-horizontal {
+  max-width: 920px !important;
+  width: min(920px, 96vw) !important;
+  margin: 1.25rem auto 2.5rem !important;
+}
+.plans-title {
+  text-align: center;
+  font-size: 1.35rem;
+  margin-bottom: 0.25rem;
+}
+.plans-sub {
+  text-align: center;
+  margin-bottom: 1.25rem !important;
+}
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+  align-items: stretch;
+}
+.pricing-grid .price-card,
+.plans-horizontal .price-card {
+  margin-bottom: 0 !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1.25rem 1.15rem;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.pricing-grid .price-card:hover,
+.plans-horizontal .price-card:hover {
+  transform: translateY(-2px);
+}
+.pricing-grid .price-card ul {
+  flex: 1;
+  margin-bottom: 1rem;
+}
+.pricing-grid .price-card .upgrade-btn,
+.pricing-grid .price-card .connect-btn,
+.pricing-grid .price-card .pricing-pick {
+  width: 100%;
+  margin-top: auto;
+}
+.price-card.recommended {
+  border-color: rgba(0, 240, 160, 0.5) !important;
+  box-shadow: 0 0 28px rgba(0, 240, 160, 0.12);
+  background: linear-gradient(180deg, rgba(0, 240, 160, 0.06), var(--bg3));
+}
+.price-card .badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  .modal-content.plans-list,
+  .modal-content.plans-horizontal {
+    max-width: 440px !important;
+  }
+}
