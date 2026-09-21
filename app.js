@@ -1268,7 +1268,7 @@ async function loadWatchlist() {
   }
 }
 
-async async function addWatch(address, symbol, name) {
+async function addWatch(address, symbol, name) {
   if (!user) return openAuthModal('Sign in to save Watchlist');
   if (!address) return;
   try {
