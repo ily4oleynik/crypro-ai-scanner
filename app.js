@@ -192,10 +192,30 @@ function toggleTheme() {
 function initBurger() {
   const burger = document.getElementById('nav-burger');
   const links = document.getElementById('nav-links');
-  if (!burger || !links) return;
-  burger.addEventListener('click', () => links.classList.toggle('open'));
-  links.querySelectorAll('a').forEach(a => {
-    a.addEventListener('click', () => links.classList.remove('open'));
+  if (!burger || !links) {
+    console.warn('[nav] burger or links missing');
+    return;
+  }
+  burger.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const open = links.classList.toggle('open');
+    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    burger.textContent = open ? '✕' : '☰';
+  });
+  links.querySelectorAll('a').forEach((a) => {
+    a.addEventListener('click', () => {
+      links.classList.remove('open');
+      burger.setAttribute('aria-expanded', 'false');
+      burger.textContent = '☰';
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if (!links.classList.contains('open')) return;
+    if (links.contains(e.target) || burger.contains(e.target)) return;
+    links.classList.remove('open');
+    burger.setAttribute('aria-expanded', 'false');
+    burger.textContent = '☰';
   });
 }
 
