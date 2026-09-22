@@ -999,6 +999,63 @@ async function updateCandleData(currentPrice) {
   candleChart.timeScale().fitContent();
 }
 
+
+function formatAiVerdict(ai, risk) {
+  ai = ai || {};
+  risk = risk || {};
+  let raw = String(ai.text || ai.summary || '').trim();
+  // strip garbage model/name prefixes like "JEANJAK:", "ASSISTANT:"
+  raw = raw.replace(/^[A-Z]{3,20}:\s*/i, '');
+  raw = raw.replace(/\*\*/g, '').replace(/#{1,3}\s*/g, '');
+  // shorten wall of text for overview card
+  const score = risk.riskScore != null ? risk.riskScore : (ai.score || '—');
+  let verdict = ai.verdict || '';
+  if (!verdict) {
+    const s = Number(score);
+    if (s >= 70) verdict = 'High risk';
+    else if (s >= 40) verdict = 'Caution';
+    else verdict = 'Relatively OK';
+  }
+  // build short bullets from text
+  const sentences = raw.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+  const short = sentences.slice(0, 3);
+  const why = short[0] || ('Risk score ' + score + '/100.');
+  const extra = short.slice(1);
+  return {
+    verdict: verdict,
+    score: score,
+    why: why,
+    points: extra,
+    full: raw,
+    confidence: ai.confidence || null,
+    risks: Array.isArray(ai.risks) ? ai.risks : [],
+    positives: Array.isArray(ai.positives) ? ai.positives : []
+  };
+}
+
+function aiOverviewHtml(ai, risk) {
+  const f = formatAiVerdict(ai, risk);
+  const vColor = Number(f.score) >= 70 ? '#ff4d6a' : Number(f.score) >= 40 ? '#f5a623' : '#00f0a0';
+  let html = '<div class="ai-verdict-card">';
+  html += '<div class="ai-verdict-head">';
+  html += '<span class="ai-verdict-badge" style="border-color:' + vColor + ';color:' + vColor + '">' + safe(f.verdict) + '</span>';
+  html += '<span class="ai-verdict-score">' + safe(f.score) + '<small>/100</small></span>';
+  html += '</div>';
+  html += '<p class="ai-verdict-why">' + safe(f.why) + '</p>';
+  if (f.points.length) {
+    html += '<ul class="ai-verdict-points">';
+    f.points.forEach(function (p) { html += '<li>' + safe(p) + '</li>'; });
+    html += '</ul>';
+  }
+  if (f.risks.length) {
+    html += '<div class="ai-mini-label">Key risks</div><ul class="ai-verdict-points risk">';
+    f.risks.slice(0, 3).forEach(function (p) { html += '<li>' + safe(p) + '</li>'; });
+    html += '</ul>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderTokenPage(data) {
   const tok = data.token || {};
   const r = data.risk || {};
@@ -1050,11 +1107,9 @@ function renderTokenPage(data) {
       : '<div class="glass panel" style="margin-bottom:1rem;">' +
         '<div class="muted small" style="margin-bottom:0.5rem;">Risk scale</div>' +
         riskBarHtml(r.riskScore) +
-        '<p style="margin-top:0.85rem;line-height:1.55;color:var(--text);">' +
-        (safe(ai.text) || 'Risk score ' + safe(r.riskScore) + '/100. Check Security and AI tabs for details.') +
-        '</p>' +
-        '<p class="muted small" style="margin-top:0.6rem;">Candles and deep security checks unlock on Premium.</p>' +
-        '<button type="button" class="connect-btn" style="margin-top:0.6rem;" onclick="openPricing(\'premium\')">See Premium report</button></div>') +
+        aiOverviewHtml(ai, r) +
+        '<p class="muted small" style="margin-top:0.75rem;">Charts and deep security checks on Premium.</p>' +
+        '<button type="button" class="connect-btn" style="margin-top:0.5rem;" onclick="openPricing(\'premium\')">See Premium report</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
         '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
@@ -1080,8 +1135,10 @@ function renderTokenPage(data) {
         '<button type="button" class="connect-btn" onclick="openPricing(\'premium\')">Unlock full security</button>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
-    '<h3>AI: <span class="verdict">' + safe(ai.verdict) + '</span></h3>' +
-    '<p style="margin:1rem 0;line-height:1.65;">' + safe(ai.text) + '</p>' +
+    aiOverviewHtml(ai, r) +
+    (formatAiVerdict(ai, r).full
+      ? '<details class="ai-full-details"><summary>Full AI text</summary><p class="ai-full-text">' + safe(formatAiVerdict(ai, r).full) + '</p></details>'
+      : '') +
     (Array.isArray(ai.risks) && ai.risks.length
       ? '<div style="margin-top:0.8rem;"><div class="muted">Key risks</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
         ai.risks.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
