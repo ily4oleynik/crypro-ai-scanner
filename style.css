@@ -2036,3 +2036,14 @@ body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
   .security-flags-grid { grid-template-columns: 1fr 1fr; }
   .scan-input-row { flex-direction: column; }
 }
+.sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+  gap: 0.5rem;
+}
+.share-btn {
+  border-color: rgba(0, 240, 160, 0.35) !important;
+  color: var(--accent, #00f0a0) !important;
+}
