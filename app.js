@@ -834,19 +834,44 @@ async function startScan() {
     }
     if (token && data.token) {
       try {
+        const histItem = {
+          address: address,
+          symbol: data.token.symbol,
+          name: data.token.name,
+          price: data.token.price,
+          riskScore: data.risk && data.risk.riskScore,
+          chainId: data.token.chainId,
+          plan: data.plan || currentPlan || 'free',
+          scannedAt: new Date().toISOString()
+        };
         await fetch(API_BASE + '/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({
-            address: address,
-            symbol: data.token.symbol,
-            name: data.token.name,
-            price: data.token.price,
-            riskScore: data.risk && data.risk.riskScore,
-            plan: data.plan || currentPlan || 'free'
-          })
+          body: JSON.stringify(histItem)
         });
-      } catch (hErr) { console.warn(hErr); }
+        // local fallback so History works even if API lacks POST
+        try {
+          const key = 'scan_history_' + (user && user.id ? user.id : 'guest');
+          const prev = JSON.parse(localStorage.getItem(key) || '[]');
+          prev.unshift(histItem);
+          localStorage.setItem(key, JSON.stringify(prev.slice(0, 50)));
+        } catch (ls) {}
+      } catch (hErr) {
+        console.warn(hErr);
+        try {
+          const key = 'scan_history_' + (user && user.id ? user.id : 'guest');
+          const prev = JSON.parse(localStorage.getItem(key) || '[]');
+          prev.unshift({
+            address: address,
+            symbol: data.token && data.token.symbol,
+            name: data.token && data.token.name,
+            riskScore: data.risk && data.risk.riskScore,
+            chainId: data.token && data.token.chainId,
+            scannedAt: new Date().toISOString()
+          });
+          localStorage.setItem(key, JSON.stringify(prev.slice(0, 50)));
+        } catch (ls2) {}
+      }
     }
     await refreshUsage();
     if (typeof refreshAccountPage === 'function') refreshAccountPage();
@@ -865,6 +890,13 @@ async function startScan() {
   }
 }
 
+function formatPrice(p) {
+  const n = Number(p);
+  if (p == null || p === '' || isNaN(n)) return '—';
+  if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  return n.toLocaleString('en-US', { maximumFractionDigits: 8 });
+}
 function safe(v, fb) {
   if (fb === undefined) fb = '—';
   if (v === null || v === undefined || Number.isNaN(v)) return fb;
@@ -1075,7 +1107,10 @@ function renderTokenPage(data) {
     '<div class="token-header glass">' +
     '<div class="token-left"><div class="token-icon">' + (tok.symbol || 'TK').slice(0, 2) + '</div>' +
     '<div><h1 class="token-title">' + safe(tok.symbol) + ' <span class="token-name">' + safe(tok.name) + '</span></h1>' +
-    '<div class="token-price">$' + safe(tok.price) + '</div></div></div>' +
+    '<div class="token-meta-row">' + chainBadgeHtml(tok, addr) +
+    (tok.pairAddress ? '<span class="muted small">Pair ' + safe(String(tok.pairAddress).slice(0, 8)) + '…</span>' : '') +
+    '</div>' +
+    '<div class="token-price">$' + formatPrice(tok.price) + '</div></div></div>' +
     '<div class="token-right">' +
     '<div class="risk-pill risk-' + (r.riskLevel || 'medium').toLowerCase() + '">Risk ' + safe(r.riskScore) + '/100</div>' +
     '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
@@ -1083,7 +1118,7 @@ function renderTokenPage(data) {
     '</div></div>' +
     (reasons.length
       ? '<div class="glass panel" style="margin-bottom:1rem;"><div class="muted small">Risk factors</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
-        reasons.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
+        reasons.map(function (x) { var w = /⚠|NOT native|не нативный|wrapper|imposter/i.test(String(x)); return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>'; }).join('') + '</ul></div>'
       : '') +
     '<div class="metrics-grid">' +
     '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
@@ -1196,7 +1231,7 @@ function renderTokenPage(data) {
 function initAIChat(data) {
   const section = document.getElementById('ai-chat-section');
   if (!section) return;
-  if (data.plan === 'Pro' || currentPlan === 'pro') {
+  if (data.plan === 'Pro' || data.plan === 'Premium' || currentPlan === 'pro' || currentPlan === 'premium') {
     section.style.display = 'block';
     currentTokenContext = { token: data.token, risk: data.risk, plan: data.plan };
     document.getElementById('chat-messages').innerHTML = '';
@@ -1239,7 +1274,7 @@ async function sendChatMessage() {
     const data = await res.json();
     removeChatMessage(loadingId);
     if (!data.success) {
-      addChatMessage('ai', data.error || 'Pro only');
+      addChatMessage('ai', data.error || 'AI chat requires Premium or Pro');
       return;
     }
     addChatMessage('ai', data.reply);
@@ -1278,17 +1313,35 @@ async function loadHistory() {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
-    if (!data.history?.length) {
+    let history = (data && data.history) || [];
+    try {
+      const key = 'scan_history_' + (user && user.id ? user.id : 'guest');
+      const local = JSON.parse(localStorage.getItem(key) || '[]');
+      if (local.length) {
+        const seen = {};
+        history = local.concat(history).filter(function (h) {
+          const k = String(h.address || '') + String(h.scannedAt || h.scanned_at || '');
+          if (seen[k]) return false;
+          seen[k] = true;
+          return !!h.address;
+        });
+      }
+    } catch (e) {}
+    if (!history.length) {
       box.innerHTML = '<div class="empty-state-cta"><p>Empty</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scan</button></div>';
       return;
     }
-    box.innerHTML = data.history.map(h =>
-      '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
-      '</strong><small>' + (h.address || '').slice(0, 12) + '... · Risk ' + h.riskScore +
-      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address + '\')">Scan</button></div></div>'
-    ).join('');
+    box.innerHTML = history.map(function (h) {
+      const risk = h.riskScore != null ? h.riskScore : (h.risk_score != null ? h.risk_score : '—');
+      const chain = h.chainId || h.chain_id || '';
+      const addr = String(h.address || '').replace(/'/g, '');
+      return '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
+        '</strong><small>' + (chain ? chainLabel(chain) + ' · ' : '') + addr.slice(0, 12) +
+        '... · Risk ' + risk + '</small></div>' +
+        '<button type="button" class="btn-sm" data-addr="' + addr + '" onclick="document.getElementById(\'token-input\').value=this.dataset.addr;showPage(\'scanner\');startScan();">Rescan</button></div>';
+    }).join('');
   } catch (e) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
+    box.innerHTML = '<div class="error-card glass">Failed to load history</div>';
   }
 }
 
@@ -1562,31 +1615,162 @@ function openDemoReport() {
   modal.style.display = 'flex';
 }
 
+
 async function enrichTokenMarket(data, address) {
   if (!data || !data.token) return data;
   const tok = data.token;
-  const need = (tok.marketCap == null || tok.marketCap === '' || Number(tok.marketCap) === 0) &&
-               (tok.fdv == null || tok.fdv === '' || Number(tok.fdv) === 0);
-  if (!need && tok.liquidity) return data;
   try {
     const url = 'https://api.dexscreener.com/latest/dex/tokens/' + encodeURIComponent(address);
     const res = await fetch(url);
     const j = await res.json();
-    const pairs = Array.isArray(j.pairs) ? j.pairs : [];
-    if (!pairs.length) return data;
-    pairs.sort((a, b) => (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0));
-    const p = pairs[0];
-    tok.marketCap = tok.marketCap || p.marketCap || p.fdv || null;
-    tok.fdv = tok.fdv || p.fdv || p.marketCap || null;
-    tok.liquidity = tok.liquidity || p.liquidity?.usd || null;
-    tok.volume24h = tok.volume24h || p.volume?.h24 || null;
-    tok.price = tok.price || p.priceUsd || null;
-    tok.pairAddress = tok.pairAddress || p.pairAddress || null;
-    tok.chainId = tok.chainId || p.chainId || 'ethereum';
-    data.token = tok;
-  } catch (e) {}
+    const pairs = Array.isArray(j.pairs) ? j.pairs.slice() : [];
+    if (pairs.length) {
+      pairs.sort(function (a, b) {
+        return (Number(b.liquidity && b.liquidity.usd) || 0) - (Number(a.liquidity && a.liquidity.usd) || 0);
+      });
+      const p = pairs[0];
+      tok.marketCap = numOr(tok.marketCap, p.marketCap, p.fdv);
+      tok.fdv = numOr(tok.fdv, p.fdv, p.marketCap);
+      tok.liquidity = numOr(tok.liquidity, p.liquidity && p.liquidity.usd);
+      tok.volume24h = numOr(tok.volume24h, p.volume && p.volume.h24);
+      tok.price = tok.price || p.priceUsd || null;
+      tok.pairAddress = tok.pairAddress || p.pairAddress || null;
+      tok.chainId = (p.chainId || tok.chainId || detectChainFromAddress(address) || 'unknown').toLowerCase();
+      tok.dexId = p.dexId || tok.dexId || null;
+      tok.pairUrl = p.url || null;
+      if (p.baseToken) {
+        tok.symbol = tok.symbol || p.baseToken.symbol;
+        tok.name = tok.name || p.baseToken.name;
+      }
+    } else {
+      tok.chainId = (tok.chainId || detectChainFromAddress(address) || 'unknown').toLowerCase();
+    }
+  } catch (e) {
+    tok.chainId = (tok.chainId || detectChainFromAddress(address) || 'unknown').toLowerCase();
+  }
+  data.token = tok;
+  data.risk = data.risk || {};
+  data.risk.reasons = mergeReasons(data.risk.reasons, buildChainRiskReasons(tok, address));
+  // bump score slightly if imposter
+  const hasImposter = (data.risk.reasons || []).some(function (x) {
+    return /not native|обёртк|wrapper|imposter|не нативный|TRC20|поддел/i.test(String(x));
+  });
+  if (hasImposter && data.risk.riskScore != null) {
+    data.risk.riskScore = Math.min(95, Number(data.risk.riskScore) + 15);
+    if (data.risk.riskScore >= 70) data.risk.riskLevel = 'HIGH';
+    else if (data.risk.riskScore >= 40) data.risk.riskLevel = 'MEDIUM';
+  }
   return data;
 }
+
+function numOr() {
+  for (var i = 0; i < arguments.length; i++) {
+    var v = arguments[i];
+    if (v == null || v === '') continue;
+    var n = Number(v);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function detectChainFromAddress(address) {
+  const a = String(address || '').trim();
+  if (/^0x[a-fA-F0-9]{40}$/.test(a)) return 'ethereum'; // could be BSC/Base — DexScreener chainId preferred
+  if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a)) return 'tron';
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a) && !a.startsWith('0x')) return 'solana';
+  return 'unknown';
+}
+
+function chainLabel(chainId) {
+  const c = String(chainId || '').toLowerCase();
+  const map = {
+    ethereum: 'Ethereum', eth: 'Ethereum',
+    bsc: 'BNB Chain', bnbt: 'BNB Chain',
+    base: 'Base', arbitrum: 'Arbitrum', polygon: 'Polygon',
+    avalanche: 'Avalanche', optimism: 'Optimism',
+    tron: 'Tron', solana: 'Solana', sui: 'Sui', ton: 'TON'
+  };
+  return map[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : 'Unknown chain');
+}
+
+function buildChainRiskReasons(tok, address) {
+  const reasons = [];
+  const chain = String(tok.chainId || detectChainFromAddress(address) || '').toLowerCase();
+  const sym = String(tok.symbol || '').toUpperCase();
+  const name = String(tok.name || '').toLowerCase();
+  const nativeChains = {
+    BTC: ['bitcoin'],
+    ETH: ['ethereum'],
+    SOL: ['solana'],
+    TRX: ['tron'],
+    BNB: ['bsc', 'bnb']
+  };
+
+  if (chain) {
+    reasons.push('Network: ' + chainLabel(chain));
+  }
+
+  // Imposter / wrapped major assets
+  ['BTC', 'ETH', 'SOL', 'BNB', 'USDT', 'USDC'].forEach(function (asset) {
+    const isNameMatch =
+      sym === asset ||
+      name === asset.toLowerCase() ||
+      name.indexOf(asset.toLowerCase()) >= 0 ||
+      (asset === 'BTC' && (name.indexOf('bitcoin') >= 0 || sym.indexOf('BTC') >= 0));
+    if (!isNameMatch) return;
+    const allowed = nativeChains[asset];
+    if (allowed && allowed.indexOf(chain) === -1) {
+      if (asset === 'BTC') {
+        reasons.unshift(
+          '⚠ This is NOT native Bitcoin. Contract is on ' +
+            chainLabel(chain) +
+            ' (e.g. TRC20/bridged «BTC»). High confusion & issuer/bridge risk.'
+        );
+      } else {
+        reasons.unshift(
+          '⚠ «' +
+            asset +
+            '» on ' +
+            chainLabel(chain) +
+            ' is not the native asset — verify bridge/issuer before buying.'
+        );
+      }
+    }
+  });
+
+  if (tok.fdv && tok.liquidity && Number(tok.fdv) > Number(tok.liquidity) * 50) {
+    reasons.push('FDV is much higher than liquidity — exit risk if you need size.');
+  }
+  if (tok.liquidity != null && Number(tok.liquidity) < 50000) {
+    reasons.push('Low liquidity (< $50k) — high slippage risk.');
+  }
+  return reasons;
+}
+
+function mergeReasons(existing, extra) {
+  const out = [];
+  const seen = {};
+  (Array.isArray(existing) ? existing : []).concat(Array.isArray(extra) ? extra : []).forEach(function (r) {
+    const k = String(r).toLowerCase();
+    if (!k || seen[k]) return;
+    seen[k] = true;
+    out.push(r);
+  });
+  return out;
+}
+
+function chainBadgeHtml(tok, address) {
+  const chain = tok.chainId || detectChainFromAddress(address) || 'unknown';
+  const label = chainLabel(chain);
+  const danger =
+    /NOT native|не нативный|⚠/i.test(JSON.stringify(tok)) ||
+    (String(tok.symbol || '').toUpperCase() === 'BTC' && chain !== 'bitcoin');
+  const cls = danger || chain === 'tron' && /btc|bitcoin/i.test(String(tok.symbol) + String(tok.name))
+    ? 'chain-badge chain-badge-warn'
+    : 'chain-badge';
+  return '<span class="' + cls + '">' + safe(label) + '</span>';
+}
+
 
 function renderScannerEmpty() {
   const results = document.getElementById('results');
