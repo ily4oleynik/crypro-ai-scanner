@@ -5,7 +5,6 @@ const cors = require('cors');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-
 const aiService = require('./services/ai.js');
 const { computeRiskFromPair } = require('./services/scoring.js');
 const { initDb } = require('./db');
@@ -20,6 +19,13 @@ try {
   newsService = require('./news');
 } catch (e) {
   console.warn('[News] news.js not found — fallback');
+}
+
+let goplus = null;
+try {
+  goplus = require('./services/goplus');
+} catch (e) {
+  console.warn('[GoPlus] services/goplus.js not found — security flags disabled');
 }
 
 const app = express();
@@ -97,6 +103,8 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+/* ===================== PUBLIC ===================== */
+
 app.get('/api/config/public', (req, res) => {
   res.json({
     success: true,
@@ -104,6 +112,58 @@ app.get('/api/config/public', (req, res) => {
     channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
   });
 });
+
+/* ===================== GOPLUS SECURITY ===================== */
+
+app.get(
+  '/api/security/:chain/:address',
+  rateLimit({
+    windowMs: 60_000,
+    max: 30,
+    keyFn: (req) => 'sec:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      if (!goplus) {
+        return res.json({
+          success: true,
+          security: { available: false, error: 'GoPlus module not loaded', flags: [] }
+        });
+      }
+      const chain = req.params.chain;
+      const address = req.params.address;
+      if (!address || address.length < 4) {
+        return res.status(400).json({ success: false, error: 'Invalid address' });
+      }
+      const security = await goplus.fetchTokenSecurity(chain, address);
+      res.json({ success: true, security });
+    } catch (e) {
+      console.error('[security]', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  }
+);
+
+app.post('/api/security/check', async (req, res) => {
+  try {
+    if (!goplus) {
+      return res.json({
+        success: true,
+        security: { available: false, flags: [] }
+      });
+    }
+    const { chain, address } = req.body || {};
+    if (!address) {
+      return res.status(400).json({ success: false, error: 'address required' });
+    }
+    const security = await goplus.fetchTokenSecurity(chain || 'ethereum', address);
+    res.json({ success: true, security });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/* ===================== AUTH ===================== */
 
 app.post(
   '/api/auth/login',
@@ -146,9 +206,10 @@ app.post(
   async (req, res) => {
     try {
       let { email, password, acceptTerms } = req.body || {};
-      email = String(email || '').trim().toLowerCase();
+      email = String(email || '')
+        .trim()
+        .toLowerCase();
       password = String(password || '');
-
       if (!email || !password) {
         return res.status(400).json({ success: false, error: 'Укажите email и пароль' });
       }
@@ -176,7 +237,6 @@ app.post(
           error: 'Аккаунт с таким email уже есть. Войдите.'
         });
       }
-
       const user = await store.createUser(email, password, 'free');
       const token = jwt.sign(
         { id: user.id, email: user.email, plan: 'free' },
@@ -226,6 +286,8 @@ app.post('/api/user/plan', authMiddleware, async (req, res) => {
   }
 });
 
+/* ===================== SCAN ===================== */
+
 app.get(
   '/api/scan/:tokenAddress',
   rateLimit({
@@ -237,11 +299,9 @@ app.get(
   async (req, res) => {
     const { tokenAddress } = req.params;
     const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
-
     if (!tokenAddress || tokenAddress.length < 8 || tokenAddress.length > 128) {
       return res.status(400).json({ success: false, error: 'Некорректный адрес' });
     }
-
     try {
       const usage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
       if (!usage.allowed) {
@@ -258,15 +318,20 @@ app.get(
         { timeout: 10000 }
       );
       const pair = dexResponse.data.pairs?.[0] || {};
-
       const base = {
         symbol: pair.baseToken?.symbol || 'TOKEN',
         name: pair.baseToken?.name || '',
-        price: pair.priceUsd || 0,
-        liquidity: pair.liquidity?.usd || 0,
-        volume24h: pair.volume?.h24 || 0,
-        fdv: pair.fdv || 0,
-        marketCap: pair.fdv || 0,
+        address: pair.baseToken?.address || tokenAddress,
+        price: pair.priceUsd != null ? Number(pair.priceUsd) : 0,
+        liquidity: pair.liquidity?.usd != null ? Number(pair.liquidity.usd) : 0,
+        volume24h: pair.volume?.h24 != null ? Number(pair.volume.h24) : 0,
+        fdv: pair.fdv != null ? Number(pair.fdv) : 0,
+        marketCap:
+          pair.marketCap != null
+            ? Number(pair.marketCap)
+            : pair.fdv != null
+              ? Number(pair.fdv)
+              : 0,
         isVerified: !!pair.info?.imageUrl,
         website: pair.info?.websites?.[0]?.url || null,
         twitter: pair.info?.socials?.find((s) => s.type === 'twitter')?.url || null,
@@ -276,28 +341,60 @@ app.get(
         dexId: pair.dexId || null
       };
 
-      const risk = computeRiskFromPair(pair, base);
-      const riskScore = risk.riskScore;
-      const riskLevel = risk.riskLevel;
+      let risk = computeRiskFromPair(pair, base);
+      let riskScore = risk.riskScore;
+      let riskLevel = risk.riskLevel;
+      const reasons = Array.isArray(risk.reasons) ? [...risk.reasons] : [];
+
+      // GoPlus on-chain (best-effort, does not fail the scan)
+      let securityOnchain = null;
+      if (goplus) {
+        try {
+          securityOnchain = await goplus.fetchTokenSecurity(base.chainId, tokenAddress);
+          if (securityOnchain?.riskBonus) {
+            riskScore = Math.min(95, riskScore + Number(securityOnchain.riskBonus));
+            if (riskScore >= 70) riskLevel = 'HIGH';
+            else if (riskScore >= 40) riskLevel = 'MEDIUM';
+            else riskLevel = 'LOW';
+          }
+          if (securityOnchain?.available && securityOnchain.meta) {
+            const m = securityOnchain.meta;
+            if (m.isHoneypot) reasons.unshift('GoPlus: honeypot flag');
+            if (m.isMintable) reasons.push('GoPlus: mintable');
+            if (m.isOpenSource === false) reasons.push('GoPlus: source not verified');
+            if (m.sellTax != null && m.sellTax > 10) {
+              reasons.push('GoPlus: high sell tax ' + m.sellTax + '%');
+            }
+          }
+        } catch (e) {
+          console.warn('[scan goplus]', e.message);
+        }
+      }
 
       const aiPlan = plan === 'pro' ? 'pro' : plan === 'premium' ? 'premium' : 'free';
       const ai = await aiService.analyzeToken(
         base,
-        { riskScore, riskLevel, reasons: risk.reasons },
+        { riskScore, riskLevel, reasons },
         aiPlan
       );
 
-      await store.incrementScan(req.user);
-      await store.addHistory(req.user, {
-        address: tokenAddress,
-        symbol: base.symbol,
-        name: base.name,
-        price: base.price,
-        riskScore,
-        plan
+      if (req.user?.id) {
+        await store.incrementScan(req.user);
+        await store.addHistory(req.user, {
+          address: tokenAddress,
+          symbol: base.symbol,
+          name: base.name,
+          price: base.price,
+          riskScore,
+          plan
+        });
+      }
+
+      const currentUsage = await store.canScan({
+        ...req.user,
+        plan: req.user?.plan || plan
       });
 
-      const currentUsage = await store.canScan({ ...req.user, plan: req.user?.plan || plan });
       const aiPayload = {
         text: ai.text,
         confidence: ai.confidence,
@@ -305,28 +402,40 @@ app.get(
         risks: ai.risks || [],
         positives: ai.positives || []
       };
+
       const riskPayload = {
         riskScore,
         riskLevel,
         confidence: ai.confidence || risk.confidence,
-        reasons: risk.reasons || []
+        reasons: reasons.slice(0, 8)
+      };
+
+      // Full token for all plans (MC/FDV needed on Free too)
+      const tokenFull = {
+        symbol: base.symbol,
+        name: base.name,
+        address: base.address,
+        price: base.price,
+        liquidity: base.liquidity,
+        volume24h: base.volume24h,
+        fdv: base.fdv,
+        marketCap: base.marketCap,
+        pairAddress: base.pairAddress,
+        chainId: base.chainId,
+        dexId: base.dexId
       };
 
       if (plan === 'free') {
         return res.json({
           success: true,
           plan: 'Free',
-          token: {
-            symbol: base.symbol,
-            name: base.name,
-            price: base.price,
-            liquidity: base.liquidity,
-            volume24h: base.volume24h,
-            pairAddress: base.pairAddress,
-            chainId: base.chainId
-          },
+          token: tokenFull,
           risk: riskPayload,
           ai: aiPayload,
+          security: securityOnchain || {
+            contractVerified: base.isVerified,
+            available: false
+          },
           locked: true,
           usage: currentUsage
         });
@@ -336,10 +445,10 @@ app.get(
         return res.json({
           success: true,
           plan: 'Premium',
-          token: base,
+          token: { ...base },
           risk: riskPayload,
           ai: aiPayload,
-          security: {
+          security: securityOnchain || {
             contractVerified: base.isVerified,
             liquidityLock: false,
             scamProbability: Math.min(90, Math.max(5, riskScore - 10))
@@ -356,10 +465,10 @@ app.get(
       return res.json({
         success: true,
         plan: 'Pro',
-        token: base,
+        token: { ...base },
         risk: riskPayload,
         ai: aiPayload,
-        security: {
+        security: securityOnchain || {
           contractVerified: base.isVerified,
           liquidityLock: false,
           scamProbability: Math.min(90, Math.max(5, riskScore - 15))
@@ -370,7 +479,10 @@ app.get(
           telegram: base.telegram
         },
         advanced: {
-          whaleConcentration: 'n/a',
+          whaleConcentration:
+            securityOnchain?.meta?.top10Pct != null
+              ? securityOnchain.meta.top10Pct + '% top10'
+              : 'n/a',
           buySellRatio: pair.txns?.h24
             ? (
                 (Number(pair.txns.h24.buys || 0) + 1) /
@@ -381,7 +493,10 @@ app.get(
             pair.priceChange?.h24 != null
               ? Number(pair.priceChange.h24).toFixed(1) + '%'
               : '—',
-          holderCount: '—'
+          holderCount:
+            securityOnchain?.meta?.holderCount != null
+              ? String(securityOnchain.meta.holderCount)
+              : '—'
         },
         usage: currentUsage
       });
