@@ -1,4 +1,3 @@
-// backend/db.js
 const { Pool } = require('pg');
 
 const pool = process.env.DATABASE_URL
@@ -30,14 +29,12 @@ async function initDb() {
       telegram_chat_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS scan_usage (
       user_id TEXT NOT NULL,
       day TEXT NOT NULL,
       count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, day)
     );
-
     CREATE TABLE IF NOT EXISTS scan_history (
       id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -49,7 +46,6 @@ async function initDb() {
       plan TEXT,
       scanned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS watchlist (
       id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -59,7 +55,6 @@ async function initDb() {
       added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (user_id, address)
     );
-
     CREATE TABLE IF NOT EXISTS alerts (
       id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -70,7 +65,6 @@ async function initDb() {
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS fired_alerts (
       user_id TEXT NOT NULL,
       alert_id TEXT NOT NULL,
@@ -78,7 +72,6 @@ async function initDb() {
     );
   `);
 
-  // на случай старой таблицы users без колонки
   await query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';
