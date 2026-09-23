@@ -1088,6 +1088,181 @@ function aiOverviewHtml(ai, risk) {
   return html;
 }
 
+
+function buildRiskBreakdown(tok, risk, address) {
+  tok = tok || {};
+  risk = risk || {};
+  const liq = Number(tok.liquidity) || 0;
+  const vol = Number(tok.volume24h) || 0;
+  const mcap = Number(tok.marketCap || tok.fdv) || 0;
+  const fdv = Number(tok.fdv || tok.marketCap) || 0;
+  const chain = String(tok.chainId || detectChainFromAddress(address) || '').toLowerCase();
+  const sym = String(tok.symbol || '').toUpperCase();
+  const name = String(tok.name || '').toLowerCase();
+
+  // Sub-scores 0-100 where higher = more risk (aligned with overall risk score)
+  let contract = 25;
+  let liquidity = 25;
+  let holders = 20;
+  let market = 20;
+
+  // Liquidity risk
+  if (liq <= 0) liquidity = 85;
+  else if (liq < 10000) liquidity = 75;
+  else if (liq < 50000) liquidity = 55;
+  else if (liq < 200000) liquidity = 35;
+  else if (liq < 1000000) liquidity = 20;
+  else liquidity = 10;
+
+  // Market / FDV vs liq
+  if (fdv > 0 && liq > 0) {
+    const ratio = fdv / liq;
+    if (ratio > 100) market = 70;
+    else if (ratio > 50) market = 55;
+    else if (ratio > 20) market = 40;
+    else market = 20;
+  }
+  if (vol > 0 && liq > 0) {
+    if (vol / liq < 0.02) market = Math.min(90, market + 15);
+  }
+
+  // Contract / identity risk (heuristic without GoPlus)
+  const isImposter =
+    (sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin' ||
+    (sym === 'ETH' && chain && chain !== 'ethereum') ||
+    (sym === 'SOL' && chain && chain !== 'solana');
+  if (isImposter) contract = 80;
+  else if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(address || ''))) contract = 35; // TRC20 unknown
+  else if (mcap > 1e9 && liq > 1e6) contract = 12; // large liquid = lower contract heuristic
+  else if (mcap > 1e8) contract = 18;
+  else contract = 30;
+
+  // Holders unknown without on-chain → moderate, lower if huge mcap
+  if (mcap > 5e9) holders = 12;
+  else if (mcap > 5e8) holders = 18;
+  else holders = 28;
+
+  // Fit to overall score if provided
+  const target = Number(risk.riskScore);
+  if (isFinite(target) && target >= 0) {
+    const avg = (contract + liquidity + holders + market) / 4;
+    if (avg > 1) {
+      const k = target / avg;
+      contract = Math.round(Math.min(95, Math.max(5, contract * k)));
+      liquidity = Math.round(Math.min(95, Math.max(5, liquidity * k)));
+      holders = Math.round(Math.min(95, Math.max(5, holders * k)));
+      market = Math.round(Math.min(95, Math.max(5, market * k)));
+    }
+  }
+
+  return [
+    { key: 'contract', label: 'Contract', score: contract, hint: isImposter ? 'Name/network mismatch' : 'Heuristic (no full audit)' },
+    { key: 'liquidity', label: 'Liquidity', score: liquidity, hint: liq ? ('$' + (liq >= 1e6 ? (liq/1e6).toFixed(2)+'M' : (liq/1e3).toFixed(0)+'K')) : 'n/a' },
+    { key: 'holders', label: 'Holders', score: holders, hint: 'Limited without on-chain API' },
+    { key: 'market', label: 'Market', score: market, hint: fdv && liq ? 'FDV/liq ratio' : 'volume/liquidity' }
+  ];
+}
+
+function riskBreakdownHtml(tok, risk, address) {
+  const parts = buildRiskBreakdown(tok, risk, address);
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const title = lang === 'en' ? 'Risk breakdown' : 'Разбивка риска';
+  const scale = lang === 'en' ? 'Higher bar = more risk in that area' : 'Чем выше полоса — тем выше риск в зоне';
+  let html = '<div class="risk-breakdown glass panel">';
+  html += '<div class="risk-breakdown-head"><span>' + title + '</span><span class="muted small">' + scale + '</span></div>';
+  parts.forEach(function (p) {
+    const color = p.score >= 61 ? '#ff4d6a' : p.score >= 31 ? '#f5a623' : '#00f0a0';
+    html += '<div class="risk-factor-row">';
+    html += '<div class="risk-factor-label"><strong>' + p.label + '</strong><span class="muted small">' + p.hint + '</span></div>';
+    html += '<div class="risk-factor-bar"><div style="width:' + p.score + '%;background:' + color + '"></div></div>';
+    html += '<div class="risk-factor-score" style="color:' + color + '">' + p.score + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function buildSecurityFlags(tok, risk, address) {
+  tok = tok || {};
+  const chain = String(tok.chainId || detectChainFromAddress(address) || '').toLowerCase();
+  const sym = String(tok.symbol || '').toUpperCase();
+  const name = String(tok.name || '').toLowerCase();
+  const liq = Number(tok.liquidity) || 0;
+  const mcap = Number(tok.marketCap || tok.fdv) || 0;
+  const isImposter =
+    ((sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin') ||
+    (sym === 'ETH' && chain && !/ethereum|eth/.test(chain));
+
+  // Heuristic flags — honest about unknown
+  const knownBluechip = ['LINK', 'UNI', 'AAVE', 'MKR', 'CRV', 'SNX', 'COMP'].indexOf(sym) >= 0 && /ethereum|eth/.test(chain);
+  return [
+    {
+      id: 'network',
+      label: 'Network',
+      status: chain ? 'ok' : 'warn',
+      text: chain ? chainLabel(chain) : 'Unknown'
+    },
+    {
+      id: 'identity',
+      label: 'Identity',
+      status: isImposter ? 'bad' : (knownBluechip ? 'ok' : 'warn'),
+      text: isImposter
+        ? 'Not native ' + (sym || 'asset') + ' on this chain'
+        : (knownBluechip ? 'Known protocol token' : 'Verify contract in explorer')
+    },
+    {
+      id: 'liquidity',
+      label: 'Liquidity',
+      status: liq >= 200000 ? 'ok' : liq >= 50000 ? 'warn' : 'bad',
+      text: liq ? (liq >= 1e6 ? '$' + (liq/1e6).toFixed(2) + 'M' : '$' + (liq/1e3).toFixed(0) + 'K') : 'Very low / n/a'
+    },
+    {
+      id: 'verified',
+      label: 'Verified',
+      status: knownBluechip ? 'ok' : 'warn',
+      text: knownBluechip ? 'Likely verified source' : 'Not checked on-chain (Free)'
+    },
+    {
+      id: 'honeypot',
+      label: 'Honeypot',
+      status: 'warn',
+      text: 'Simulation on Premium'
+    },
+    {
+      id: 'mint',
+      label: 'Mint / Own',
+      status: 'warn',
+      text: 'Ownership scan on Premium'
+    }
+  ];
+}
+
+function securityFlagsHtml(tok, risk, address) {
+  const flags = buildSecurityFlags(tok, risk, address);
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const title = lang === 'en' ? 'Security snapshot' : 'Снимок безопасности';
+  let html = '<div class="security-flags glass panel">';
+  html += '<div class="muted small" style="margin-bottom:0.6rem;">' + title + '</div>';
+  html += '<div class="security-flags-grid">';
+  flags.forEach(function (f) {
+    const icon = f.status === 'ok' ? '✓' : f.status === 'bad' ? '!' : '·';
+    html += '<div class="sec-flag sec-' + f.status + '">';
+    html += '<span class="sec-icon">' + icon + '</span>';
+    html += '<div><div class="sec-label">' + f.label + '</div><div class="sec-text">' + f.text + '</div></div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function scoreColor(score) {
+  const s = Number(score) || 0;
+  if (s >= 61) return '#ff4d6a';
+  if (s >= 31) return '#f5a623';
+  return '#00f0a0';
+}
+
+
 function renderTokenPage(data) {
   const tok = data.token || {};
   const r = data.risk || {};
@@ -1112,13 +1287,15 @@ function renderTokenPage(data) {
     '</div>' +
     '<div class="token-price">$' + formatPrice(tok.price) + '</div></div></div>' +
     '<div class="token-right">' +
-    '<div class="risk-pill risk-' + (r.riskLevel || 'medium').toLowerCase() + '">Risk ' + safe(r.riskScore) + '/100</div>' +
+    '<div class="risk-pill" style="border-color:' + scoreColor(r.riskScore) + ';color:' + scoreColor(r.riskScore) + '">Risk ' + safe(r.riskScore) + '/100</div>' +
     '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
     '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
     '</div></div>' +
+    riskBreakdownHtml(tok, r, addr) +
+    securityFlagsHtml(tok, r, addr) +
     (reasons.length
-      ? '<div class="glass panel" style="margin-bottom:1rem;"><div class="muted small">Risk factors</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
-        reasons.map(function (x) { var w = /⚠|NOT native|не нативный|wrapper|imposter/i.test(String(x)); return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>'; }).join('') + '</ul></div>'
+      ? '<div class="glass panel risk-factors-panel"><div class="muted small">Risk factors</div><ul class="risk-factors-list">' +
+        reasons.map(function (x) { var w = /⚠|NOT native|не нативный|wrapper|imposter|Network:/i.test(String(x)); return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>'; }).join('') + '</ul></div>'
       : '') +
     '<div class="metrics-grid">' +
     '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
