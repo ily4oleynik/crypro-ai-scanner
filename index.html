@@ -229,7 +229,17 @@
         <p>Вставь адрес контракта — AI оценит риск до покупки</p>
       </div>
       <div class="search-bar glass">
-        <input type="text" id="token-input" placeholder="0x… contract address" autocomplete="off" />
+        <div class="scan-input-row">
+        <select id="chain-select" class="chain-select" title="Network hint">
+          <option value="auto">Auto</option>
+          <option value="ethereum">Ethereum</option>
+          <option value="bsc">BNB Chain</option>
+          <option value="base">Base</option>
+          <option value="arbitrum">Arbitrum</option>
+          <option value="solana">Solana</option>
+          <option value="tron">Tron</option>
+        </select>
+        <input type="text" id="token-input" placeholder="0x… contract address" autocomplete="off" /></div>
         <button type="button" id="scan-button" class="upgrade-btn">Проверить токен бесплатно</button>
       </div>
       <div id="results"></div>
