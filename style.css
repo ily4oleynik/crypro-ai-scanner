@@ -1917,3 +1917,28 @@ body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
   .desktop-only { display: revert !important; }
   .nav-burger { display: none !important; }
 }
+.token-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.35rem;
+  flex-wrap: wrap;
+}
+.chain-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(0, 212, 255, 0.12);
+  color: #7dd3fc;
+  border: 1px solid rgba(0, 212, 255, 0.28);
+}
+.chain-badge-warn {
+  background: rgba(255, 77, 106, 0.12);
+  color: #ff8a9a;
+  border-color: rgba(255, 77, 106, 0.4);
+}
