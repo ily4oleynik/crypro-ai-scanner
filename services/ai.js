@@ -5,7 +5,7 @@ class AIService {
     this.groqKey = process.env.GROQ_API_KEY || '';
     this.openRouterKey = process.env.OPENROUTER_API_KEY || '';
     this.groqURL = 'https://api.groq.com/openai/v1';
-    this.groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'];
+    this.groqModels = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
     this.groqModel = this.groqModels[0];
     this.orURL = 'https://openrouter.ai/api/v1';
     console.log('[AI] GROQ_API_KEY loaded:', this.groqKey ? 'YES' : 'NO');
@@ -57,29 +57,69 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
 Сеть: ${td.chainId || "unknown"}. Если BTC/Bitcoin не на native bitcoin — явно напиши: это НЕ нативный Bitcoin, а токен на другой сети (обёртка/мост). Не давай инвестсоветов. Без имён моделей.`;
   }
 
-  async callGroq(messages) {
-    const models = this.groqModels || [this.groqModel || 'llama-3.1-8b-instant'];
+    async callGroq(messages) {
+    // Groq free/dev (Aug 2026+): Llama IDs often 400 — prefer gpt-oss / qwen
+    const models = this.groqModels || [
+      'openai/gpt-oss-20b',
+      'openai/gpt-oss-120b',
+      'qwen/qwen3.6-27b'
+    ];
+    const clean = (Array.isArray(messages) ? messages : [])
+      .filter(function (m) {
+        return m && m.role && m.content != null && String(m.content).trim() !== '';
+      })
+      .map(function (m) {
+        return { role: m.role, content: String(m.content).slice(0, 12000) };
+      });
+    if (!clean.length) {
+      throw new Error('Empty messages for Groq');
+    }
     let lastErr = null;
     for (const model of models) {
       try {
         const response = await axios.post(
           this.groqURL + '/chat/completions',
-          { model: model, messages: messages, temperature: 0.5, max_tokens: 700 },
-          { headers: { Authorization: 'Bearer ' + this.groqKey, 'Content-Type': 'application/json' } }
+          {
+            model: model,
+            messages: clean,
+            temperature: 0.5,
+            max_tokens: 700
+          },
+          {
+            headers: {
+              Authorization: 'Bearer ' + this.groqKey,
+              'Content-Type': 'application/json'
+            },
+            timeout: 45000
+          }
         );
         this.groqModel = model;
-        let text = response.data.choices[0].message.content.trim();
-    text = text.replace(/^[A-Z][A-Z0-9_-]{2,20}:\s*/i, '');
-    text = text.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
+        let text = (response.data.choices[0].message.content || '').trim();
+        text = text.replace(/^[A-Z][A-Z0-9_-]{2,20}:\s*/i, '');
+        text = text.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
         return text.replace(/[#*_`]/g, '').replace(/\n{3,}/g, '\n\n');
       } catch (e) {
         lastErr = e;
         const status = e.response && e.response.status;
-        console.error('[AI] Groq', model, status || e.message);
-        if (status && status !== 404 && status !== 400) break;
+        const detail =
+          (e.response && e.response.data && (e.response.data.error && e.response.data.error.message)) ||
+          e.message;
+        console.error('[AI] Groq', model, status || '', detail);
+        // try next model on 400/404/decommissioned
+        if (status && status !== 400 && status !== 404 && status !== 403) {
+          break;
+        }
       }
     }
-    throw lastErr || new Error('Groq failed');
+    const msg =
+      (lastErr &&
+        lastErr.response &&
+        lastErr.response.data &&
+        lastErr.response.data.error &&
+        lastErr.response.data.error.message) ||
+      (lastErr && lastErr.message) ||
+      'Groq failed';
+    throw new Error(msg);
   }
 
   async callOpenRouter(prompt) {
