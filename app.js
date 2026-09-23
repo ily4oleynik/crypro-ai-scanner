@@ -824,7 +824,9 @@ async function startScan() {
     if (window._scanProgressTimer) clearInterval(window._scanProgressTimer);
     try {
       data = await enrichTokenMarket(data, address);
+      data = await enrichSecurity(data, address);
     } catch (enr) { console.warn(enr); }
+    window.__lastScanData = data;
     try {
       renderTokenPage(data);
     } catch (renderErr) {
@@ -1237,30 +1239,166 @@ function buildSecurityFlags(tok, risk, address) {
   ];
 }
 
-function securityFlagsHtml(tok, risk, address) {
-  const flags = buildSecurityFlags(tok, risk, address);
-  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
-  const title = lang === 'en' ? 'Security snapshot' : 'Снимок безопасности';
-  let html = '<div class="security-flags glass panel">';
-  html += '<div class="muted small" style="margin-bottom:0.6rem;">' + title + '</div>';
-  html += '<div class="security-flags-grid">';
-  flags.forEach(function (f) {
-    const icon = f.status === 'ok' ? '✓' : f.status === 'bad' ? '!' : '·';
-    html += '<div class="sec-flag sec-' + f.status + '">';
-    html += '<span class="sec-icon">' + icon + '</span>';
-    html += '<div><div class="sec-label">' + f.label + '</div><div class="sec-text">' + f.text + '</div></div>';
-    html += '</div>';
-  });
-  html += '</div></div>';
-  return html;
-}
-
 function scoreColor(score) {
   const s = Number(score) || 0;
   if (s >= 61) return '#ff4d6a';
   if (s >= 31) return '#f5a623';
   return '#00f0a0';
 }
+
+
+
+async function enrichSecurity(data, address) {
+  if (!data) return data;
+  const chain = (data.token && data.token.chainId) || detectChainFromAddress(address) || 'ethereum';
+  try {
+    const res = await fetch(
+      API_BASE + '/api/security/' + encodeURIComponent(chain) + '/' + encodeURIComponent(address)
+    );
+    if (!res.ok) throw new Error('security ' + res.status);
+    const body = await res.json();
+    if (body.success && body.security) {
+      data.security = body.security;
+      if (body.security.riskBonus && data.risk) {
+        data.risk.riskScore = Math.min(
+          99,
+          Number(data.risk.riskScore || 50) + Number(body.security.riskBonus || 0)
+        );
+        if (data.risk.riskScore >= 70) data.risk.riskLevel = 'HIGH';
+        else if (data.risk.riskScore >= 40) data.risk.riskLevel = 'MEDIUM';
+        else data.risk.riskLevel = 'LOW';
+      }
+    }
+  } catch (e) {
+    console.warn('[security]', e.message);
+    // client-side fallback attempt (may fail CORS)
+    try {
+      data.security = data.security || { available: false, flags: [] };
+    } catch (e2) {}
+  }
+  return data;
+}
+
+function securityFlagsHtml(tok, risk, address, security) {
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const title = lang === 'en' ? 'Security snapshot' : 'Снимок безопасности';
+  const source =
+    security && security.available
+      ? 'GoPlus'
+      : lang === 'en'
+        ? 'Heuristic'
+        : 'Эвристика';
+
+  let flags;
+  if (security && security.available && Array.isArray(security.flags) && security.flags.length) {
+    flags = security.flags;
+  } else {
+    flags = buildSecurityFlags(tok, risk, address);
+  }
+
+  let html = '<div class="security-flags glass panel">';
+  html +=
+    '<div class="sec-head"><span class="muted small">' +
+    title +
+    '</span><span class="muted small">Source: ' +
+    source +
+    '</span></div>';
+  html += '<div class="security-flags-grid">';
+  flags.forEach(function (f) {
+    const icon = f.status === 'ok' ? '✓' : f.status === 'bad' ? '!' : '·';
+    html += '<div class="sec-flag sec-' + (f.status || 'warn') + '">';
+    html += '<span class="sec-icon">' + icon + '</span>';
+    html +=
+      '<div><div class="sec-label">' +
+      (f.label || '') +
+      '</div><div class="sec-text">' +
+      (f.text || '') +
+      '</div></div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function shareReport() {
+  const data = window.__lastScanData;
+  if (!data || !data.token) {
+    alert('Scan a token first');
+    return;
+  }
+  const tok = data.token;
+  const r = data.risk || {};
+  const canvas = document.createElement('canvas');
+  canvas.width = 900;
+  canvas.height = 480;
+  const ctx = canvas.getContext('2d');
+  // background
+  ctx.fillStyle = '#0b0e11';
+  ctx.fillRect(0, 0, 900, 480);
+  // card
+  ctx.fillStyle = '#12161c';
+  roundRect(ctx, 40, 40, 820, 400, 20);
+  ctx.fill();
+  ctx.strokeStyle = '#1e2438';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // accent line
+  ctx.fillStyle = '#00f0a0';
+  ctx.fillRect(40, 40, 8, 400);
+
+  ctx.fillStyle = '#e4e4f0';
+  ctx.font = 'bold 28px Inter, system-ui, sans-serif';
+  ctx.fillText((tok.symbol || 'TOKEN') + '  ' + (tok.name || ''), 70, 100);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '16px Inter, system-ui, sans-serif';
+  const chain = tok.chainId ? String(tok.chainId).toUpperCase() : '';
+  ctx.fillText(chain + (tok.pairAddress ? '  ·  ' + String(tok.pairAddress).slice(0, 10) + '…' : ''), 70, 130);
+
+  const score = Number(r.riskScore) || 0;
+  const col = score >= 61 ? '#ff4d6a' : score >= 31 ? '#f5a623' : '#00f0a0';
+  ctx.fillStyle = col;
+  ctx.font = 'bold 64px Inter, system-ui, sans-serif';
+  ctx.fillText(String(score), 70, 220);
+  ctx.fillStyle = '#888';
+  ctx.font = '18px Inter, system-ui, sans-serif';
+  ctx.fillText('/ 100 risk', 70 + ctx.measureText(String(score)).width + 12, 220);
+
+  ctx.fillStyle = '#e4e4f0';
+  ctx.font = '20px Inter, system-ui, sans-serif';
+  ctx.fillText('Price  $' + (tok.price != null ? formatPrice(tok.price) : '—'), 70, 280);
+  ctx.fillText('Liquidity  ' + formatNum(tok.liquidity), 70, 315);
+  ctx.fillText('Volume 24h  ' + formatNum(tok.volume24h), 70, 350);
+
+  ctx.fillStyle = '#00f0a0';
+  ctx.font = 'bold 18px Inter, system-ui, sans-serif';
+  ctx.fillText('Crypto AI Scanner', 70, 400);
+  ctx.fillStyle = '#666';
+  ctx.font = '14px Inter, system-ui, sans-serif';
+  ctx.fillText('Not financial advice · DYOR', 250, 400);
+
+  canvas.toBlob(function (blob) {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (tok.symbol || 'token') + '-risk-report.png';
+    a.click();
+    URL.revokeObjectURL(url);
+    if (typeof showToast === 'function') showToast('Report saved as PNG');
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 
 
 function renderTokenPage(data) {
@@ -1290,9 +1428,10 @@ function renderTokenPage(data) {
     '<div class="risk-pill" style="border-color:' + scoreColor(r.riskScore) + ';color:' + scoreColor(r.riskScore) + '">Risk ' + safe(r.riskScore) + '/100</div>' +
     '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
     '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
+    '<button type="button" class="btn-sm share-btn" style="margin-top:0.35rem;" onclick="shareReport()">Share report</button>' +
     '</div></div>' +
     riskBreakdownHtml(tok, r, addr) +
-    securityFlagsHtml(tok, r, addr) +
+    securityFlagsHtml(tok, r, addr, data.security) +
     (reasons.length
       ? '<div class="glass panel risk-factors-panel"><div class="muted small">Risk factors</div><ul class="risk-factors-list">' +
         reasons.map(function (x) { var w = /⚠|NOT native|не нативный|wrapper|imposter|Network:/i.test(String(x)); return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>'; }).join('') + '</ul></div>'
