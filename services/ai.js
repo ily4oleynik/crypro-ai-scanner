@@ -38,19 +38,23 @@ class AIService {
   }
 
   buildPrompt(td, rr) {
-    return `Ты крипто-риск аналитик. Ответь на русском, без markdown, 180-280 слов.
-Токен: ${td.symbol || '?'} (${td.name || ''})
-Цена: $${td.price || 'n/a'}
-Риск-скор: ${rr.riskScore || '?'}/100 (${rr.riskLevel || ''})
-Ликвидность: $${td.liquidity || 0}
-Объём 24ч: $${td.volume24h || 0}
-Market Cap/FDV: $${td.marketCap || td.fdv || 'n/a'}
-Структура ответа:
-1) Короткий вердикт одной фразой
-2) Почему такой risk score (2-4 конкретные причины)
-3) Что проверить до покупки
-4) Чего не хватает в данных
-Не давай финансовых советов "покупай/продавай". DYOR.`;
+    const liq = td.liquidity != null ? Number(td.liquidity).toLocaleString('en-US') : 'n/a';
+    const vol = td.volume24h != null ? Number(td.volume24h).toLocaleString('en-US') : 'n/a';
+    const mcap = td.marketCap != null ? Number(td.marketCap).toLocaleString('en-US') : 'n/a';
+    return `Ты аналитик риска токенов. Ответь ТОЛЬКО на русском. Без markdown, без имени модели, без приветствий.
+Формат строго:
+1) Одна фраза-вердикт (до 12 слов)
+2) 2-3 коротких предложения: почему такой risk score, ликвидность, объём
+3) Одна фраза что проверить до покупки
+Данные:
+Токен: ${td.symbol || '?'} / ${td.name || ''}
+Цена: $${td.price || '?'}
+Risk score: ${rr.riskScore != null ? rr.riskScore : '?'}/100
+Liquidity USD: ${liq}
+Volume 24h: ${vol}
+Market cap: ${mcap}
+FDV: ${td.fdv != null ? td.fdv : 'n/a'}
+Сеть: ${td.chainId || "unknown"}. Если BTC/Bitcoin не на native bitcoin — явно напиши: это НЕ нативный Bitcoin, а токен на другой сети (обёртка/мост). Не давай инвестсоветов. Без имён моделей.`;
   }
 
   async callGroq(messages) {
@@ -65,6 +69,8 @@ Market Cap/FDV: $${td.marketCap || td.fdv || 'n/a'}
         );
         this.groqModel = model;
         let text = response.data.choices[0].message.content.trim();
+    text = text.replace(/^[A-Z][A-Z0-9_-]{2,20}:\s*/i, '');
+    text = text.replace(/\*\*/g, '').replace(/^#+\s*/gm, '');
         return text.replace(/[#*_`]/g, '').replace(/\n{3,}/g, '\n\n');
       } catch (e) {
         lastErr = e;
