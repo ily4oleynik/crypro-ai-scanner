@@ -45,7 +45,8 @@ class AIService {
 Формат строго:
 1) Одна фраза-вердикт (до 12 слов)
 2) 2-3 коротких предложения: почему такой risk score, ликвидность, объём
-3) Одна фраза что проверить до покупки
+3) 3) 2-3 конкретных риска (не пиши residual/always remains)
+4) Одна фраза: что проверить до покупки
 Данные:
 Токен: ${td.symbol || '?'} / ${td.name || ''}
 Цена: $${td.price || '?'}
@@ -153,10 +154,35 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
     const risks = [];
     const liq = Number(td.liquidity) || 0;
     const vol = Number(td.volume24h) || 0;
-    if (liq < 50000) risks.push('Thin liquidity — exits may slip heavily');
-    if (vol < 10000) risks.push('Low 24h volume — price discovery is weak');
-    if ((Number(rr.riskScore) || 0) >= 60) risks.push('Elevated composite risk score');
-    if (!risks.length) risks.push('Residual smart-contract and market risk always remains');
+    const fdv = Number(td.fdv || td.marketCap) || 0;
+    const chain = String(td.chainId || '').toLowerCase();
+    const sym = String(td.symbol || '').toUpperCase();
+    const name = String(td.name || '').toLowerCase();
+    if ((sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin') {
+      risks.push('Это не native Bitcoin — токен в сети ' + chain + ' (обёртка / мост / эмитент)');
+    }
+    if (liq > 0 && liq < 50000) {
+      risks.push('Тонкая ликвидность ($' + Math.round(liq).toLocaleString('ru-RU') + ') — высокий slippage');
+    } else if (liq > 0 && liq < 200000) {
+      risks.push('Средняя ликвидность — крупные выходы могут двигать цену');
+    }
+    // High FDV/liq is normal for liquid large-caps; only flag thin pools
+    if (fdv > 0 && liq > 0 && liq < 500000 && fdv / liq > 50) {
+      risks.push('FDV сильно выше ликвидности пула (ratio > 50×) — узкий выход');
+    }
+    if (vol > 0 && vol < 10000) {
+      risks.push('Низкий объём 24ч — слабое ценообразование');
+    }
+    if ((Number(rr.riskScore) || 0) >= 70) {
+      risks.push('Итоговый risk score в высокой зоне');
+    }
+    if (!risks.length) {
+      if (liq >= 500000) {
+        risks.push('По рынку явных red flags нет — сверьте ownership и mint в эксплорере');
+      } else {
+        risks.push('Мало публичных сигналов — проверьте контракт и холдеров до размера');
+      }
+    }
     return risks.slice(0, 4);
   }
 
@@ -164,10 +190,10 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
     const pos = [];
     const liq = Number(td.liquidity) || 0;
     const vol = Number(td.volume24h) || 0;
-    if (liq >= 100000) pos.push('Liquidity supports reasonable trade size');
-    if (vol >= 50000) pos.push('Active 24h trading volume');
-    if ((Number(rr.riskScore) || 100) < 45) pos.push('Composite score in a milder band');
-    if (!pos.length) pos.push('Pair data available from the market feed');
+    if (liq >= 100000) pos.push('Ликвидность достаточна для обычного размера сделки');
+    if (vol >= 50000) pos.push('Есть заметный объём торгов за 24ч');
+    if ((Number(rr.riskScore) || 100) < 45) pos.push('Итоговый score ближе к нижней зоне риска');
+    if (!pos.length) pos.push('Есть рыночные данные по паре');
     return pos.slice(0, 4);
   }
 
