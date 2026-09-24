@@ -2047,3 +2047,63 @@ body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
   border-color: rgba(0, 240, 160, 0.35) !important;
   color: var(--accent, #00f0a0) !important;
 }
+
+/* Scanner input — clean row */
+.search-bar.glass {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.25rem;
+}
+.scan-input-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: stretch;
+  width: 100%;
+}
+.chain-select {
+  flex: 0 0 132px;
+  min-width: 120px;
+  max-width: 140px;
+  background: var(--bg2, #141825);
+  color: var(--text, #e4e4f0);
+  border: 1px solid var(--border2, #2a2f45);
+  border-radius: 12px;
+  padding: 0 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.scan-input-row #token-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto !important;
+  margin: 0 !important;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+}
+.search-bar #scan-button,
+.search-bar .upgrade-btn {
+  width: 100%;
+  border-radius: 12px;
+  padding: 0.85rem 1.25rem;
+  font-weight: 600;
+}
+.risk-breakdown-note {
+  margin: 0 0 0.75rem;
+  line-height: 1.4;
+  font-size: 0.8rem;
+}
+@media (max-width: 600px) {
+  .scan-input-row {
+    flex-direction: column;
+  }
+  .chain-select {
+    flex: 1 1 auto;
+    max-width: none;
+    width: 100%;
+    min-height: 44px;
+  }
+}
