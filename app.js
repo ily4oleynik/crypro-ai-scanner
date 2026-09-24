@@ -1101,50 +1101,73 @@ function buildRiskBreakdown(tok, risk, address) {
   const chain = String(tok.chainId || detectChainFromAddress(address) || '').toLowerCase();
   const sym = String(tok.symbol || '').toUpperCase();
   const name = String(tok.name || '').toLowerCase();
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const en = lang === 'en';
 
-  // Sub-scores 0-100 where higher = more risk (aligned with overall risk score)
   let contract = 25;
   let liquidity = 25;
   let holders = 20;
   let market = 20;
+  let marketHint = en ? 'FDV vs pool liquidity' : 'FDV к ликвидности пула';
 
-  // Liquidity risk
+  // Liquidity — absolute depth
   if (liq <= 0) liquidity = 85;
   else if (liq < 10000) liquidity = 75;
   else if (liq < 50000) liquidity = 55;
   else if (liq < 200000) liquidity = 35;
-  else if (liq < 1000000) liquidity = 20;
-  else liquidity = 10;
+  else if (liq < 1000000) liquidity = 18;
+  else liquidity = 8;
 
-  // Market / FDV vs liq
+  // Market = concentration / exit friction on THIS pool, NOT "token is scam"
+  // High FDV/liq is normal for blue-chips (LINK, UNI) when pair liquidity is only a slice of total market
   if (fdv > 0 && liq > 0) {
     const ratio = fdv / liq;
-    if (ratio > 100) market = 70;
-    else if (ratio > 50) market = 55;
-    else if (ratio > 20) market = 40;
-    else market = 20;
+    const ratioLabel = ratio >= 1000 ? (ratio / 1000).toFixed(1) + 'k×' : Math.round(ratio) + '×';
+    marketHint = en
+      ? 'FDV/pool ' + ratioLabel + (liq >= 1e6 ? ' · normal for large caps' : '')
+      : 'FDV/пул ' + ratioLabel + (liq >= 1e6 ? ' · нормально для large-cap' : '');
+    if (liq >= 1000000) {
+      // Deep pool: ratio alone is not a red flag
+      if (ratio > 500) market = 28;
+      else if (ratio > 100) market = 20;
+      else market = 12;
+    } else if (liq >= 200000) {
+      if (ratio > 200) market = 45;
+      else if (ratio > 50) market = 32;
+      else market = 18;
+    } else {
+      if (ratio > 100) market = 70;
+      else if (ratio > 50) market = 55;
+      else if (ratio > 20) market = 40;
+      else market = 25;
+    }
   }
-  if (vol > 0 && liq > 0) {
-    if (vol / liq < 0.02) market = Math.min(90, market + 15);
+  if (vol > 0 && liq > 0 && vol / liq < 0.02 && liq < 500000) {
+    market = Math.min(80, market + 12);
+    marketHint += en ? ' · low turnover' : ' · низкий оборот';
   }
 
-  // Contract / identity risk (heuristic without GoPlus)
   const isImposter =
-    (sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin' ||
-    (sym === 'ETH' && chain && chain !== 'ethereum') ||
+    ((sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin') ||
+    (sym === 'ETH' && chain && chain !== 'ethereum' && !/eth/.test(chain)) ||
     (sym === 'SOL' && chain && chain !== 'solana');
-  if (isImposter) contract = 80;
-  else if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(address || ''))) contract = 35; // TRC20 unknown
-  else if (mcap > 1e9 && liq > 1e6) contract = 12; // large liquid = lower contract heuristic
-  else if (mcap > 1e8) contract = 18;
-  else contract = 30;
+  if (isImposter) {
+    contract = 80;
+  } else if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(address || ''))) {
+    contract = 35;
+  } else if (mcap > 1e9 && liq > 1e6) {
+    contract = 12;
+  } else if (mcap > 1e8) {
+    contract = 18;
+  } else {
+    contract = 30;
+  }
 
-  // Holders unknown without on-chain → moderate, lower if huge mcap
-  if (mcap > 5e9) holders = 12;
-  else if (mcap > 5e8) holders = 18;
+  if (mcap > 5e9) holders = 10;
+  else if (mcap > 5e8) holders = 16;
   else holders = 28;
 
-  // Fit to overall score if provided
+  // Soft-align to overall score WITHOUT blowing up Market for liquid blue-chips
   const target = Number(risk.riskScore);
   if (isFinite(target) && target >= 0) {
     const avg = (contract + liquidity + holders + market) / 4;
@@ -1153,25 +1176,56 @@ function buildRiskBreakdown(tok, risk, address) {
       contract = Math.round(Math.min(95, Math.max(5, contract * k)));
       liquidity = Math.round(Math.min(95, Math.max(5, liquidity * k)));
       holders = Math.round(Math.min(95, Math.max(5, holders * k)));
-      market = Math.round(Math.min(95, Math.max(5, market * k)));
+      // Market: only mild pull toward target; never force >40 when pool is deep
+      let m2 = Math.round(market * (0.55 + 0.45 * Math.min(k, 1.4)));
+      if (liq >= 1000000) m2 = Math.min(m2, 35);
+      market = Math.round(Math.min(90, Math.max(8, m2)));
     }
   }
 
   return [
-    { key: 'contract', label: 'Contract', score: contract, hint: isImposter ? 'Name/network mismatch' : 'Heuristic (no full audit)' },
-    { key: 'liquidity', label: 'Liquidity', score: liquidity, hint: liq ? ('$' + (liq >= 1e6 ? (liq/1e6).toFixed(2)+'M' : (liq/1e3).toFixed(0)+'K')) : 'n/a' },
-    { key: 'holders', label: 'Holders', score: holders, hint: 'Limited without on-chain API' },
-    { key: 'market', label: 'Market', score: market, hint: fdv && liq ? 'FDV/liq ratio' : 'volume/liquidity' }
+    {
+      key: 'contract',
+      label: en ? 'Contract' : 'Контракт',
+      score: contract,
+      hint: isImposter
+        ? (en ? 'Name/network mismatch' : 'Имя не совпадает с сетью')
+        : (en ? 'Identity / proxy heuristic' : 'Идентичность / proxy')
+    },
+    {
+      key: 'liquidity',
+      label: en ? 'Liquidity' : 'Ликвидность',
+      score: liquidity,
+      hint: liq
+        ? (liq >= 1e6 ? '$' + (liq / 1e6).toFixed(2) + 'M' : '$' + (liq / 1e3).toFixed(0) + 'K')
+        : 'n/a'
+    },
+    {
+      key: 'holders',
+      label: en ? 'Holders' : 'Холдеры',
+      score: holders,
+      hint: en ? 'Limited without full on-chain' : 'Без полного on-chain'
+    },
+    {
+      key: 'market',
+      label: en ? 'Exit friction' : 'Выход из позиции',
+      score: market,
+      hint: marketHint
+    }
   ];
 }
 
 function riskBreakdownHtml(tok, risk, address) {
   const parts = buildRiskBreakdown(tok, risk, address);
   const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
-  const title = lang === 'en' ? 'Risk breakdown' : 'Разбивка риска';
-  const scale = lang === 'en' ? 'Higher bar = more risk in that area' : 'Чем выше полоса — тем выше риск в зоне';
+  const en = lang === 'en';
+  const title = en ? 'Risk breakdown' : 'Разбивка риска';
+  const scale = en
+    ? 'Bars = risk in that area (not a scam verdict). Exit friction ≠ token quality.'
+    : 'Полосы = риск в зоне (не «токен = скам»). «Выход» ≠ качество проекта.';
   let html = '<div class="risk-breakdown glass panel">';
-  html += '<div class="risk-breakdown-head"><span>' + title + '</span><span class="muted small">' + scale + '</span></div>';
+  html += '<div class="risk-breakdown-head"><span>' + title + '</span></div>';
+  html += '<p class="risk-breakdown-note muted small">' + scale + '</p>';
   parts.forEach(function (p) {
     const color = p.score >= 61 ? '#ff4d6a' : p.score >= 31 ? '#f5a623' : '#00f0a0';
     html += '<div class="risk-factor-row">';
@@ -1434,7 +1488,14 @@ function renderTokenPage(data) {
     securityFlagsHtml(tok, r, addr, data.security) +
     (reasons.length
       ? '<div class="glass panel risk-factors-panel"><div class="muted small">Risk factors</div><ul class="risk-factors-list">' +
-        reasons.map(function (x) { var w = /⚠|NOT native|не нативный|wrapper|imposter|Network:/i.test(String(x)); return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>'; }).join('') + '</ul></div>'
+        reasons.filter(function (x) {
+      var s = String(x || '');
+      if (/residual smart-contract|always remains|остаточный риск/i.test(s)) return false;
+      return s.trim().length > 0;
+    }).map(function (x) {
+      var w = /⚠|NOT native|не нативный|wrapper|imposter|Network:|honeypot|GoPlus/i.test(String(x));
+      return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>';
+    }).join('') + '</ul></div>'
       : '') +
     '<div class="metrics-grid">' +
     '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
