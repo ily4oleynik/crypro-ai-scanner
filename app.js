@@ -1846,34 +1846,98 @@ async function removeAlertItem(id) {
   loadAlerts();
 }
 
+let tgPollTimer = null;
+let tgPollUntil = 0;
+
+function stopTgPoll() {
+  if (tgPollTimer) {
+    clearInterval(tgPollTimer);
+    tgPollTimer = null;
+  }
+  tgPollUntil = 0;
+}
+
+function startTgLinkPoll() {
+  stopTgPoll();
+  tgPollUntil = Date.now() + 3 * 60 * 1000;
+  const wait = document.getElementById('tg-wait-msg');
+  if (wait) {
+    wait.style.display = 'block';
+    wait.textContent = 'Waiting for /start in the bot… (auto-checks every 4s, up to 3 min)';
+  }
+  tgPollTimer = setInterval(async function () {
+    if (Date.now() > tgPollUntil) {
+      stopTgPoll();
+      if (wait) {
+        wait.textContent = 'Still waiting. Open the bot, press Start, then click Connect again.';
+      }
+      return;
+    }
+    try {
+      const res = await fetch(API_BASE + '/api/telegram/status', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      const data = await res.json();
+      if (data.linked) {
+        stopTgPoll();
+        if (wait) {
+          wait.style.display = 'none';
+          wait.textContent = '';
+        }
+        const area = document.getElementById('tg-link-area');
+        if (area) area.style.display = 'none';
+        refreshTelegramStatus();
+        if (typeof showToast === 'function') showToast('Telegram connected');
+      }
+    } catch (e) {}
+  }, 4000);
+}
+
 async function refreshTelegramStatus() {
-  if (!token) return;
+  const st = document.getElementById('tg-status');
+  const btn = document.getElementById('tg-connect-btn');
+  if (!st || !btn) return;
+
+  if (!token || !user) {
+    st.textContent = 'Login to connect Telegram';
+    st.className = 'tg-status-badge';
+    st.style.color = '';
+    btn.textContent = 'Connect Telegram';
+    btn.onclick = function () {
+      openAuthModal('Sign in to connect Telegram');
+    };
+    return;
+  }
+
   try {
     const res = await fetch(API_BASE + '/api/telegram/status', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
-    const st = document.getElementById('tg-status');
-    const btn = document.getElementById('tg-connect-btn');
-    if (!st || !btn) return;
-    const cta = document.getElementById('tg-channel-cta');
-    if (cta) {
-      cta.innerHTML =
-        'Channels: <a class="link-more" href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">RU</a> · ' +
-        '<a class="link-more" href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">EN</a>';
-    }
     if (data.linked) {
-      st.textContent = 'Connected ✓';
-      st.style.color = '#00ffc8';
+      stopTgPoll();
+      st.textContent = 'Connected ✓ · alerts → @aicryptoscreenerbot';
+      st.className = 'tg-status-badge tg-status-on';
+      st.style.color = '#00f0a0';
       btn.textContent = 'Disconnect';
       btn.onclick = disconnectTelegram;
+      const area = document.getElementById('tg-link-area');
+      if (area) area.style.display = 'none';
+      const wait = document.getElementById('tg-wait-msg');
+      if (wait) {
+        wait.style.display = 'none';
+        wait.textContent = '';
+      }
     } else {
-      st.textContent = 'Not connected';
+      st.textContent = 'Not connected · bot for personal alerts';
+      st.className = 'tg-status-badge';
       st.style.color = '';
       btn.textContent = 'Connect Telegram';
       btn.onclick = connectTelegram;
     }
-  } catch (e) {}
+  } catch (e) {
+    st.textContent = 'Status unavailable';
+  }
 }
 
 async function connectTelegram() {
@@ -1888,9 +1952,12 @@ async function connectTelegram() {
     const area = document.getElementById('tg-link-area');
     if (area) area.style.display = 'block';
     const link = document.getElementById('tg-deep-link');
-    if (link) link.href = data.deepLink;
+    if (link) {
+      link.href = data.deepLink || ('https://t.me/aicryptoscreenerbot?start=' + data.code);
+    }
     const code = document.getElementById('tg-code');
     if (code) code.textContent = data.code;
+    startTgLinkPoll();
   } catch (e) {
     alert('Telegram link failed');
   }
@@ -1898,12 +1965,18 @@ async function connectTelegram() {
 
 async function disconnectTelegram() {
   try {
+    stopTgPoll();
     await fetch(API_BASE + '/api/telegram/link', {
       method: 'DELETE',
       headers: { Authorization: 'Bearer ' + token }
     });
     const area = document.getElementById('tg-link-area');
     if (area) area.style.display = 'none';
+    const wait = document.getElementById('tg-wait-msg');
+    if (wait) {
+      wait.style.display = 'none';
+      wait.textContent = '';
+    }
     refreshTelegramStatus();
   } catch (e) {
     alert('Error');
