@@ -270,27 +270,64 @@
 
     <section id="page-alerts" class="page" style="display:none">
       <h2 class="page-title">Alerts</h2>
-      <div class="glass panel-block">
-        <p id="tg-status">Telegram: not connected</p>
-        <p id="tg-channel-cta" class="muted small"></p>
-        <div class="tg-channel-links">
-          <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener" class="tg-chip">RU channel</a>
-          <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener" class="tg-chip">EN channel</a>
+      <p class="muted small" style="margin:-0.4rem 0 1rem">Personal alerts in the bot · public digests in channels</p>
+
+      <div class="glass panel-block tg-connect-panel">
+        <div class="tg-status-row">
+          <span id="tg-status" class="tg-status-badge">Telegram: not connected</span>
+          <button type="button" class="connect-btn" id="tg-connect-btn">Connect Telegram</button>
         </div>
-        <button type="button" class="connect-btn" id="tg-connect-btn" style="margin-top:0.75rem">Connect Telegram</button>
-        <div id="tg-link-area" style="display:none;margin-top:0.75rem">
-          <p>Code: <strong id="tg-code"></strong></p>
-          <a id="tg-deep-link" href="#" target="_blank" rel="noopener">Open bot</a>
+        <p id="tg-wait-msg" class="muted small" style="display:none;margin-top:0.5rem"></p>
+
+        <div id="tg-link-area" class="tg-link-box" style="display:none">
+          <p class="tg-steps-title">3 steps</p>
+          <ol class="tg-steps">
+            <li>Open the bot <strong>@aicryptoscreenerbot</strong></li>
+            <li>Press <strong>Start</strong> (code is already in the link)</li>
+            <li>Return here — status becomes <strong>Connected</strong></li>
+          </ol>
+          <p class="tg-code-line">Code: <strong id="tg-code"></strong></p>
+          <a id="tg-deep-link" class="upgrade-btn tg-open-bot" href="#" target="_blank" rel="noopener">Open bot &amp; Start</a>
+        </div>
+
+        <div class="tg-split">
+          <div>
+            <div class="muted small tg-label">Bot (personal alerts)</div>
+            <a href="https://t.me/aicryptoscreenerbot" target="_blank" rel="noopener" class="tg-chip">@aicryptoscreenerbot</a>
+          </div>
+          <div>
+            <div class="muted small tg-label">Channels (public feed)</div>
+            <div class="tg-channel-links">
+              <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener" class="tg-chip">RU · Crypto_AI_Scanner</a>
+              <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener" class="tg-chip">EN · crypto_ai_scanner_en</a>
+            </div>
+            <p id="tg-channel-cta" class="muted small" style="margin-top:0.35rem">News &amp; digests — not personal price alerts</p>
+          </div>
         </div>
       </div>
+
+      <div class="glass panel-block tg-demo-panel" style="margin-top:1rem">
+        <h3 class="tg-demo-title">Example alert in Telegram</h3>
+        <div class="tg-demo-bubble">
+          <div class="tg-demo-app">Crypto AI Scanner</div>
+          <p><strong>⚠ LINK price alert</strong></p>
+          <p>Price went <em>below</em> $12.50</p>
+          <p class="muted small">Current ≈ $11.80 · Risk 42/100</p>
+          <p class="muted small">Open report → Scanner</p>
+        </div>
+        <p class="muted small" style="margin-top:0.6rem">Premium: alerts to the bot when conditions hit. Channels = public posts only.</p>
+      </div>
+
       <div class="glass panel-block" style="margin-top:1rem">
         <h3>Create alert</h3>
         <div class="form-stack">
           <input type="text" id="alert-address" placeholder="0x address" />
-          <input type="text" id="alert-symbol" placeholder="Symbol" />
+          <input type="text" id="alert-symbol" placeholder="Symbol (e.g. LINK)" />
           <select id="alert-type">
             <option value="price_above">Price above</option>
             <option value="price_below">Price below</option>
+            <option value="risk_above">Risk score above</option>
+            <option value="liquidity_below">Liquidity below ($)</option>
           </select>
           <input type="number" id="alert-value" placeholder="Value" step="any" />
           <button type="button" class="upgrade-btn" id="alert-create">Create</button>
