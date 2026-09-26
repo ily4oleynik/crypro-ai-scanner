@@ -2187,3 +2187,49 @@ body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
 @media (max-width: 600px) {
   .tg-split { grid-template-columns: 1fr; }
 }
+
+/* High risk signals + buy checklist */
+.high-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.high-risk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 12px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.high-risk-card:hover {
+  border-color: rgba(255, 77, 106, 0.45);
+  transform: translateY(-1px);
+}
+.hr-score {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.buy-checklist {
+  margin-top: 1rem;
+  padding: 1rem 1.15rem;
+}
+.buy-checklist-list {
+  margin: 0.35rem 0 0 1.1rem;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.9rem;
+}
+.risk-scale-legend {
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+.sample-banner {
+  padding: 0.85rem 1rem;
+}
