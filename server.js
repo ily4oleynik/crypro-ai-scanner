@@ -400,7 +400,8 @@ app.get(
         confidence: ai.confidence,
         verdict: ai.verdict,
         risks: ai.risks || [],
-        positives: ai.positives || []
+        positives: ai.positives || [],
+        checklist: ai.checklist || []
       };
 
       const riskPayload = {
@@ -990,22 +991,141 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/ai/chat', authMiddleware, async (req, res) => {
-  if (getPlan(req.user) !== 'pro') {
+  const plan = getPlan(req.user);
+  if (plan !== 'pro' && plan !== 'premium') {
     return res.status(403).json({
       success: false,
-      error: 'AI-чат доступен только на тарифе Pro',
-      upsell: 'pro'
+      error: 'AI-чат доступен с Premium (лимит) и Pro',
+      upsell: 'premium'
     });
   }
   const { messages, context } = req.body;
   if (!messages || !Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ success: false, error: 'Нет сообщений' });
   }
+  // Premium: short context; Pro: fuller thread
+  const maxMsgs = plan === 'pro' ? 12 : 6;
   try {
-    const result = await aiService.chat(messages.slice(-12), context || {});
-    res.json({ success: true, reply: result.reply, demo: result.demo || false });
+    const result = await aiService.chat(messages.slice(-maxMsgs), {
+      ...(context || {}),
+      plan
+    });
+    res.json({
+      success: true,
+      reply: result.reply,
+      demo: result.demo || false,
+      plan,
+      limitNote: plan === 'premium' ? 'Premium: короткий контекст. Pro — длиннее диалог.' : null
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Ошибка AI' });
+  }
+});
+
+/** Explicit history save (also written on scan when logged in) */
+app.post('/api/history', authMiddleware, async (req, res) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ success: false, error: 'Войдите в аккаунт' });
+  }
+  try {
+    const body = req.body || {};
+    await store.addHistory(req.user, {
+      address: body.address || '',
+      symbol: body.symbol || '',
+      name: body.name || '',
+      price: body.price || 0,
+      riskScore: body.riskScore != null ? body.riskScore : body.risk_score,
+      plan: body.plan || getPlan(req.user)
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[history POST]', e.message);
+    res.status(500).json({ success: false, error: 'Не удалось сохранить историю' });
+  }
+});
+
+/** Public Premium sample report — no paywall demo */
+app.get('/api/sample/premium', async (req, res) => {
+  const address = '0x514910771AF9Ca656af840dff83E8264EcF986CA';
+  try {
+    const dexResponse = await axios.get(
+      `https://api.dexscreener.com/latest/dex/tokens/${address}`,
+      { timeout: 10000 }
+    );
+    const pair = dexResponse.data.pairs?.[0] || {};
+    const base = {
+      symbol: pair.baseToken?.symbol || 'LINK',
+      name: pair.baseToken?.name || 'Chainlink',
+      address: pair.baseToken?.address || address,
+      price: pair.priceUsd != null ? Number(pair.priceUsd) : 0,
+      liquidity: pair.liquidity?.usd != null ? Number(pair.liquidity.usd) : 0,
+      volume24h: pair.volume?.h24 != null ? Number(pair.volume.h24) : 0,
+      fdv: pair.fdv != null ? Number(pair.fdv) : 0,
+      marketCap:
+        pair.marketCap != null
+          ? Number(pair.marketCap)
+          : pair.fdv != null
+            ? Number(pair.fdv)
+            : 0,
+      pairAddress: pair.pairAddress || null,
+      chainId: pair.chainId || 'ethereum',
+      dexId: pair.dexId || null,
+      website: pair.info?.websites?.[0]?.url || 'https://chain.link',
+      twitter: 'https://twitter.com/chainlink',
+      telegram: null,
+      isVerified: true
+    };
+    let risk = computeRiskFromPair(pair, base);
+    let securityOnchain = null;
+    if (goplus) {
+      try {
+        securityOnchain = await goplus.fetchTokenSecurity(base.chainId, address);
+      } catch (e) {}
+    }
+    const ai = await aiService.analyzeToken(
+      base,
+      { riskScore: risk.riskScore, riskLevel: risk.riskLevel, reasons: risk.reasons || [] },
+      'premium'
+    );
+    res.json({
+      success: true,
+      sample: true,
+      plan: 'Premium',
+      token: base,
+      risk: {
+        riskScore: risk.riskScore,
+        riskLevel: risk.riskLevel,
+        confidence: ai.confidence || 75,
+        reasons: (risk.reasons || []).slice(0, 8)
+      },
+      ai: {
+        text: ai.text,
+        confidence: ai.confidence,
+        verdict: ai.verdict,
+        risks: ai.risks || [],
+        positives: ai.positives || []
+      },
+      security: securityOnchain || {
+        available: false,
+        contractVerified: true,
+        scamProbability: Math.min(25, Math.max(5, (risk.riskScore || 40) - 20))
+      },
+      projectLinks: {
+        website: base.website,
+        twitter: base.twitter,
+        telegram: base.telegram
+      },
+      checklist: [
+        'Сверить адрес контракта в официальных каналах проекта',
+        'Проверить mint / ownership в эксплорере',
+        'Оценить top holders и заблокированную LP',
+        'Сравнить ликвидность с размером планируемой сделки',
+        'Не путать одноимённые токены на разных сетях'
+      ]
+    });
+  } catch (e) {
+    console.error('[sample]', e.message);
+    res.status(500).json({ success: false, error: 'Sample unavailable' });
   }
 });
 
