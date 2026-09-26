@@ -1628,16 +1628,33 @@ async function enrichSecurity(data, address) {
 }
 
 function securityFlagsHtml(tok, risk, address, security) {
-  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
-  const title = lang === 'en' ? 'Security snapshot' : 'Снимок безопасности';
+  const tt = typeof t === 'function' ? t : function (k) { return k; };
+  const title = tt('report.securitySnap');
   const source =
-    security && security.available
-      ? 'GoPlus'
-      : lang === 'en'
-        ? 'Heuristic'
-        : 'Эвристика';
+    security && security.available ? tt('report.sourceGoplus') : tt('report.sourceHeuristic');
 
-  const flags = buildSecurityFlags(tok, risk, address, security);
+  let flags = buildSecurityFlags(tok, risk, address, security);
+  // Localize known flag labels by id
+  const labelKey = {
+    network: 'sec.network',
+    identity: 'sec.identity',
+    liquidity: 'sec.liquidity',
+    verified: 'sec.verified',
+    honeypot: 'sec.honeypot',
+    tax: 'sec.tax',
+    mint: 'sec.mint',
+    lp: 'sec.lp',
+    holders: 'sec.holders',
+    blacklist: 'sec.blacklist',
+    proxy: 'sec.proxy',
+    trading: 'sec.trading',
+    ownership: 'sec.mint'
+  };
+  flags = flags.map(function (f) {
+    const k = labelKey[f.id];
+    if (k) return Object.assign({}, f, { label: tt(k) });
+    return f;
+  });
 
   let html = '<div class="security-flags glass panel">';
   html +=
@@ -1744,6 +1761,30 @@ function roundRect(ctx, x, y, w, h, r) {
 
 
 
+function localizeRiskReason(x) {
+  const s = String(x || '');
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  if (lang === 'en') {
+    return s
+      .replace(/Сеть:/gi, 'Network:')
+      .replace(/ликвидность/gi, 'liquidity')
+      .replace(/объём/gi, 'volume');
+  }
+  // RU: map common EN backend reasons
+  return s
+    .replace(/^Network:\s*/i, 'Сеть: ')
+    .replace(/FDV is much higher than liquidity[^.]*\.?/i, 'FDV сильно выше ликвидности — риск выхода при крупной сделке')
+    .replace(/exit risk if you need size/gi, 'сложно выйти крупным объёмом')
+    .replace(/GoPlus:\s*honeypot flag/i, 'GoPlus: флаг honeypot')
+    .replace(/GoPlus:\s*mintable/i, 'GoPlus: возможен mint')
+    .replace(/GoPlus:\s*source not verified/i, 'GoPlus: код не верифицирован')
+    .replace(/GoPlus:\s*high sell tax/i, 'GoPlus: высокий sell tax')
+    .replace(/Very low liquidity/i, 'Очень низкая ликвидность')
+    .replace(/Thin liquidity/i, 'Тонкая ликвидность')
+    .replace(/Low volume/i, 'Низкий объём')
+    .replace(/FDV >> liquidity/i, 'FDV сильно выше ликвидности');
+}
+
 function renderTokenPage(data) {
   const tok = data.token || {};
   const r = data.risk || {};
@@ -1753,6 +1794,7 @@ function renderTokenPage(data) {
   const addr = lastScannedToken?.address || '';
   const adv = data.advanced || {};
   const reasons = Array.isArray(r.reasons) ? r.reasons : [];
+  const tt = typeof t === 'function' ? t : function (k) { return k; };
 
   lastPairMeta = {
     pairAddress: tok.pairAddress || lastPairMeta?.pairAddress || null,
@@ -1770,32 +1812,32 @@ function renderTokenPage(data) {
     '<div class="token-right">' +
     '<div class="risk-pill" style="border-color:' + scoreColor(r.riskScore) + ';color:' + scoreColor(r.riskScore) + '">Risk ' + safe(r.riskScore) + '/100</div>' +
     '<div class="plan-badge" style="display:inline-block;margin-top:0.4rem;">' + safe(data.plan) + '</div>' +
-    '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">+ Watchlist</button>' +
-    '<button type="button" class="btn-sm share-btn" style="margin-top:0.35rem;" onclick="shareReport()">Share report</button>' +
+    '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">' + tt('btn.watchlistAdd') + '</button>' +
+    '<button type="button" class="btn-sm share-btn" style="margin-top:0.35rem;" onclick="shareReport()">' + tt('btn.share') + '</button>' +
     '</div></div>' +
     riskBreakdownHtml(tok, r, addr) +
     securityFlagsHtml(tok, r, addr, data.security) +
     (reasons.length
-      ? '<div class="glass panel risk-factors-panel"><div class="muted small">Risk factors</div><ul class="risk-factors-list">' +
+      ? '<div class="glass panel risk-factors-panel"><div class="muted small">' + tt('report.riskFactors') + '</div><ul class="risk-factors-list">' +
         reasons.filter(function (x) {
       var s = String(x || '');
       if (/residual smart-contract|always remains|остаточный риск/i.test(s)) return false;
       return s.trim().length > 0;
     }).map(function (x) {
       var w = /⚠|NOT native|не нативный|wrapper|imposter|Network:|honeypot|GoPlus/i.test(String(x));
-      return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + x + '</li>';
+      return '<li class="' + (w ? 'risk-reason-warn' : '') + '">' + localizeRiskReason(x) + '</li>';
     }).join('') + '</ul></div>'
       : '') +
     '<div class="metrics-grid">' +
-    '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">FDV</div><div class="metric-value">' + formatNum(tok.fdv) + '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">Volume 24h</div><div class="metric-value">' + formatNum(tok.volume24h) + '</div></div>' +
-    '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">' + formatNum(tok.liquidity) + '</div></div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">' + tt('report.marketCap') + '</div><div class="metric-value">' + formatNum(tok.marketCap || tok.fdv) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">' + tt('report.fdv') + '</div><div class="metric-value">' + formatNum(tok.fdv) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">' + tt('report.volume') + '</div><div class="metric-value">' + formatNum(tok.volume24h) + '</div></div>' +
+    '<div class="metric-card glass"><div class="metric-label">' + tt('report.liquidity') + '</div><div class="metric-value">' + formatNum(tok.liquidity) + '</div></div></div>' +
     '<div class="tabs">' +
-    '<button type="button" class="tab active" data-tab="overview">Overview</button>' +
-    '<button type="button" class="tab" data-tab="security">Security</button>' +
-    '<button type="button" class="tab" data-tab="ai">AI</button>' +
-    '<button type="button" class="tab" data-tab="links">Links</button></div>' +
+    '<button type="button" class="tab active" data-tab="overview">' + tt('report.tabOverview') + '</button>' +
+    '<button type="button" class="tab" data-tab="security">' + tt('report.tabSecurity') + '</button>' +
+    '<button type="button" class="tab" data-tab="ai">' + tt('report.tabAi') + '</button>' +
+    '<button type="button" class="tab" data-tab="links">' + tt('report.tabLinks') + '</button></div>' +
     '<div class="tab-content">' +
     '<div class="tab-pane active" id="overview">' +
     (isPrem
@@ -1806,11 +1848,11 @@ function renderTokenPage(data) {
         '<button type="button" class="tf-btn" data-tf="1W">1W</button></div>' +
         '<div id="candle-chart" class="candle-chart"></div></div>'
       : '<div class="glass panel" style="margin-bottom:1rem;">' +
-        '<div class="muted small" style="margin-bottom:0.5rem;">Risk scale</div>' +
+        '<div class="muted small" style="margin-bottom:0.5rem;">' + tt('report.riskScale') + '</div>' +
         riskBarHtml(r.riskScore) +
         aiOverviewHtml(ai, r) +
-        '<p class="muted small" style="margin-top:0.75rem;">Charts and deep security checks on Premium.</p>' +
-        '<button type="button" class="connect-btn" style="margin-top:0.5rem;" onclick="openPricing(\'premium\')">See Premium report</button></div>') +
+        '<p class="muted small" style="margin-top:0.75rem;">' + tt('report.freeCharts') + '</p>' +
+        '<button type="button" class="connect-btn" style="margin-top:0.5rem;" onclick="openPricing(\'premium\')">' + tt('btn.seePremium') + '</button></div>') +
     (isPro
       ? '<div class="advanced-grid">' +
         '<div class="metric-card glass"><div class="metric-label">Whale</div><div class="metric-value">' + safe(adv.whaleConcentration) + '</div></div>' +
@@ -2549,19 +2591,11 @@ function chainBadgeHtml(tok, address) {
 function renderScannerEmpty() {
   const results = document.getElementById('results');
   if (!results || results.innerHTML.trim()) return;
-  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
-  const title =
-    lang === 'en'
-      ? 'Paste a contract address or try an example:'
-      : 'Вставьте адрес контракта или выберите пример:';
-  const sub =
-    lang === 'en'
-      ? 'Free: risk score · honeypot/tax/mint flags · short AI. Source: DexScreener + GoPlus.'
-      : 'Free: risk score · honeypot/tax/mint · короткий AI. Источник: DexScreener + GoPlus.';
+  const tt = typeof t === 'function' ? t : function (k) { return k; };
   results.innerHTML =
     '<div class="scanner-empty glass">' +
     '<p class="muted" style="margin-bottom:0.85rem;">' +
-    title +
+    tt('scanner.examplesTitle') +
     '</p>' +
     '<div class="home-chip-row">' +
     '<button type="button" class="home-chip example-token" data-addr="0x514910771AF9Ca656af840dff83E8264EcF986CA">LINK</button>' +
@@ -2570,9 +2604,11 @@ function renderScannerEmpty() {
     '<button type="button" class="home-chip example-token" data-addr="0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984">UNI</button>' +
     '</div>' +
     '<p class="muted small" style="margin-top:0.9rem;text-align:center;">' +
-    sub +
+    tt('scanner.examplesSub') +
     '</p>' +
-    '<p class="muted small" style="margin-top:0.4rem;text-align:center;"><a href="/methodology.html" style="color:var(--accent,#00f0a0)">How risk score works</a></p>' +
+    '<p class="muted small" style="margin-top:0.4rem;text-align:center;"><a href="/methodology.html" style="color:var(--accent,#00f0a0)">' +
+    tt('scanner.howRisk') +
+    '</a></p>' +
     '</div>';
   results.querySelectorAll('.example-token').forEach((btn) => {
     btn.addEventListener('click', function () {
