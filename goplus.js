@@ -102,6 +102,29 @@ function normalizeSecurity(raw, chainId) {
     top10Pct = Math.round(top10Pct * 10) / 10;
   }
 
+  // LP lock / burn from lp_holders if present
+  let lpLockedPct = null;
+  let lpBurned = false;
+  if (Array.isArray(raw.lp_holders) && raw.lp_holders.length) {
+    let locked = 0;
+    let burned = 0;
+    raw.lp_holders.forEach((h) => {
+      const p = Number(h.percent) || 0;
+      const pctVal = p <= 1 ? p * 100 : p;
+      const addr = String(h.address || '').toLowerCase();
+      const isBurn =
+        addr.includes('dead') ||
+        addr === '0x0000000000000000000000000000000000000000' ||
+        addr === '0x000000000000000000000000000000000000dead';
+      if (isBurn || h.is_locked === true || h.is_locked === 1 || h.is_locked === '1') {
+        locked += pctVal;
+        if (isBurn) burned += pctVal;
+      }
+    });
+    if (locked > 0) lpLockedPct = Math.round(Math.min(100, locked) * 10) / 10;
+    lpBurned = burned >= 50;
+  }
+
   const flags = [
     {
       id: 'verified',
@@ -205,17 +228,36 @@ function normalizeSecurity(raw, chainId) {
           : top10Pct != null
             ? `Top10 ~${top10Pct}%`
             : 'Holder data limited'
+    },
+    {
+      id: 'lp',
+      label: 'LP lock / burn',
+      status:
+        lpBurned || (lpLockedPct != null && lpLockedPct >= 80)
+          ? 'ok'
+          : lpLockedPct != null && lpLockedPct >= 30
+            ? 'warn'
+            : lpLockedPct != null
+              ? 'bad'
+              : 'warn',
+      text: lpBurned
+        ? 'Majority LP burned'
+        : lpLockedPct != null
+          ? `~${lpLockedPct}% LP locked/burned`
+          : 'LP lock unknown — check explorer'
     }
   ];
 
   // Risk contribution from on-chain
   let riskBonus = 0;
   if (isHoneypot) riskBonus += 35;
+  if (cannotSellAll) riskBonus += 20;
   if (isMintable) riskBonus += 12;
   if (hiddenOwner || canTakeBack) riskBonus += 10;
   if (isOpenSource === false) riskBonus += 8;
   if (sellTax != null && sellTax > 10) riskBonus += 15;
   if (top10Pct != null && top10Pct > 70) riskBonus += 12;
+  if (lpLockedPct != null && lpLockedPct < 20) riskBonus += 8;
 
   return {
     available: true,
@@ -229,10 +271,13 @@ function normalizeSecurity(raw, chainId) {
       isMintable,
       renounced,
       isHoneypot,
+      cannotSellAll,
       buyTax,
       sellTax,
       holderCount,
       top10Pct,
+      lpLockedPct,
+      lpBurned,
       owner: raw.owner_address || null,
       creator: raw.creator_address || null
     },
