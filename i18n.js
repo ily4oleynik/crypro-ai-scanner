@@ -21,7 +21,7 @@ const I18N = {
 
     'hero.badge': 'AI · On-chain риск',
     'hero.title': 'Не влетай в скам. Проверь токен за 10 секунд',
-    'hero.sub': 'Риск смарт-контракта + AI-вердикт + алерты — до покупки, не после rug.',
+    'hero.sub': 'Риск смарт-контракта + AI-вердикт + алерты — выявляем риски до входа. Не гарантия прибыли и не совет покупать.',
     'hero.proof': 'Сделано для тех, кто уже обжигался на скамах',
     'hero.cta': 'Сканировать бесплатно',
     'hero.example': 'Пример: LINK',
@@ -127,7 +127,7 @@ const I18N = {
     'footer.methodology': 'Как считается risk',
     'footer.privacy': 'Конфиденциальность',
     'footer.terms': 'Условия',
-    'footer.payments': 'Оплата скоро · демо-тарифы после входа',
+    'footer.payments': 'Оплата скоро. После входа можно демо-переключить тариф и посмотреть Premium-отчёт.',
 
     'welcome.title': 'Добро пожаловать',
     'welcome.text': '5 бесплатных сканов в день. Вставьте адрес или откройте пример LINK.',
@@ -155,7 +155,7 @@ const I18N = {
 
     'hero.badge': 'Institutional AI · On-chain risk',
     'hero.title': 'Check a token in seconds — before you buy',
-    'hero.sub': 'Smart-contract risk + AI verdict + alerts — so you do not lose money on the next rug.',
+    'hero.sub': 'Smart-contract risk + AI verdict + alerts — we surface risks before entry. Not financial advice and not a guarantee.',
     'hero.proof': 'Built for people who already got burned by scams',
     'hero.cta': 'Scan free',
     'hero.example': 'Example: LINK',
@@ -261,7 +261,7 @@ const I18N = {
     'footer.methodology': 'How risk works',
     'footer.privacy': 'Privacy Policy',
     'footer.terms': 'Terms of Use',
-    'footer.payments': 'Payments coming soon · Demo plans after login',
+    'footer.payments': 'Payments coming soon. After login you can demo-switch plans and open a Premium sample.',
 
     'welcome.title': 'Welcome',
     'welcome.text': '5 free scans per day. Paste an address or try the LINK example.',
