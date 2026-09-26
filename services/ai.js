@@ -11,11 +11,12 @@ class AIService {
     console.log('[AI] GROQ_API_KEY loaded:', this.groqKey ? 'YES' : 'NO');
   }
 
-  async analyzeToken(tokenData, riskReport) {
+  async analyzeToken(tokenData, riskReport, plan) {
     const td = tokenData || {};
     const rr = riskReport || {};
+    const p = String(plan || 'free').toLowerCase();
     try {
-      const prompt = this.buildPrompt(td, rr);
+      const prompt = this.buildPrompt(td, rr, p);
       let text = null;
       if (this.groqKey) {
         text = await this.callGroq([{ role: 'user', content: prompt }]);
@@ -23,12 +24,17 @@ class AIService {
         text = await this.callOpenRouter(prompt);
       }
       if (text) {
+        text = String(text)
+          .replace(/residual risk always remains/gi, '')
+          .replace(/остаточный риск всегда остаётся/gi, '')
+          .trim();
         return {
           text,
-          confidence: 78,
+          confidence: p === 'free' ? 68 : 82,
           risks: this.pickRisks(td, rr),
           positives: this.pickPositives(td, rr),
-          verdict: this.verdictFromScore(rr.riskScore)
+          verdict: this.verdictFromScore(rr.riskScore),
+          checklist: this.buyChecklist(td, rr)
         };
       }
     } catch (e) {
@@ -37,25 +43,51 @@ class AIService {
     return this.generateFallbackAnalysis(td, rr);
   }
 
-  buildPrompt(td, rr) {
+  buyChecklist(td, rr) {
+    const chain = String(td.chainId || 'unknown');
+    const liq = Number(td.liquidity) || 0;
+    const items = [
+      'Сверь адрес контракта с официальным сайтом / docs проекта',
+      'Открой эксплорер сети ' + chain + ': mint authority и ownership',
+      'Посмотри top holders и не заблокирована ли LP',
+      liq < 100000
+        ? 'Ликвидность низкая — оцени slippage на свой размер позиции'
+        : 'Сравни размер сделки с глубиной пула (liq ' +
+          Math.round(liq).toLocaleString('en-US') +
+          ' USD)',
+      'Убедись, что тикер не копирует blue-chip на другой сети'
+    ];
+    if ((Number(rr.riskScore) || 0) >= 60) {
+      items.unshift('Score высокий — не входи крупно без on-chain проверки');
+    }
+    return items.slice(0, 5);
+  }
+
+  buildPrompt(td, rr, plan) {
     const liq = td.liquidity != null ? Number(td.liquidity).toLocaleString('en-US') : 'n/a';
     const vol = td.volume24h != null ? Number(td.volume24h).toLocaleString('en-US') : 'n/a';
     const mcap = td.marketCap != null ? Number(td.marketCap).toLocaleString('en-US') : 'n/a';
+    const depth =
+      plan === 'premium' || plan === 'pro'
+        ? 'Дай 2–3 конкретных findings по рынку (liq vs объём, FDV/пул если уместно). Без воды.'
+        : 'Коротко: вердикт + 2 предложения + 2 риска.';
     return `Ты аналитик риска токенов. Ответь ТОЛЬКО на русском. Без markdown, без имени модели, без приветствий.
-Формат строго:
+Запрещено писать: residual risk always remains, "риск всегда остаётся" как единственный пункт.
+Формат:
 1) Одна фраза-вердикт (до 12 слов)
-2) 2-3 коротких предложения: почему такой risk score, ликвидность, объём
-3) 3) 2-3 конкретных риска (не пиши residual/always remains)
+2) 2-3 коротких предложения: почему score ${rr.riskScore != null ? rr.riskScore : '?'}/100, ликвидность, объём
+3) 2-3 конкретных риска по данным (не общие фразы)
 4) Одна фраза: что проверить до покупки
+${depth}
 Данные:
 Токен: ${td.symbol || '?'} / ${td.name || ''}
 Цена: $${td.price || '?'}
-Risk score: ${rr.riskScore != null ? rr.riskScore : '?'}/100
+Risk score: ${rr.riskScore != null ? rr.riskScore : '?'}/100 (0=низкий риск, 100=высокий)
 Liquidity USD: ${liq}
 Volume 24h: ${vol}
 Market cap: ${mcap}
 FDV: ${td.fdv != null ? td.fdv : 'n/a'}
-Сеть: ${td.chainId || "unknown"}. Если BTC/Bitcoin не на native bitcoin — явно напиши: это НЕ нативный Bitcoin, а токен на другой сети (обёртка/мост). Не давай инвестсоветов. Без имён моделей.`;
+Сеть: ${td.chainId || 'unknown'}. Если символ BTC/Bitcoin не на native bitcoin — явно: это НЕ нативный Bitcoin, а токен на другой сети. Не давай инвестсоветов.`;
   }
 
     async callGroq(messages) {
@@ -145,9 +177,9 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
 
   verdictFromScore(score) {
     const s = Number(score) || 50;
-    if (s >= 70) return 'High risk';
-    if (s >= 40) return 'Cautious OK';
-    return 'Lower risk';
+    if (s >= 70) return 'Высокий риск';
+    if (s >= 40) return 'Осторожно';
+    return 'Ниже среднего риска';
   }
 
   pickRisks(td, rr) {
@@ -229,7 +261,8 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
       confidence: 62,
       risks: this.pickRisks(td, rr),
       positives: this.pickPositives(td, rr),
-      verdict
+      verdict,
+      checklist: this.buyChecklist(td, rr)
     };
   }
 
