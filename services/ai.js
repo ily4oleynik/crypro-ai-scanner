@@ -268,32 +268,116 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
 
   async chat(messages, context) {
     context = context || {};
-    const last = (messages || []).filter(m => m.role === 'user').pop();
+    const last = (messages || []).filter((m) => m.role === 'user').pop();
     const lastText = last ? last.content : '';
+    const tok = context.token || {};
+    const risk = context.risk || {};
+    const sec = context.security || {};
+    const meta = sec.meta || {};
+
     if (!this.groqKey && !this.openRouterKey) {
       return {
-        reply:
-          'Демо-режим чата. Ключ API не найден.\nВы написали: «' +
-          lastText +
-          '»\nТокен: ' +
-          ((context.token && context.token.symbol) || 'не выбран') +
-          '\nДобавьте GROQ_API_KEY в env.',
+        reply: this.chatFallback(lastText, tok, risk, meta),
         demo: true
       };
     }
     try {
       const systemPrompt =
-        'Ты крипто-аналитик. Отвечай на русском коротко, без markdown. Не давай прямых финансовых советов. Токен: ' +
-        ((context.token && context.token.symbol) || 'n/a') +
-        ', Risk: ' +
-        ((context.risk && context.risk.riskScore) || '—');
-      const msgs = [{ role: 'system', content: systemPrompt }].concat((messages || []).slice(-10));
-      const reply = this.groqKey ? await this.callGroq(msgs) : await this.callOpenRouter(systemPrompt + '\n\n' + lastText);
+        'Ты AI-аналитик рисков токенов Crypto AI Scanner. Отвечай на русском, без markdown-разметки (** #).\n' +
+        'Структура ответа (обязательно, коротко):\n' +
+        '1) Based on current data — 5 строк: Contract / Liquidity / Holders / Whales / Trading с LOW|MEDIUM|HIGH\n' +
+        '2) My analysis — 2–4 предложения по фактам\n' +
+        '3) What would change my assessment — 1–2 конкретных условия (числа: liq, top10, tax)\n' +
+        'Запрещено: «это хороший вход», «покупай», «гарантированно безопасно». Не финансовый совет.\n' +
+        'Данные токена:\n' +
+        'Symbol: ' +
+        (tok.symbol || 'n/a') +
+        ' Name: ' +
+        (tok.name || '') +
+        '\n' +
+        'Chain: ' +
+        (tok.chainId || 'n/a') +
+        ' Price: $' +
+        (tok.price != null ? tok.price : 'n/a') +
+        '\n' +
+        'Risk score: ' +
+        (risk.riskScore != null ? risk.riskScore : '—') +
+        '/100 Level: ' +
+        (risk.riskLevel || '—') +
+        '\n' +
+        'Liquidity: ' +
+        (tok.liquidity != null ? tok.liquidity : 'n/a') +
+        ' Vol24h: ' +
+        (tok.volume24h != null ? tok.volume24h : 'n/a') +
+        ' FDV: ' +
+        (tok.fdv != null ? tok.fdv : 'n/a') +
+        '\n' +
+        'Honeypot: ' +
+        String(meta.isHoneypot) +
+        ' Mintable: ' +
+        String(meta.isMintable) +
+        ' Top10%: ' +
+        (meta.top10Pct != null ? meta.top10Pct : 'n/a') +
+        ' Sell tax: ' +
+        (meta.sellTax != null ? meta.sellTax : 'n/a') +
+        '\n' +
+        'Reasons: ' +
+        (Array.isArray(risk.reasons) ? risk.reasons.slice(0, 5).join('; ') : '');
+
+      const msgs = [{ role: 'system', content: systemPrompt }].concat(
+        (messages || []).slice(-10)
+      );
+      const reply = this.groqKey
+        ? await this.callGroq(msgs)
+        : await this.callOpenRouter(systemPrompt + '\n\nUser: ' + lastText);
       return { reply, demo: false };
     } catch (e) {
       console.error('AI chat error:', e.message);
-      return { reply: 'Ошибка AI: ' + e.message, demo: true };
+      return {
+        reply: this.chatFallback(lastText, tok, risk, meta) + '\n\n(Ошибка API: ' + e.message + ')',
+        demo: true
+      };
     }
+  }
+
+  chatFallback(lastText, tok, risk, meta) {
+    const score = Number(risk.riskScore) || 50;
+    const liq = Number(tok.liquidity) || 0;
+    const top = meta.top10Pct;
+    const band = (n) => (n <= 30 ? 'LOW' : n <= 60 ? 'MEDIUM' : 'HIGH');
+    const contract = meta.isHoneypot || meta.isMintable ? 75 : 30;
+    const liquidity = liq < 50000 ? 80 : liq < 200000 ? 50 : 25;
+    const holders = top != null && top >= 50 ? 75 : top != null && top >= 30 ? 45 : 30;
+    const trading = meta.sellTax != null && meta.sellTax > 10 ? 70 : 30;
+    return (
+      'Based on current data:\n' +
+      'Contract: ' +
+      band(contract) +
+      '\nLiquidity: ' +
+      band(liquidity) +
+      '\nHolders: ' +
+      band(holders) +
+      '\nWhales: ' +
+      band(holders) +
+      '\nTrading: ' +
+      band(trading) +
+      '\n\nMy analysis\n' +
+      (tok.symbol || 'Token') +
+      ' · risk ' +
+      score +
+      '/100. ' +
+      (meta.isHoneypot
+        ? 'Есть honeypot-флаг — продажа может быть ограничена. '
+        : '') +
+      (liq < 100000 ? 'Ликвидность ограничена для крупного размера. ' : '') +
+      (top != null && top >= 50 ? 'Высокая концентрация холдеров. ' : '') +
+      'Это разбор рисков, не рекомендация к сделке.\n\n' +
+      'What would change my assessment?\n' +
+      'Если ликвидность вырастет существенно и top-10 концентрация снизится (и исчезнут honeypot/mint flags), общий риск снизится.\n\n' +
+      'Вы спросили: «' +
+      (lastText || '') +
+      '»'
+    );
   }
 }
 
