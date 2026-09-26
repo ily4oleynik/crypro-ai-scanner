@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initBurger();
   initOnboarding();
+  loadPublicConfig();
   loadTicker();
   loadTrending();
   loadNews('all');
@@ -438,7 +439,72 @@ function openAuthModal(hintText) {
   if (modal) modal.style.display = 'flex';
   document.body.classList.add('modal-open');
   if (typeof applyTranslations === 'function') applyTranslations();
+  mountTelegramLoginWidget();
 }
+
+let tgBotUsername = localStorage.getItem('tg_bot_username') || 'aicryptoscreenerbot';
+
+async function loadPublicConfig() {
+  try {
+    const res = await fetch(API_BASE + '/api/config/public');
+    const data = await res.json();
+    if (data.success && data.telegramBotUsername) {
+      tgBotUsername = data.telegramBotUsername;
+      localStorage.setItem('tg_bot_username', tgBotUsername);
+    }
+  } catch (e) {}
+}
+
+function mountTelegramLoginWidget() {
+  const box = document.getElementById('tg-login-widget');
+  if (!box) return;
+  box.innerHTML = '';
+  const bot = tgBotUsername || 'aicryptoscreenerbot';
+  const s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://telegram.org/js/telegram-widget.js?22';
+  s.setAttribute('data-telegram-login', bot);
+  s.setAttribute('data-size', 'large');
+  s.setAttribute('data-radius', '10');
+  s.setAttribute('data-onauth', 'onTelegramAuth(user)');
+  s.setAttribute('data-request-access', 'write');
+  box.appendChild(s);
+}
+
+async function onTelegramAuth(tgUser) {
+  const errEl = document.getElementById('auth-error');
+  const showErr = function (msg) {
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    } else alert(msg);
+  };
+  try {
+    const res = await fetch(API_BASE + '/api/auth/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tgUser)
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showErr(data.error || 'Telegram login failed');
+      return;
+    }
+    token = data.token;
+    localStorage.setItem('token', token);
+    user = data.user;
+    currentPlan = (user && user.plan) || 'free';
+    updateAuthUI();
+    closeAuthModal();
+    refreshUsage();
+    if (typeof refreshAccountPage === 'function') refreshAccountPage();
+    if (typeof loadHomeWidgets === 'function') loadHomeWidgets();
+    if (typeof showToast === 'function') showToast('Signed in via Telegram');
+  } catch (e) {
+    showErr('Network error');
+  }
+}
+window.onTelegramAuth = onTelegramAuth;
 
 function closeAuthModal() {
   const modal = document.getElementById('auth-modal');
