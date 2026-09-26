@@ -60,6 +60,35 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.pricing-pick').forEach(btn => {
     btn.addEventListener('click', () => selectPlan(btn.dataset.plan));
   });
+  let waitlistPlan = 'premium';
+  document.querySelectorAll('.waitlist-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      waitlistPlan = btn.dataset.plan || 'premium';
+      const box = document.getElementById('waitlist-box');
+      if (box) box.style.display = 'block';
+      const msg = document.getElementById('waitlist-msg');
+      if (msg) msg.textContent = '';
+    });
+  });
+  document.getElementById('waitlist-submit')?.addEventListener('click', async () => {
+    const email = document.getElementById('waitlist-email')?.value?.trim();
+    const msg = document.getElementById('waitlist-msg');
+    if (!email) {
+      if (msg) msg.textContent = 'Enter email';
+      return;
+    }
+    try {
+      const res = await fetch(API_BASE + '/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, plan: waitlistPlan })
+      });
+      const data = await res.json();
+      if (msg) msg.textContent = data.success ? data.message || 'OK' : data.error || 'Error';
+    } catch (e) {
+      if (msg) msg.textContent = 'Network error';
+    }
+  });
 
   document.querySelectorAll('.auth-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -2217,9 +2246,22 @@ function initAIChat(data) {
   }
   if (allowed) {
     section.style.display = 'block';
-    currentTokenContext = { token: data.token, risk: data.risk, plan: data.plan };
+    currentTokenContext = {
+      token: data.token,
+      risk: data.risk,
+      security: data.security,
+      plan: data.plan
+    };
     const msgs = document.getElementById('chat-messages');
-    if (msgs) msgs.innerHTML = '';
+    if (msgs) {
+      msgs.innerHTML = '';
+      const tip = document.createElement('div');
+      tip.className = 'muted small';
+      tip.style.marginBottom = '0.5rem';
+      tip.textContent =
+        'Try: «Стоит ли брать?» — ответ в формате Contract/Liquidity/Holders + what would change my assessment';
+      msgs.appendChild(tip);
+    }
     chatHistory = [];
   } else {
     section.style.display = 'none';
