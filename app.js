@@ -615,6 +615,62 @@ async function refreshAccountPage() {
 async function loadHomeWidgets() {
   loadHomeWatchlist();
   loadHomeHistory();
+  loadHighRiskSignals();
+}
+
+async function loadHighRiskSignals() {
+  const box = document.getElementById('high-risk-grid');
+  if (!box) return;
+  try {
+    const res = await fetch(API_BASE + '/api/trending');
+    const data = await res.json();
+    const list = (data.tokens || []).slice(0, 8);
+    if (!list.length) {
+      box.innerHTML = '<p class="muted small">No signals yet</p>';
+      return;
+    }
+    const scored = list
+      .map(function (t) {
+        const liq = Number(t.liquidity) || 0;
+        const vol = Number(t.volume24h) || 0;
+        let signal = 40;
+        if (liq > 0 && liq < 50000) signal += 25;
+        else if (liq < 150000) signal += 12;
+        if (vol > 0 && vol < 20000) signal += 15;
+        if (liq > 0 && vol / Math.max(liq, 1) > 2) signal += 10;
+        return Object.assign({}, t, { signal: Math.min(95, signal) });
+      })
+      .sort(function (a, b) {
+        return b.signal - a.signal;
+      })
+      .slice(0, 5);
+    box.innerHTML = scored
+      .map(function (t) {
+        const addr = String(t.address || '').replace(/'/g, '');
+        const col = t.signal >= 70 ? '#ff4d6a' : t.signal >= 50 ? '#f5a623' : '#00f0a0';
+        return (
+          '<button type="button" class="high-risk-card glass" onclick="rescan(\'' +
+          addr +
+          '\')">' +
+          '<strong>' +
+          (t.symbol || 'TOKEN') +
+          '</strong>' +
+          '<span class="hr-score" style="color:' +
+          col +
+          '">~' +
+          t.signal +
+          '</span>' +
+          '<span class="muted small">' +
+          (t.chainId || '') +
+          ' · liq ' +
+          formatNum(t.liquidity) +
+          '</span></button>'
+        );
+      })
+      .join('');
+  } catch (e) {
+    box.innerHTML = '<p class="muted small">Unavailable</p>';
+  }
 }
 
 async function loadHomeWatchlist() {
@@ -921,8 +977,101 @@ function riskBarHtml(score) {
   let color = '#00f0a0';
   if (s >= 70) color = '#ff4d6a';
   else if (s >= 40) color = '#f5a623';
-  return '<div class="risk-bar-wrap"><div class="risk-bar-track"><div class="risk-bar-fill" style="width:' + s + '%;background:' + color + '"></div></div>' +
-    '<div class="risk-bar-labels"><span>Low</span><span>Med</span><span>High</span></div></div>';
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const en = lang === 'en';
+  const legend = en
+    ? '0–30 lower risk · 30–70 caution · 70–100 high risk (not a buy/sell signal)'
+    : '0–30 ниже риска · 30–70 осторожно · 70–100 высокий риск (не сигнал купить/продать)';
+  return (
+    '<div class="risk-bar-wrap"><div class="risk-bar-track"><div class="risk-bar-fill" style="width:' +
+    s +
+    '%;background:' +
+    color +
+    '"></div></div>' +
+    '<div class="risk-bar-labels"><span>0</span><span>50</span><span>100</span></div>' +
+    '<p class="muted small risk-scale-legend">' +
+    legend +
+    '</p></div>'
+  );
+}
+
+function buyChecklistHtml(data) {
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const en = lang === 'en';
+  const title = en ? 'Before you buy' : 'Перед покупкой';
+  let items =
+    (data && data.checklist) ||
+    (data && data.ai && data.ai.checklist) ||
+    null;
+  if (!items || !items.length) {
+    const tok = (data && data.token) || {};
+    const chain = tok.chainId || 'unknown';
+    items = en
+      ? [
+          'Verify contract address on the official project site',
+          'Check mint / ownership on the ' + chain + ' explorer',
+          'Review top holders and LP lock',
+          'Size your trade vs pool liquidity',
+          'Watch for ticker clones on other networks'
+        ]
+      : [
+          'Сверь адрес контракта с официальным сайтом проекта',
+          'Проверь mint / ownership в эксплорере сети ' + chain,
+          'Посмотри top holders и lock LP',
+          'Сравни размер сделки с ликвидностью пула',
+          'Не путай одноимённые токены на других сетях'
+        ];
+  }
+  let html =
+    '<div class="glass panel buy-checklist"><div class="muted small" style="margin-bottom:0.45rem">' +
+    title +
+    '</div><ul class="buy-checklist-list">';
+  items.slice(0, 5).forEach(function (x) {
+    html += '<li>' + safe(x) + '</li>';
+  });
+  html += '</ul></div>';
+  return html;
+}
+
+function openDemoReport() {
+  showPage('scanner');
+  const results = document.getElementById('results');
+  if (results) results.innerHTML = '<div class="loading glass">Loading Premium sample…</div>';
+  fetch(API_BASE + '/api/sample/premium')
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (data) {
+      if (!data.success) {
+        if (results)
+          results.innerHTML =
+            '<div class="error-card glass">Sample unavailable. Try scanning LINK.</div>';
+        return;
+      }
+      lastScannedToken = {
+        address: data.token && data.token.address,
+        symbol: data.token && data.token.symbol,
+        name: data.token && data.token.name
+      };
+      lastPairMeta = {
+        pairAddress: data.token && data.token.pairAddress,
+        chainId: (data.token && data.token.chainId) || 'ethereum'
+      };
+      window.__lastScanData = data;
+      renderTokenPage(data);
+      if (results) {
+        results.insertAdjacentHTML(
+          'afterbegin',
+          '<div class="glass panel sample-banner" style="margin-bottom:1rem;border-color:rgba(0,240,160,0.35)">' +
+            '<strong>Sample Premium report</strong>' +
+            '<p class="muted small" style="margin:0.35rem 0 0">Демо без paywall — так выглядит полный разбор. Это не финансовый совет.</p></div>'
+        );
+      }
+    })
+    .catch(function () {
+      if (results)
+        results.innerHTML = '<div class="error-card glass">Could not load sample</div>';
+    });
 }
 
 function generateCandleAndVolumeData(currentPrice, timeframe) {
@@ -1560,9 +1709,10 @@ function renderTokenPage(data) {
         ai.positives.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
       : '') +
     '<div class="muted" style="margin-top:0.8rem;">Confidence: ' + safe(ai.confidence) + '%</div>' +
+    buyChecklistHtml(data) +
     (!isPrem
       ? '<div class="glass panel" style="margin-top:1rem;padding:1rem;border-color:rgba(0,240,160,0.25);">' +
-        '<p style="margin:0 0 0.5rem;font-size:0.9rem;">Free AI is a solid first pass. Premium adds contract findings, holder concentration and actionable recommendations.</p>' +
+        '<p style="margin:0 0 0.5rem;font-size:0.9rem;">Free AI — первый фильтр. Premium: график, security, алерты и чат с лимитом.</p>' +
         '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">See full AI report</button>' +
         '<button type="button" class="connect-btn" style="margin-left:0.5rem;" onclick="openDemoReport()">View sample Premium report</button></div>'
       : '') +
@@ -1608,10 +1758,22 @@ function renderTokenPage(data) {
 function initAIChat(data) {
   const section = document.getElementById('ai-chat-section');
   if (!section) return;
-  if (data.plan === 'Pro' || data.plan === 'Premium' || currentPlan === 'pro' || currentPlan === 'premium') {
+  const plan = String(
+    (data && data.plan) || currentPlan || (user && user.plan) || 'free'
+  ).toLowerCase();
+  const allowed = plan === 'pro' || plan === 'premium' || plan === 'Premium' || plan === 'Pro';
+  const title = section.querySelector('h3');
+  if (title) {
+    title.textContent =
+      plan === 'pro' || plan === 'Pro'
+        ? 'AI Chat (Pro)'
+        : 'AI Chat (Premium · limited)';
+  }
+  if (allowed) {
     section.style.display = 'block';
     currentTokenContext = { token: data.token, risk: data.risk, plan: data.plan };
-    document.getElementById('chat-messages').innerHTML = '';
+    const msgs = document.getElementById('chat-messages');
+    if (msgs) msgs.innerHTML = '';
     chatHistory = [];
   } else {
     section.style.display = 'none';
@@ -2033,36 +2195,50 @@ document.getElementById('footer-pricing')?.addEventListener('click', function (e
   else document.querySelector('.plan-btn[data-plan="premium"]')?.click();
 });
 
+function showExampleReport() {
+  openDemoReport();
+}
+
+/** Live Premium sample via API (LINK) — no paywall */
 function openDemoReport() {
-  let modal = document.getElementById('demo-report-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'demo-report-modal';
-    modal.className = 'pricing-modal';
-    modal.innerHTML =
-      '<div class="modal-content glass" style="max-width:560px;max-height:85vh;overflow-y:auto;">' +
-      '<button type="button" class="modal-close" id="demo-report-close">&times;</button>' +
-      '<h2 style="margin-bottom:0.5rem;">Sample Premium report</h2>' +
-      '<p class="muted small" style="margin-bottom:1rem;">Example of what a full analysis looks like (illustrative, not a live token).</p>' +
-      '<div class="risk-pill risk-medium" style="display:inline-block;margin-bottom:0.8rem;">Risk 38 / 100 · MEDIUM</div>' +
-      '<div class="metrics-grid" style="margin-bottom:1rem;">' +
-      '<div class="metric-card glass"><div class="metric-label">Market Cap</div><div class="metric-value">$4.2B</div></div>' +
-      '<div class="metric-card glass"><div class="metric-label">Liquidity</div><div class="metric-value">$48M</div></div>' +
-      '<div class="metric-card glass"><div class="metric-label">Holders</div><div class="metric-value">~680k</div></div>' +
-      '<div class="metric-card glass"><div class="metric-label">Top 10</div><div class="metric-value">22%</div></div></div>' +
-      '<h3 style="margin:0.5rem 0;">AI verdict: Cautious OK</h3>' +
-      '<p style="line-height:1.65;margin-bottom:0.8rem;">Liquidity is deep enough for mid-size orders. Contract is verified; no obvious mint/honeypot flags in the scanned pair. Concentration in the top wallets is moderate for a large-cap token. Volatility over 24h is within normal range for the sector.</p>' +
-      '<p style="line-height:1.65;margin-bottom:0.8rem;"><strong>Why the score is not lower:</strong> residual smart-contract and oracle risk always remains; large holder moves can still move the book. This is risk scoring, not investment advice.</p>' +
-      '<div class="muted small">Key risks</div><ul style="margin:0.3rem 0 0.8rem 1.1rem;color:var(--muted);"><li>Market-wide drawdowns</li><li>Bridge / L2 dependency if applicable</li><li>Always DYOR on latest contract changes</li></ul>' +
-      '<div class="muted small">Positive signals</div><ul style="margin:0.3rem 0 1rem 1.1rem;color:var(--muted);"><li>Verified contract</li><li>Healthy 24h volume vs liquidity</li><li>No honeypot heuristics triggered</li></ul>' +
-      '<button type="button" class="upgrade-btn" onclick="document.getElementById(\'demo-report-modal\').remove();openPricing(\'premium\');">Get reports like this</button>' +
-      '</div>';
-    document.body.appendChild(modal);
-    document.getElementById('demo-report-close').onclick = () => modal.remove();
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-  }
-  document.body.classList.add('modal-open');
-  modal.style.display = 'flex';
+  showPage('scanner');
+  const results = document.getElementById('results');
+  if (results) results.innerHTML = '<div class="loading glass">Loading Premium sample…</div>';
+  fetch(API_BASE + '/api/sample/premium')
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (data) {
+      if (!data.success) {
+        if (results) {
+          results.innerHTML =
+            '<div class="error-card glass">Sample unavailable. Try scanning LINK: 0x514910771AF9Ca656af840dff83E8264EcF986CA</div>';
+        }
+        return;
+      }
+      lastScannedToken = {
+        address: data.token && data.token.address,
+        symbol: data.token && data.token.symbol,
+        name: data.token && data.token.name
+      };
+      lastPairMeta = {
+        pairAddress: data.token && data.token.pairAddress,
+        chainId: (data.token && data.token.chainId) || 'ethereum'
+      };
+      window.__lastScanData = data;
+      renderTokenPage(data);
+      if (results) {
+        results.insertAdjacentHTML(
+          'afterbegin',
+          '<div class="glass panel sample-banner" style="margin-bottom:1rem;border-color:rgba(0,240,160,0.35)">' +
+            '<strong>Sample Premium report</strong>' +
+            '<p class="muted small" style="margin:0.35rem 0 0">Живой пример без paywall (LINK). Не финансовый совет.</p></div>'
+        );
+      }
+    })
+    .catch(function () {
+      if (results) results.innerHTML = '<div class="error-card glass">Could not load sample</div>';
+    });
 }
 
 
