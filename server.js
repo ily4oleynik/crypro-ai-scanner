@@ -1084,7 +1084,6 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   if (!messages || !Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ success: false, error: 'Нет сообщений' });
   }
-  // Premium: short context; Pro: fuller thread
   const maxMsgs = plan === 'pro' ? 12 : 6;
   try {
     const result = await aiService.chat(messages.slice(-maxMsgs), {
@@ -1096,12 +1095,48 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
       reply: result.reply,
       demo: result.demo || false,
       plan,
-      limitNote: plan === 'premium' ? 'Premium: короткий контекст. Pro — длиннее диалог.' : null
+      limitNote:
+        plan === 'premium'
+          ? 'Premium: analyst-format, короткий контекст. Pro — длиннее диалог.'
+          : null
     });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Ошибка AI' });
   }
 });
+
+/** Waitlist for paid plans (until payments are live) */
+app.post(
+  '/api/waitlist',
+  rateLimit({
+    windowMs: 60 * 60_000,
+    max: 8,
+    keyFn: (req) => 'wl:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      const email = String(req.body?.email || '')
+        .trim()
+        .toLowerCase();
+      const plan = String(req.body?.plan || 'premium').toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, error: 'Укажите корректный email' });
+      }
+      if (typeof store.addWaitlist === 'function') {
+        await store.addWaitlist(email, plan);
+      } else {
+        console.log('[waitlist]', email, plan);
+      }
+      res.json({
+        success: true,
+        message: 'Вы в waitlist. Напишем, когда оплата будет доступна.'
+      });
+    } catch (e) {
+      console.error('[waitlist]', e.message);
+      res.status(500).json({ success: false, error: 'Не удалось сохранить' });
+    }
+  }
+);
 
 /** Explicit history save (also written on scan when logged in) */
 app.post('/api/history', authMiddleware, async (req, res) => {
