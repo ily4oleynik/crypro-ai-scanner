@@ -458,52 +458,67 @@
   <div class="modal-overlay" id="pricing-modal" style="display:none">
     <div class="modal-content plans-list plans-horizontal">
       <button type="button" class="modal-close" id="pricing-close">&times;</button>
-      <h2 class="plans-title">Choose plan</h2>
-      <p class="muted small plans-sub" data-i18n="footer.payments">Оплата скоро. Сейчас можно переключить тариф для демо после входа.</p>
+      <h2 class="plans-title">Plans</h2>
+      <p class="muted small plans-sub">Оплата ещё не подключена. Можно демо-переключить тариф после входа или оставить email в waitlist.</p>
 
-      
       <div class="pricing-grid">
-<div class="price-card" data-plan="free">
-        <h3>Free</h3>
-        <p class="plan-price">$0</p>
-        <p class="muted">5 scans / day · basic risk</p>
-        <button type="button" class="connect-btn full pricing-pick" data-plan="free">Stay on Free</button>
+        <div class="price-card" data-plan="free">
+          <h3>Free</h3>
+          <p class="plan-price">$0</p>
+          <p class="plan-pitch">Попробовать first-pass</p>
+          <ul>
+            <li>5 сканов / день</li>
+            <li>Risk score + разбивка</li>
+            <li>Honeypot / tax / mint flags</li>
+            <li>Короткий AI</li>
+          </ul>
+          <button type="button" class="connect-btn full pricing-pick" data-plan="free">Остаться на Free</button>
+        </div>
+
+        <div class="price-card recommended" data-plan="premium">
+          <span class="badge">Recommended</span>
+          <h3>Premium</h3>
+          <p class="plan-price">$29<span>/mo</span></p>
+          <p class="plan-pitch">Для активного инвестора: глубина + алерты</p>
+          <ul>
+            <li>50 сканов / день</li>
+            <li>Полный security + holders</li>
+            <li>AI-отчёт + limited chat</li>
+            <li>Telegram alerts (цена + risk)</li>
+            <li>History + watchlist 30</li>
+            <li>Свечной график</li>
+          </ul>
+          <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Демо Premium</button>
+          <button type="button" class="connect-btn full waitlist-btn" data-plan="premium" style="margin-top:0.5rem">Waitlist · $29</button>
+        </div>
+
+        <div class="price-card" data-plan="pro">
+          <h3>Pro</h3>
+          <p class="plan-price">$79<span>/mo</span></p>
+          <p class="plan-pitch">Для трейдеров и аналитиков</p>
+          <ul>
+            <li>Unlimited scans</li>
+            <li>Всё из Premium</li>
+            <li>Длинный AI analyst chat</li>
+            <li>Priority alerts</li>
+            <li>Unlimited watchlist</li>
+            <li>Bybit read-only</li>
+            <li>Скоро: export / bulk</li>
+          </ul>
+          <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Демо Pro</button>
+          <button type="button" class="connect-btn full waitlist-btn" data-plan="pro" style="margin-top:0.5rem">Waitlist · $79</button>
+        </div>
       </div>
 
-      <div class="price-card recommended" data-plan="premium">
-        <span class="badge">Recommended</span>
-        <h3>Premium</h3>
-        <p class="plan-price">$29<span>/mo</span></p>
-        <p class="plan-pitch">One caught scam usually pays for a month</p>
-        <ul>
-          <li>50 scans / day</li>
-          <li>Full Risk + Security</li>
-          <li>Full AI report</li>
-          <li>Telegram alerts</li>
-          <li>Compare up to 3</li>
-          <li>Full history</li>
-          <li>Watchlist up to 30</li>
-          <li>Candlestick chart</li>
-        </ul>
-        <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Open Premium</button>
+      <div class="waitlist-box" style="margin-top:1rem;display:none" id="waitlist-box">
+        <p class="muted small">Email для waitlist:</p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <input type="email" id="waitlist-email" placeholder="you@email.com" style="flex:1;min-width:180px" />
+          <button type="button" class="upgrade-btn" id="waitlist-submit">Join</button>
+        </div>
+        <p class="muted small" id="waitlist-msg" style="margin-top:0.5rem"></p>
       </div>
-
-      <div class="price-card" data-plan="pro">
-        <h3>Pro</h3>
-        <p class="plan-price">$79<span>/mo</span></p>
-        <p class="plan-pitch">For daily token research</p>
-        <ul>
-          <li>Unlimited scans</li>
-          <li>Everything in Premium</li>
-          <li>AI chat on token</li>
-          <li>Priority alerts</li>
-          <li>Unlimited watchlist</li>
-          <li>Bybit connection</li>
-        </ul>
-        <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Open Pro</button>
-      </div>
-          </div>
-</div>
+    </div>
   </div>
 
   <div class="modal-overlay" id="bybit-modal" style="display:none">
