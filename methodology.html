@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How risk score works · Crypto AI Scanner</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .meth { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .meth h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+    .meth h2 { font-size: 1.15rem; margin: 1.75rem 0 0.6rem; color: var(--accent, #00f0a0); }
+    .meth p, .meth li { color: var(--muted, #888); line-height: 1.6; font-size: 0.95rem; }
+    .meth ul { margin: 0.4rem 0 0 1.2rem; }
+    .meth .band { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.75rem 0; }
+    .meth .band span {
+      padding: 0.35rem 0.7rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+      border: 1px solid var(--border, #1e2438);
+    }
+    .meth .low { color: #00f0a0; border-color: rgba(0,240,160,0.35); }
+    .meth .mid { color: #f5a623; border-color: rgba(245,166,35,0.35); }
+    .meth .high { color: #ff4d6a; border-color: rgba(255,77,106,0.35); }
+    .meth a.back { color: var(--accent, #00f0a0); text-decoration: none; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="meth">
+    <a class="back" href="/">← Crypto AI Scanner</a>
+    <h1>Как считается Risk Score</h1>
+    <p>Оценка 0–100 — эвристика по рыночным данным (DexScreener) и on-chain флагам (GoPlus, где доступно). Это <strong>не</strong> финансовый совет и не гарантия безопасности.</p>
+
+    <h2>Шкала</h2>
+    <div class="band">
+      <span class="low">0–30 · ниже риск по нашим проверкам</span>
+      <span class="mid">30–70 · есть замечания</span>
+      <span class="high">70–100 · высокий риск</span>
+    </div>
+    <p>Высокий балл = больше красных флагов в модели, а не «монета 100% скам». Низкий балл ≠ «можно покупать без DYOR».</p>
+
+    <h2>Откуда данные</h2>
+    <ul>
+      <li><strong>DexScreener</strong> — цена, ликвидность, объём, FDV/market cap, сеть пары</li>
+      <li><strong>GoPlus</strong> — honeypot, buy/sell tax, mint, ownership, blacklist, holders, LP (где API отдаёт)</li>
+      <li><strong>Эвристики</strong> — соотношение FDV/ликвидность, объём, «imposter» имена (BTC/ETH на чужой сети)</li>
+      <li><strong>AI (Groq)</strong> — текст-вердикт по уже посчитанным фактам; модель не видит блокчейн напрямую</li>
+    </ul>
+
+    <h2>Разбивка Contract / Liquidity / Holders / Market</h2>
+    <ul>
+      <li><strong>Contract</strong> — верификация, honeypot, mint, ownership, proxy</li>
+      <li><strong>Liquidity</strong> — глубина пула; низкая ликвидность = сложнее выйти</li>
+      <li><strong>Holders</strong> — концентрация top-10 (если есть данные GoPlus)</li>
+      <li><strong>Market</strong> — FDV vs liquidity, объём: высокий балл здесь часто значит «тонкий рынок / высокий FDV к пулу», а не «контракт сломан»</li>
+    </ul>
+
+    <h2>Free vs Premium</h2>
+    <ul>
+      <li><strong>Free</strong> — score, ключевые GoPlus flags (honeypot, tax, mint, ownership, LP), короткий AI</li>
+      <li><strong>Premium</strong> — график, расширенный AI, алерты, watchlist, history</li>
+      <li><strong>Pro</strong> — безлимит + AI-чат + advanced metrics</li>
+    </ul>
+
+    <h2>Ограничения</h2>
+    <ul>
+      <li>Не все сети одинаково покрыты GoPlus (Solana/Tron — урезанно)</li>
+      <li>LP lock % бывает «unknown», если индексатор не отдал lp_holders</li>
+      <li>Скор может меняться при обновлении ликвидности и API</li>
+    </ul>
+
+    <p style="margin-top:2rem"><a class="back" href="/">Вернуться к сканеру</a> · <a class="back" href="/privacy.html">Privacy</a> · <a class="back" href="/terms.html">Terms</a></p>
+  </div>
+</body>
+</html>
