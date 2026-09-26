@@ -108,6 +108,7 @@ setInterval(() => {
 app.get('/api/config/public', (req, res) => {
   res.json({
     success: true,
+    telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || 'aicryptoscreenerbot',
     channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
     channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
   });
@@ -251,6 +252,79 @@ app.post(
     } catch (e) {
       console.error(e);
       res.status(500).json({ success: false, error: 'Ошибка регистрации' });
+    }
+  }
+);
+
+/** Verify Telegram Login Widget payload (HMAC-SHA256) */
+function verifyTelegramLogin(data) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+  if (!botToken || !data || !data.hash) return false;
+  const check = { ...data };
+  delete check.hash;
+  const secret = crypto.createHash('sha256').update(botToken).digest();
+  const str = Object.keys(check)
+    .sort()
+    .map((k) => k + '=' + check[k])
+    .join('\n');
+  const hmac = crypto.createHmac('sha256', secret).update(str).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hmac, 'hex'), Buffer.from(String(data.hash), 'hex'));
+  } catch (e) {
+    return hmac === data.hash;
+  }
+}
+
+app.post(
+  '/api/auth/telegram',
+  rateLimit({
+    windowMs: 15 * 60_000,
+    max: 40,
+    keyFn: (req) => 'tgauth:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      const data = req.body || {};
+      if (!verifyTelegramLogin(data)) {
+        return res.status(401).json({ success: false, error: 'Неверная подпись Telegram' });
+      }
+      const authDate = Number(data.auth_date) || 0;
+      if (!authDate || Date.now() / 1000 - authDate > 86400) {
+        return res.status(401).json({ success: false, error: 'Сессия Telegram устарела, войдите снова' });
+      }
+      if (!data.id) {
+        return res.status(400).json({ success: false, error: 'Нет Telegram id' });
+      }
+
+      const user = await store.createUserFromTelegram({
+        telegramId: data.id,
+        username: data.username || '',
+        firstName: data.first_name || '',
+        lastName: data.last_name || ''
+      });
+      if (!user) {
+        return res.status(500).json({ success: false, error: 'Не удалось создать аккаунт' });
+      }
+
+      const tokenJwt = jwt.sign(
+        { id: user.id, email: user.email, plan: user.plan || 'free' },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      res.json({
+        success: true,
+        token: tokenJwt,
+        user: {
+          id: user.id,
+          email: user.email,
+          plan: user.plan || 'free',
+          telegramId: String(data.id),
+          name: [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || ''
+        }
+      });
+    } catch (e) {
+      console.error('[auth/telegram]', e.message);
+      res.status(500).json({ success: false, error: 'Ошибка входа через Telegram' });
     }
   }
 );
