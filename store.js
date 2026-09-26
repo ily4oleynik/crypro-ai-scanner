@@ -57,10 +57,27 @@ async function query(text, params) {
 
 async function findUserByEmail(email) {
   const r = await query(
-    `SELECT id, email, password, plan FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    `SELECT id, email, password, plan, telegram_id, telegram_chat_id
+     FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
     [email]
   );
   return r.rows[0] || null;
+}
+
+async function findUserByTelegramId(telegramId) {
+  const tid = String(telegramId || '').trim();
+  if (!tid) return null;
+  try {
+    const r = await query(
+      `SELECT id, email, password, plan, telegram_id, telegram_chat_id
+       FROM users WHERE telegram_id = $1 LIMIT 1`,
+      [tid]
+    );
+    return r.rows[0] || null;
+  } catch (e) {
+    console.error('[store] findUserByTelegramId:', e.message);
+    return null;
+  }
 }
 
 async function createUser(email, password, plan = 'free') {
@@ -72,6 +89,49 @@ async function createUser(email, password, plan = 'free') {
     [email, hash, plan || 'free']
   );
   return r.rows[0];
+}
+
+/** Login via Telegram Widget — no real password */
+async function createUserFromTelegram({ telegramId, username, firstName, lastName }) {
+  const tid = String(telegramId || '').trim();
+  if (!tid) throw new Error('telegramId required');
+
+  const existing = await findUserByTelegramId(tid);
+  if (existing) {
+    // refresh chat id for alerts (private chats: chat_id === user id)
+    try {
+      await query(
+        `UPDATE users
+         SET telegram_chat_id = COALESCE(telegram_chat_id, $1)
+         WHERE id = $2::integer`,
+        [tid, existing.id]
+      );
+    } catch (e) {}
+    return existing;
+  }
+
+  const uname = (username || '').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 32);
+  const email = uname
+    ? `tg_${tid}_${uname}@telegram.local`
+    : `tg_${tid}@telegram.local`;
+  // unusable password marker (cannot login with password)
+  const hash = hashPassword(crypto.randomBytes(24).toString('hex'));
+
+  try {
+    const r = await query(
+      `INSERT INTO users (email, password, plan, telegram_id, telegram_chat_id)
+       VALUES ($1, $2, 'free', $3, $4)
+       RETURNING id, email, plan, telegram_id, telegram_chat_id`,
+      [email, hash, tid, tid]
+    );
+    return r.rows[0];
+  } catch (e) {
+    // race: already created
+    if (String(e.message || '').includes('unique') || e.code === '23505') {
+      return findUserByTelegramId(tid);
+    }
+    throw e;
+  }
 }
 
 async function verifyPassword(user, password) {
@@ -341,7 +401,9 @@ async function getAllAlertUsers() {
 
 module.exports = {
   findUserByEmail,
+  findUserByTelegramId,
   createUser,
+  createUserFromTelegram,
   verifyPassword,
   updateUserPlan,
   canScan,
