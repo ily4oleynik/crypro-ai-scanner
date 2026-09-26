@@ -75,7 +75,26 @@ async function initDb() {
   await query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id TEXT;
   `);
+
+  // unique telegram_id (ignore if already exists)
+  try {
+    await query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS users_telegram_id_uidx
+       ON users (telegram_id)
+       WHERE telegram_id IS NOT NULL AND telegram_id <> ''`
+    );
+  } catch (e) {
+    console.warn('[DB] telegram_id index:', e.message);
+  }
+
+  // TG-only users may have placeholder password
+  try {
+    await query(`ALTER TABLE users ALTER COLUMN password DROP NOT NULL`);
+  } catch (e) {
+    /* older PG or already nullable */
+  }
 
   console.log('[DB] PostgreSQL ready');
 }
