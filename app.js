@@ -1453,57 +1453,136 @@ function riskBreakdownHtml(tok, risk, address) {
   return html;
 }
 
-function buildSecurityFlags(tok, risk, address) {
+function buildSecurityFlags(tok, risk, address, security) {
   tok = tok || {};
   const chain = String(tok.chainId || detectChainFromAddress(address) || '').toLowerCase();
   const sym = String(tok.symbol || '').toUpperCase();
   const name = String(tok.name || '').toLowerCase();
   const liq = Number(tok.liquidity) || 0;
-  const mcap = Number(tok.marketCap || tok.fdv) || 0;
   const isImposter =
     ((sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin') ||
     (sym === 'ETH' && chain && !/ethereum|eth/.test(chain));
+  const knownBluechip =
+    ['LINK', 'UNI', 'AAVE', 'MKR', 'CRV', 'SNX', 'COMP', 'USDC', 'USDT'].indexOf(sym) >= 0 &&
+    /ethereum|eth|base|arbitrum/.test(chain);
+  const meta = (security && security.meta) || {};
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const L = function (ru, en) {
+    return lang === 'en' ? en : ru;
+  };
 
-  // Heuristic flags — honest about unknown
-  const knownBluechip = ['LINK', 'UNI', 'AAVE', 'MKR', 'CRV', 'SNX', 'COMP'].indexOf(sym) >= 0 && /ethereum|eth/.test(chain);
+  // Prefer GoPlus flags when available
+  if (security && security.available && Array.isArray(security.flags) && security.flags.length) {
+    const base = [
+      {
+        id: 'network',
+        label: L('Сеть', 'Network'),
+        status: chain ? 'ok' : 'warn',
+        text: chain ? chainLabel(chain) : L('Неизвестно', 'Unknown')
+      },
+      {
+        id: 'identity',
+        label: L('Идентичность', 'Identity'),
+        status: isImposter ? 'bad' : knownBluechip ? 'ok' : 'warn',
+        text: isImposter
+          ? L('Не нативный ' + (sym || 'актив') + ' на этой сети', 'Not native ' + (sym || 'asset') + ' on this chain')
+          : knownBluechip
+            ? L('Известный протокол', 'Known protocol token')
+            : L('Сверьте контракт в explorer', 'Verify contract in explorer')
+      }
+    ];
+    return base.concat(security.flags);
+  }
+
   return [
     {
       id: 'network',
-      label: 'Network',
+      label: L('Сеть', 'Network'),
       status: chain ? 'ok' : 'warn',
-      text: chain ? chainLabel(chain) : 'Unknown'
+      text: chain ? chainLabel(chain) : L('Неизвестно', 'Unknown')
     },
     {
       id: 'identity',
-      label: 'Identity',
-      status: isImposter ? 'bad' : (knownBluechip ? 'ok' : 'warn'),
+      label: L('Идентичность', 'Identity'),
+      status: isImposter ? 'bad' : knownBluechip ? 'ok' : 'warn',
       text: isImposter
-        ? 'Not native ' + (sym || 'asset') + ' on this chain'
-        : (knownBluechip ? 'Known protocol token' : 'Verify contract in explorer')
+        ? L('Не нативный актив на этой сети', 'Not native asset on this chain')
+        : knownBluechip
+          ? L('Известный протокол', 'Known protocol token')
+          : L('Сверьте контракт', 'Verify contract')
     },
     {
       id: 'liquidity',
-      label: 'Liquidity',
+      label: L('Ликвидность', 'Liquidity'),
       status: liq >= 200000 ? 'ok' : liq >= 50000 ? 'warn' : 'bad',
-      text: liq ? (liq >= 1e6 ? '$' + (liq/1e6).toFixed(2) + 'M' : '$' + (liq/1e3).toFixed(0) + 'K') : 'Very low / n/a'
+      text: liq
+        ? liq >= 1e6
+          ? '$' + (liq / 1e6).toFixed(2) + 'M'
+          : '$' + (liq / 1e3).toFixed(0) + 'K'
+        : L('Очень низкая', 'Very low / n/a')
     },
     {
       id: 'verified',
-      label: 'Verified',
-      status: knownBluechip ? 'ok' : 'warn',
-      text: knownBluechip ? 'Likely verified source' : 'Not checked on-chain (Free)'
+      label: L('Верификация', 'Verified'),
+      status: meta.isOpenSource === true || knownBluechip ? 'ok' : 'warn',
+      text:
+        meta.isOpenSource === true
+          ? L('Исходный код открыт', 'Source verified')
+          : meta.isOpenSource === false
+            ? L('Код не верифицирован', 'Source not verified')
+            : L('Нет данных GoPlus', 'No GoPlus data yet')
     },
     {
       id: 'honeypot',
       label: 'Honeypot',
-      status: 'warn',
-      text: 'Simulation on Premium'
+      status: meta.isHoneypot === true ? 'bad' : meta.isHoneypot === false ? 'ok' : 'warn',
+      text:
+        meta.isHoneypot === true
+          ? L('Флаг honeypot', 'Honeypot flag')
+          : meta.isHoneypot === false
+            ? L('Honeypot не обнаружен', 'No honeypot flag')
+            : L('Симуляция недоступна для сети', 'Simulation unavailable for chain')
+    },
+    {
+      id: 'tax',
+      label: L('Налог buy/sell', 'Buy / Sell tax'),
+      status:
+        (meta.sellTax != null && meta.sellTax > 10) || (meta.buyTax != null && meta.buyTax > 10)
+          ? 'bad'
+          : meta.buyTax != null || meta.sellTax != null
+            ? 'ok'
+            : 'warn',
+      text:
+        meta.buyTax != null || meta.sellTax != null
+          ? 'Buy ' +
+            (meta.buyTax != null ? meta.buyTax + '%' : '—') +
+            ' / Sell ' +
+            (meta.sellTax != null ? meta.sellTax + '%' : '—')
+          : L('Налог неизвестен', 'Tax unknown')
     },
     {
       id: 'mint',
-      label: 'Mint / Own',
-      status: 'warn',
-      text: 'Ownership scan on Premium'
+      label: L('Mint / Owner', 'Mint / Own'),
+      status: meta.isMintable === true ? 'bad' : meta.renounced ? 'ok' : meta.isMintable === false ? 'ok' : 'warn',
+      text: meta.isMintable
+        ? L('Mint возможен', 'Mint present')
+        : meta.renounced
+          ? L('Owner renounced', 'Owner renounced')
+          : L('Нужна проверка ownership', 'Review ownership')
+    },
+    {
+      id: 'lp',
+      label: L('LP lock', 'LP lock'),
+      status:
+        meta.lpBurned || (meta.lpLockedPct != null && meta.lpLockedPct >= 80)
+          ? 'ok'
+          : meta.lpLockedPct != null
+            ? 'warn'
+            : 'warn',
+      text:
+        meta.lpLockedPct != null
+          ? '~' + meta.lpLockedPct + '% locked/burned'
+          : L('Неизвестно — смотри explorer', 'Unknown — check explorer')
     }
   ];
 }
@@ -1558,12 +1637,7 @@ function securityFlagsHtml(tok, risk, address, security) {
         ? 'Heuristic'
         : 'Эвристика';
 
-  let flags;
-  if (security && security.available && Array.isArray(security.flags) && security.flags.length) {
-    flags = security.flags;
-  } else {
-    flags = buildSecurityFlags(tok, risk, address);
-  }
+  const flags = buildSecurityFlags(tok, risk, address, security);
 
   let html = '<div class="security-flags glass panel">';
   html +=
@@ -1748,18 +1822,26 @@ function renderTokenPage(data) {
         : '')) +
     '</div>' +
     '<div class="tab-pane" id="security">' +
+    securityFlagsHtml(tok, r, addr, data.security) +
     (isPrem
-      ? '<div class="metrics-grid">' +
-        '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' + (data.security?.contractVerified ? 'Verified' : 'Not verified') + '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Scam %</div><div class="metric-value">' + safe(data.security?.scamProbability) + '%</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' + (r.riskLevel || '').toLowerCase() + '">' + safe(r.riskLevel) + '</div></div></div>'
-      : '<div class="metrics-grid">' +
-        '<div class="metric-card glass"><div class="metric-label">Risk level</div><div class="metric-value risk-' + (r.riskLevel || 'medium').toLowerCase() + '">' + safe(r.riskLevel || 'MEDIUM') + '</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Score</div><div class="metric-value">' + safe(r.riskScore) + '/100</div></div>' +
-        '<div class="metric-card glass"><div class="metric-label">Scam signal</div><div class="metric-value">' + safe(data.security?.scamProbability || '—') + (data.security?.scamProbability != null ? '%' : '') + '</div></div>' +
-        '</div>' +
-        '<p class="muted small" style="margin-top:0.75rem;">Verified contract, honeypot and ownership checks — Premium.</p>' +
-        '<button type="button" class="connect-btn" onclick="openPricing(\'premium\')">Unlock full security</button>') +
+      ? '<div class="metrics-grid" style="margin-top:1rem">' +
+        '<div class="metric-card glass"><div class="metric-label">Contract</div><div class="metric-value">' +
+        (data.security?.meta?.isOpenSource === true || data.security?.contractVerified
+          ? 'Verified'
+          : data.security?.meta?.isOpenSource === false
+            ? 'Not verified'
+            : '—') +
+        '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Top-10</div><div class="metric-value">' +
+        (data.security?.meta?.top10Pct != null ? data.security.meta.top10Pct + '%' : safe(adv.whaleConcentration) || '—') +
+        '</div></div>' +
+        '<div class="metric-card glass"><div class="metric-label">Risk</div><div class="metric-value risk-' +
+        (r.riskLevel || '').toLowerCase() +
+        '">' +
+        safe(r.riskLevel) +
+        '</div></div></div>'
+      : '<p class="muted small" style="margin-top:0.75rem;">Free: honeypot · tax · mint · ownership · LP (GoPlus). Premium: holders chart, deep AI, alerts.</p>' +
+        '<button type="button" class="connect-btn" onclick="openPricing(\'premium\')">Premium deep report</button>') +
     '</div>' +
     '<div class="tab-pane" id="ai"><div class="ai-card glass">' +
     aiOverviewHtml(ai, r) +
@@ -2467,18 +2549,32 @@ function chainBadgeHtml(tok, address) {
 function renderScannerEmpty() {
   const results = document.getElementById('results');
   if (!results || results.innerHTML.trim()) return;
+  const lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+  const title =
+    lang === 'en'
+      ? 'Paste a contract address or try an example:'
+      : 'Вставьте адрес контракта или выберите пример:';
+  const sub =
+    lang === 'en'
+      ? 'Free: risk score · honeypot/tax/mint flags · short AI. Source: DexScreener + GoPlus.'
+      : 'Free: risk score · honeypot/tax/mint · короткий AI. Источник: DexScreener + GoPlus.';
   results.innerHTML =
     '<div class="scanner-empty glass">' +
-    '<p class="muted" style="margin-bottom:0.75rem;">Paste a contract address or try an example:</p>' +
-    '<div class="home-chip-row" style="justify-content:center;flex-wrap:wrap;gap:0.5rem;">' +
+    '<p class="muted" style="margin-bottom:0.85rem;">' +
+    title +
+    '</p>' +
+    '<div class="home-chip-row">' +
     '<button type="button" class="home-chip example-token" data-addr="0x514910771AF9Ca656af840dff83E8264EcF986CA">LINK</button>' +
     '<button type="button" class="home-chip example-token" data-addr="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48">USDC</button>' +
     '<button type="button" class="home-chip example-token" data-addr="0xdAC17F958D2ee523a2206206994597C13D831ec7">USDT</button>' +
     '<button type="button" class="home-chip example-token" data-addr="0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984">UNI</button>' +
     '</div>' +
-    '<p class="muted small" style="margin-top:0.75rem;text-align:center;">Free includes Risk Score, market metrics and a first-pass AI verdict.</p>' +
+    '<p class="muted small" style="margin-top:0.9rem;text-align:center;">' +
+    sub +
+    '</p>' +
+    '<p class="muted small" style="margin-top:0.4rem;text-align:center;"><a href="/methodology.html" style="color:var(--accent,#00f0a0)">How risk score works</a></p>' +
     '</div>';
-  results.querySelectorAll('.example-token').forEach(btn => {
+  results.querySelectorAll('.example-token').forEach((btn) => {
     btn.addEventListener('click', function () {
       const input = document.getElementById('token-input');
       if (input) input.value = btn.getAttribute('data-addr');
