@@ -1,101 +1,113 @@
+/**
+ * Alert worker: price / risk / liquidity thresholds → Telegram
+ */
 const axios = require('axios');
 const store = require('./store');
 
-let sendAlertFn = null;
+let sendMessage = null;
 try {
-  const tg = require('./telegram');
-  sendAlertFn = typeof tg.sendAlert === 'function' ? tg.sendAlert : null;
+  sendMessage = require('./telegram').sendMessage;
 } catch (e) {
-  console.warn('[Alerts] telegram module not loaded:', e.message);
+  console.warn('[Alerts] telegram.js missing');
 }
 
-async function fetchPrice(address) {
-  try {
-    const res = await axios.get(
-      `https://api.dexscreener.com/latest/dex/tokens/${address}`,
-      { timeout: 8000 }
-    );
-    const pair = res.data?.pairs?.[0];
-    const price = parseFloat(pair?.priceUsd);
-    return Number.isFinite(price) ? price : null;
-  } catch (e) {
-    return null;
-  }
+const INTERVAL_MS = Number(process.env.ALERT_INTERVAL_MS || 60000);
+
+async function fetchDexPair(address) {
+  const res = await axios.get(
+    `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`,
+    { timeout: 10000 }
+  );
+  return res.data?.pairs?.[0] || null;
 }
 
-function shouldTrigger(alert, price) {
-  const value = parseFloat(alert.value);
-  if (!Number.isFinite(value) || !Number.isFinite(price)) return false;
-  if (alert.type === 'price_above') return price >= value;
-  if (alert.type === 'price_below') return price <= value;
-  return false;
+async function estimateRisk(pair) {
+  if (!pair) return null;
+  const liq = Number(pair.liquidity?.usd) || 0;
+  const vol = Number(pair.volume?.h24) || 0;
+  const fdv = Number(pair.fdv) || 0;
+  let score = 35;
+  if (liq < 10000) score += 30;
+  else if (liq < 50000) score += 18;
+  else if (liq < 200000) score += 8;
+  if (fdv > 0 && liq > 0 && fdv / liq > 50 && liq < 500000) score += 15;
+  if (vol < 5000 && liq < 100000) score += 8;
+  return Math.max(5, Math.min(95, score));
 }
 
 async function checkAlerts() {
-  if (typeof store.getAllAlertUsers !== 'function') {
-    console.warn('[Alerts] getAllAlertUsers missing — skip');
-    return;
-  }
-
+  if (!sendMessage) return;
   let users = [];
   try {
     users = await store.getAllAlertUsers();
   } catch (e) {
-    console.error('[Alerts] getAllAlertUsers error:', e.message);
+    console.error('[Alerts]', e.message);
     return;
   }
-
-  if (!users || !users.length) return;
-
-  for (const user of users) {
+  for (const user of users || []) {
     const chatId = user.telegramChatId || user.telegram_chat_id;
+    if (!chatId) continue;
     const alerts = user.alerts || [];
-    if (!chatId || !alerts.length) continue;
-
     for (const alert of alerts) {
+      if (alert.active === false) continue;
       try {
-        const price = await fetchPrice(alert.address);
-        if (price == null) continue;
-        if (!shouldTrigger(alert, price)) continue;
+        const pair = await fetchDexPair(alert.address);
+        if (!pair) continue;
+        const price = Number(pair.priceUsd) || 0;
+        const liq = Number(pair.liquidity?.usd) || 0;
+        const riskScore = await estimateRisk(pair);
+        const type = String(alert.type || '');
+        const value = Number(alert.value);
+        let hit = false;
+        let detail = '';
 
-        if (sendAlertFn) {
-          await sendAlertFn(chatId, alert, price);
-        } else {
-          console.log(
-            '[Alerts] triggered',
-            alert.symbol || alert.address,
-            price,
-            'chat',
-            chatId
-          );
+        if (type === 'price_above' && price >= value) {
+          hit = true;
+          detail = `Price $${price} ≥ $${value}`;
+        } else if (type === 'price_below' && price > 0 && price <= value) {
+          hit = true;
+          detail = `Price $${price} ≤ $${value}`;
+        } else if (type === 'risk_above' && riskScore != null && riskScore >= value) {
+          hit = true;
+          detail = `Risk ${riskScore}/100 ≥ ${value}`;
+        } else if (type === 'liquidity_below' && liq > 0 && liq <= value) {
+          hit = true;
+          detail = `Liquidity $${Math.round(liq)} ≤ $${value}`;
         }
 
-        // опционально: удалить сработавший алерт
-        // if (typeof store.removeAlert === 'function') {
-        //   await store.removeAlert(user, alert.id);
-        // }
+        if (!hit) continue;
+
+        // de-dupe via store if available
+        if (typeof store.wasAlertFired === 'function') {
+          const fired = await store.wasAlertFired(user, alert.id);
+          if (fired) continue;
+          await store.markAlertFired(user, alert.id);
+        }
+
+        const sym = alert.symbol || pair.baseToken?.symbol || 'TOKEN';
+        await sendMessage(
+          chatId,
+          `🚨 <b>Alert · ${sym}</b>\n` +
+            `${detail}\n` +
+            `Type: <code>${type}</code>\n` +
+            `<code>${alert.address}</code>\n\n` +
+            `<i>Not financial advice.</i>`
+        );
       } catch (e) {
-        console.error('[Alerts] item error:', e.message);
+        console.error('[Alerts] item', e.message);
       }
     }
   }
 }
 
-function startAlertWorker(intervalMs) {
-  const ms = intervalMs || 60000;
-  console.log('[Alerts] Worker started, interval', ms, 'ms');
-
-  const tick = async () => {
-    try {
-      await checkAlerts();
-    } catch (e) {
-      console.error('[Alerts] tick error:', e.message);
-    }
-  };
-
-  // не блокируем старт сервера
-  setTimeout(tick, 5000);
-  setInterval(tick, ms);
+function startAlertWorker() {
+  console.log('[Alerts] Worker started, interval', INTERVAL_MS, 'ms');
+  setTimeout(() => {
+    checkAlerts().catch(() => {});
+  }, 5000);
+  setInterval(() => {
+    checkAlerts().catch(() => {});
+  }, INTERVAL_MS);
 }
 
 module.exports = { startAlertWorker, checkAlerts };
