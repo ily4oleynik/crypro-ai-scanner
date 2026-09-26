@@ -507,11 +507,18 @@ app.get(
           token: tokenFull,
           risk: riskPayload,
           ai: aiPayload,
+          // Full GoPlus first-pass on Free (honeypot/tax/mint/ownership/LP)
           security: securityOnchain || {
+            available: false,
             contractVerified: base.isVerified,
-            available: false
+            flags: []
           },
-          locked: true,
+          // charts / deep holders still locked
+          locked: {
+            charts: true,
+            advancedHolders: true,
+            deepAi: true
+          },
           usage: currentUsage
         });
       }
