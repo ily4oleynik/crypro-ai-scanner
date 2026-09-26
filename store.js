@@ -369,7 +369,6 @@ async function getUsersWithTelegram() {
 
 async function getAllAlertUsers() {
   try {
-    // users.id integer, alerts.user_id text (или integer) — сравниваем как text
     const r = await query(
       `SELECT DISTINCT u.id, u.email, u.plan, u.telegram_chat_id AS "telegramChatId"
        FROM users u
@@ -380,8 +379,8 @@ async function getAllAlertUsers() {
     const users = [];
     for (const row of r.rows) {
       const alertsRes = await query(
-        `SELECT id, type, address, symbol, value
-         FROM alerts WHERE user_id::text = $1`,
+        `SELECT id, type, address, symbol, value, active
+         FROM alerts WHERE user_id::text = $1 AND (active IS NULL OR active = TRUE)`,
         [String(row.id)]
       );
       users.push({
@@ -397,6 +396,50 @@ async function getAllAlertUsers() {
     console.error('[store] getAllAlertUsers:', e.message);
     return [];
   }
+}
+
+async function wasAlertFired(user, alertId) {
+  const id = uid(user);
+  if (!id || !alertId) return false;
+  try {
+    const r = await query(
+      `SELECT 1 FROM fired_alerts WHERE user_id = $1 AND alert_id = $2 LIMIT 1`,
+      [String(id), String(alertId)]
+    );
+    return r.rows.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function markAlertFired(user, alertId) {
+  const id = uid(user);
+  if (!id || !alertId) return;
+  try {
+    await query(
+      `INSERT INTO fired_alerts (user_id, alert_id) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [String(id), String(alertId)]
+    );
+  } catch (e) {
+    console.warn('[store] markAlertFired', e.message);
+  }
+}
+
+async function addWaitlist(email, plan) {
+  await query(`
+    CREATE TABLE IF NOT EXISTS waitlist (
+      email TEXT PRIMARY KEY,
+      plan TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await query(
+    `INSERT INTO waitlist (email, plan) VALUES ($1, $2)
+     ON CONFLICT (email) DO UPDATE SET plan = EXCLUDED.plan`,
+    [email, plan || 'premium']
+  );
+  return true;
 }
 
 module.exports = {
@@ -421,5 +464,8 @@ module.exports = {
   unlinkTelegram,
   getUsersWithTelegram,
   getAllAlertUsers,
-  getDigestUsers
+  getDigestUsers,
+  wasAlertFired,
+  markAlertFired,
+  addWaitlist
 };
