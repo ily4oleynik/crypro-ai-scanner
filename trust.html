@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trust Center · Crypto AI Scanner</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .trust { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .trust h1 { font-size: 1.7rem; margin: 0.75rem 0 0.5rem; }
+    .trust h2 { font-size: 1.1rem; margin: 1.6rem 0 0.5rem; color: var(--accent, #00f0a0); }
+    .trust p, .trust li { color: var(--muted, #888); line-height: 1.6; font-size: 0.95rem; }
+    .trust ul { margin: 0.35rem 0 0 1.15rem; }
+    .trust a.back { color: var(--accent, #00f0a0); text-decoration: none; }
+    .trust .box {
+      margin-top: 1rem; padding: 1rem 1.1rem; border-radius: 12px;
+      border: 1px solid var(--border, #1e2438); background: rgba(255,255,255,0.03);
+    }
+  </style>
+</head>
+<body>
+  <div class="trust">
+    <a class="back" href="/">← Crypto AI Scanner</a>
+    <h1>Trust Center</h1>
+    <p>Мы помогаем <strong>выявлять и объяснять риски</strong> токена. Мы не гарантируем прибыль и не говорим, что покупать.</p>
+
+    <div class="box">
+      <strong>Коротко</strong>
+      <ul>
+        <li>Данные: DexScreener (рынок), GoPlus (on-chain flags), собственные эвристики</li>
+        <li>AI (Groq) пишет вердикт по уже посчитанным фактам — модель не «видит» блокчейн напрямую</li>
+        <li>Risk Score 0–100 — композит, не приговор и не инвестсовет</li>
+      </ul>
+    </div>
+
+    <h2>Почему доверять анализу?</h2>
+    <ul>
+      <li>Прозрачные источники на каждом отчёте (GoPlus / heuristic)</li>
+      <li>Разбивка Contract / Liquidity / Holders / Market</li>
+      <li>Страница <a class="back" href="/methodology.html">How risk works</a></li>
+      <li>Ограничения честно: не все сети, LP lock иногда unknown, API может лагать</li>
+    </ul>
+
+    <h2>Как часто обновляются данные?</h2>
+    <p>При каждом скане — live запрос к DexScreener и GoPlus. История риска на устройстве сохраняет повторные сканы локально.</p>
+
+    <h2>Чего мы не делаем</h2>
+    <ul>
+      <li>Не обещаем «не потерять деньги»</li>
+      <li>Не храним ваши приватные ключи (Bybit — только API ключи, которые вы сами вводите)</li>
+      <li>Не продаём «сигналы на покупку»</li>
+    </ul>
+
+    <p style="margin-top:2rem">
+      <a class="back" href="/">Сканер</a> ·
+      <a class="back" href="/methodology.html">Methodology</a> ·
+      <a class="back" href="/privacy.html">Privacy</a> ·
+      <a class="back" href="/terms.html">Terms</a>
+    </p>
+  </div>
+</body>
+</html>
