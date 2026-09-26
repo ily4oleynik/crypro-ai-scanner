@@ -1770,7 +1770,6 @@ function localizeRiskReason(x) {
       .replace(/ликвидность/gi, 'liquidity')
       .replace(/объём/gi, 'volume');
   }
-  // RU: map common EN backend reasons
   return s
     .replace(/^Network:\s*/i, 'Сеть: ')
     .replace(/FDV is much higher than liquidity[^.]*\.?/i, 'FDV сильно выше ликвидности — риск выхода при крупной сделке')
@@ -1783,6 +1782,259 @@ function localizeRiskReason(x) {
     .replace(/Thin liquidity/i, 'Тонкая ликвидность')
     .replace(/Low volume/i, 'Низкий объём')
     .replace(/FDV >> liquidity/i, 'FDV сильно выше ликвидности');
+}
+
+function healthEmoji(score) {
+  const s = Number(score) || 0;
+  if (s <= 30) return '🟢';
+  if (s <= 60) return '🟡';
+  return '🔴';
+}
+
+function healthLabel(score, en) {
+  const s = Number(score) || 0;
+  if (s <= 30) return en ? 'LOW' : 'НИЗКИЙ';
+  if (s <= 60) return en ? 'MEDIUM' : 'СРЕДНИЙ';
+  return en ? 'HIGH' : 'ВЫСОКИЙ';
+}
+
+/** Persist risk points per address for local "Risk history" chart */
+function pushRiskHistory(address, score) {
+  if (!address) return [];
+  const key = 'risk_hist_' + String(address).toLowerCase();
+  let arr = [];
+  try {
+    arr = JSON.parse(localStorage.getItem(key) || '[]');
+  } catch (e) {
+    arr = [];
+  }
+  if (!Array.isArray(arr)) arr = [];
+  const now = Date.now();
+  const last = arr[arr.length - 1];
+  if (!last || last.s !== Number(score) || now - last.t > 30 * 60 * 1000) {
+    arr.push({ t: now, s: Number(score) || 0 });
+  }
+  if (arr.length > 24) arr = arr.slice(-24);
+  try {
+    localStorage.setItem(key, JSON.stringify(arr));
+  } catch (e) {}
+  return arr;
+}
+
+function tokenHealthHtml(tok, risk, security) {
+  const en = ((typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru') === 'en';
+  const parts = buildRiskBreakdown(tok, risk, tok && tok.address);
+  const meta = (security && security.meta) || {};
+  const trading =
+    meta.isHoneypot === true || meta.cannotSellAll
+      ? 85
+      : meta.sellTax != null && meta.sellTax > 10
+        ? 70
+        : 25;
+  const ownership = meta.renounced ? 15 : meta.isMintable ? 70 : 40;
+  const items = [
+    { key: en ? 'Contract' : 'Контракт', score: parts.contract },
+    { key: en ? 'Liquidity' : 'Ликвидность', score: parts.liquidity },
+    { key: en ? 'Holders' : 'Холдеры', score: parts.holders },
+    { key: en ? 'Trading' : 'Торговля', score: trading },
+    { key: en ? 'Whales' : 'Киты', score: parts.holders },
+    { key: en ? 'Ownership' : 'Ownership', score: ownership }
+  ];
+  const overall = Number(risk && risk.riskScore) || 50;
+  let html = '<div class="token-health glass panel">';
+  html += '<div class="th-head"><span class="th-title">TOKEN HEALTH</span>';
+  html +=
+    '<span class="th-overall" style="color:' +
+    scoreColor(overall) +
+    '">' +
+    healthEmoji(overall) +
+    ' ' +
+    overall +
+    '/100 · ' +
+    healthLabel(overall, en) +
+    '</span></div>';
+  html += '<div class="th-grid">';
+  items.forEach(function (it) {
+    html +=
+      '<div class="th-item"><span class="th-ico">' +
+      healthEmoji(it.score) +
+      '</span><span class="th-key">' +
+      it.key +
+      '</span></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function whatWeCheckedHtml(security) {
+  const en = ((typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru') === 'en';
+  const flags = (security && security.flags) || [];
+  const n = Math.max(flags.length, 12);
+  let html = '<div class="what-checked glass panel">';
+  html +=
+    '<div class="muted small">' +
+    (en ? 'What we checked' : 'Что проверили') +
+    '</div>';
+  html +=
+    '<p class="wc-lead">' +
+    (en
+      ? n + ' risk signals → AI analysis → Risk score'
+      : n + ' сигналов риска → AI-анализ → Risk score') +
+    '</p>';
+  html += '<div class="wc-cols">';
+  html +=
+    '<div><strong>Contract</strong><ul><li>Honeypot</li><li>Mint</li><li>Ownership</li><li>Proxy</li><li>Tax</li><li>Blacklist</li></ul></div>';
+  html +=
+    '<div><strong>Liquidity</strong><ul><li>Size</li><li>LP lock</li><li>LP burn</li><li>Depth vs FDV</li></ul></div>';
+  html +=
+    '<div><strong>Holders</strong><ul><li>Top-10</li><li>Concentration</li><li>Count</li></ul></div>';
+  html +=
+    '<div><strong>Market</strong><ul><li>Volume</li><li>Buy/Sell</li><li>Volatility</li></ul></div>';
+  html += '</div>';
+  html +=
+    '<p class="muted small wc-src">' +
+    (en
+      ? 'Sources: DexScreener · GoPlus · own heuristics. Not financial advice.'
+      : 'Источники: DexScreener · GoPlus · эвристики. Не финансовый совет.') +
+    '</p></div>';
+  return html;
+}
+
+function scamAlertBannerHtml(tok, risk, security) {
+  const score = Number(risk && risk.riskScore) || 0;
+  if (score < 55) return '';
+  const en = ((typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru') === 'en';
+  const meta = (security && security.meta) || {};
+  const bullets = [];
+  if (meta.isHoneypot) bullets.push(en ? 'Honeypot flag from GoPlus' : 'Флаг honeypot (GoPlus)');
+  if (meta.isMintable) bullets.push(en ? 'Mint authority present' : 'Возможен mint');
+  if (meta.top10Pct != null && meta.top10Pct >= 50)
+    bullets.push(
+      en
+        ? 'Top wallets concentrated ~' + meta.top10Pct + '%'
+        : 'Концентрация top wallets ~' + meta.top10Pct + '%'
+    );
+  if (meta.sellTax != null && meta.sellTax > 10)
+    bullets.push(en ? 'High sell tax ' + meta.sellTax + '%' : 'Высокий sell tax ' + meta.sellTax + '%');
+  if ((Number(tok && tok.liquidity) || 0) < 50000)
+    bullets.push(en ? 'Thin liquidity' : 'Тонкая ликвидность');
+  if (!bullets.length) {
+    bullets.push(
+      en ? 'Elevated composite risk score' : 'Повышенный составной risk score'
+    );
+  }
+  let html = '<div class="scam-alert glass panel">';
+  html +=
+    '<div class="scam-alert-title">🚨 ' +
+    (en ? 'AI Scam Detection' : 'AI Scam Detection') +
+    '</div>';
+  html +=
+    '<div class="scam-alert-verdict" style="color:' +
+    scoreColor(score) +
+    '">' +
+    (en ? 'Elevated risk detected' : 'Обнаружен повышенный риск') +
+    ' · ' +
+    score +
+    '/100</div>';
+  html += '<ul class="scam-alert-list">';
+  bullets.slice(0, 5).forEach(function (b) {
+    html += '<li>🔴 ' + safe(b) + '</li>';
+  });
+  html += '</ul>';
+  html +=
+    '<p class="scam-alert-ai"><strong>AI:</strong> ' +
+    (score >= 70
+      ? en
+        ? 'HIGH RISK — avoid size until further investigation.'
+        : 'ВЫСОКИЙ РИСК — не входи крупно до доп. проверки.'
+      : en
+        ? 'CAUTION — review flags before any entry.'
+        : 'ОСТОРОЖНО — проверь флаги до входа.') +
+    '</p>';
+  html +=
+    '<button type="button" class="connect-btn" onclick="document.getElementById(\'security\')?.scrollIntoView({behavior:\'smooth\'})">' +
+    (en ? 'See what triggered the warning' : 'Что вызвало предупреждение') +
+    '</button></div>';
+  return html;
+}
+
+function riskHistoryHtml(address, score) {
+  const en = ((typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru') === 'en';
+  const hist = pushRiskHistory(address, score);
+  if (!hist.length) return '';
+  const scores = hist.map(function (h) {
+    return h.s;
+  });
+  const first = scores[0];
+  const last = scores[scores.length - 1];
+  const delta = last - first;
+  const maxS = Math.max.apply(null, scores.concat([100]));
+  const w = 280;
+  const h = 72;
+  const step = scores.length > 1 ? w / (scores.length - 1) : w;
+  let d = '';
+  scores.forEach(function (s, i) {
+    const x = i * step;
+    const y = h - (s / maxS) * (h - 8) - 4;
+    d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+  });
+  let html = '<div class="risk-history glass panel">';
+  html +=
+    '<div class="muted small">' + (en ? 'Risk history (this device)' : 'История риска (это устройство)') + '</div>';
+  html +=
+    '<svg class="risk-hist-svg" viewBox="0 0 ' +
+    w +
+    ' ' +
+    h +
+    '" width="100%" height="72" preserveAspectRatio="none"><path d="' +
+    d +
+    '" fill="none" stroke="#00f0a0" stroke-width="2"/></svg>';
+  if (hist.length >= 2 && Math.abs(delta) >= 5) {
+    html +=
+      '<p class="risk-hist-delta" style="color:' +
+      (delta > 0 ? '#ff4d6a' : '#00f0a0') +
+      '">' +
+      (delta > 0 ? '⚠️ ' : '✅ ') +
+      (en ? 'Risk changed ' : 'Риск изменился ') +
+      first +
+      ' → ' +
+      last +
+      ' (' +
+      (delta > 0 ? '+' : '') +
+      delta +
+      ')</p>';
+  } else {
+    html +=
+      '<p class="muted small">' +
+      (en
+        ? 'Re-scan later to see how risk moves over time.'
+        : 'Повторный скан покажет, как меняется риск.') +
+      '</p>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function demoTokensHtml() {
+  const en = ((typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru') === 'en';
+  // LINK low, a mid meme-style addr placeholder uses USDC as mid-stable, high uses known pattern via sample API + synthetic
+  return (
+    '<div class="demo-tokens glass panel">' +
+    '<div class="muted small" style="margin-bottom:0.6rem">' +
+    (en ? 'Demo reports (Low / Medium / High risk profile)' : 'Демо-отчёты (низкий / средний / высокий риск)') +
+    '</div>' +
+    '<div class="demo-row">' +
+    '<button type="button" class="demo-card low" data-demo="low"><span>🟢</span> ' +
+    (en ? 'Low risk' : 'Низкий риск') +
+    '<small>LINK-style</small></button>' +
+    '<button type="button" class="demo-card mid" data-demo="mid"><span>🟡</span> ' +
+    (en ? 'Medium' : 'Средний') +
+    '<small>Stable / mixed</small></button>' +
+    '<button type="button" class="demo-card high" data-demo="high"><span>🔴</span> ' +
+    (en ? 'High risk' : 'Высокий риск') +
+    '<small>Flags heavy</small></button>' +
+    '</div></div>'
+  );
 }
 
 function renderTokenPage(data) {
@@ -1815,8 +2067,12 @@ function renderTokenPage(data) {
     '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">' + tt('btn.watchlistAdd') + '</button>' +
     '<button type="button" class="btn-sm share-btn" style="margin-top:0.35rem;" onclick="shareReport()">' + tt('btn.share') + '</button>' +
     '</div></div>' +
+    scamAlertBannerHtml(tok, r, data.security) +
+    tokenHealthHtml(tok, r, data.security) +
     riskBreakdownHtml(tok, r, addr) +
     securityFlagsHtml(tok, r, addr, data.security) +
+    whatWeCheckedHtml(data.security) +
+    riskHistoryHtml(addr, r.riskScore) +
     (reasons.length
       ? '<div class="glass panel risk-factors-panel"><div class="muted small">' + tt('report.riskFactors') + '</div><ul class="risk-factors-list">' +
         reasons.filter(function (x) {
@@ -2603,12 +2859,13 @@ function renderScannerEmpty() {
     '<button type="button" class="home-chip example-token" data-addr="0xdAC17F958D2ee523a2206206994597C13D831ec7">USDT</button>' +
     '<button type="button" class="home-chip example-token" data-addr="0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984">UNI</button>' +
     '</div>' +
+    demoTokensHtml() +
     '<p class="muted small" style="margin-top:0.9rem;text-align:center;">' +
     tt('scanner.examplesSub') +
     '</p>' +
     '<p class="muted small" style="margin-top:0.4rem;text-align:center;"><a href="/methodology.html" style="color:var(--accent,#00f0a0)">' +
     tt('scanner.howRisk') +
-    '</a></p>' +
+    '</a> · <a href="/trust.html" style="color:var(--accent,#00f0a0)">Trust Center</a></p>' +
     '</div>';
   results.querySelectorAll('.example-token').forEach((btn) => {
     btn.addEventListener('click', function () {
@@ -2617,6 +2874,97 @@ function renderScannerEmpty() {
       startScan();
     });
   });
+  results.querySelectorAll('.demo-card').forEach((btn) => {
+    btn.addEventListener('click', function () {
+      openDemoByTier(btn.getAttribute('data-demo'));
+    });
+  });
+}
+
+async function openDemoByTier(tier) {
+  const map = {
+    low: '0x514910771AF9Ca656af840dff83E8264EcF986CA', // LINK
+    mid: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    high: null
+  };
+  if (tier === 'high') {
+    // Synthetic high-risk report for demo (no need for a live scam)
+    const data = {
+      success: true,
+      plan: 'Premium',
+      sample: true,
+      token: {
+        symbol: 'DEMO',
+        name: 'High-Risk Demo Token',
+        address: '0xDEAD00000000000000000000000000000000BEEF',
+        price: 0.00012,
+        liquidity: 18000,
+        volume24h: 4200,
+        fdv: 2500000,
+        marketCap: 2100000,
+        chainId: 'ethereum'
+      },
+      risk: {
+        riskScore: 87,
+        riskLevel: 'HIGH',
+        confidence: 78,
+        reasons: [
+          'GoPlus: honeypot flag',
+          'Top wallets concentrated ~72%',
+          'Thin liquidity',
+          'GoPlus: mintable',
+          'FDV >> liquidity'
+        ]
+      },
+      ai: {
+        text:
+          'HIGH RISK — Avoid until further investigation. Honeypot/mint signals and thin liquidity mean exit may fail under sell pressure.',
+        confidence: 78,
+        verdict: 'HIGH RISK',
+        risks: [
+          'Honeypot / sell restriction signals',
+          'Holder concentration above 70%',
+          'Liquidity too thin for size'
+        ],
+        positives: ['Contract address visible on DEX'],
+        checklist: [
+          'Do not buy size',
+          'Verify honeypot simulation independently',
+          'Check top holders on explorer'
+        ]
+      },
+      security: {
+        available: true,
+        source: 'demo',
+        flags: [
+          { id: 'honeypot', label: 'Honeypot', status: 'bad', text: 'Flagged as honeypot' },
+          { id: 'mint', label: 'Mint', status: 'bad', text: 'Mint function present' },
+          { id: 'holders', label: 'Holders', status: 'bad', text: 'Top10 ~72%' },
+          { id: 'lp', label: 'LP lock', status: 'bad', text: 'LP lock unknown / low' },
+          { id: 'tax', label: 'Buy / Sell tax', status: 'warn', text: 'Buy 5% / Sell 12%' }
+        ],
+        meta: {
+          isHoneypot: true,
+          isMintable: true,
+          top10Pct: 72,
+          sellTax: 12,
+          buyTax: 5,
+          renounced: false
+        }
+      }
+    };
+    window.__lastScanData = data;
+    lastScannedToken = { address: data.token.address, symbol: data.token.symbol };
+    showPage('scanner');
+    renderTokenPage(data);
+    return;
+  }
+  const addr = map[tier];
+  if (!addr) return;
+  const input = document.getElementById('token-input');
+  if (input) input.value = addr;
+  showPage('scanner');
+  startScan();
 }
 
 function showToast(msg) {
