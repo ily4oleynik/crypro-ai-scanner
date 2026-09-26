@@ -2260,6 +2260,102 @@ button.home-chip.example-token:hover,
   padding: 0.85rem 1rem;
 }
 
+/* Token Health + Scam alert + What we checked + Risk history */
+.token-health,
+.what-checked,
+.scam-alert,
+.risk-history,
+.demo-tokens {
+  margin: 1rem 0;
+  padding: 1rem 1.15rem;
+}
+.th-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.th-title { font-weight: 700; letter-spacing: 0.04em; font-size: 0.85rem; }
+.th-overall { font-weight: 700; font-size: 0.95rem; }
+.th-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+@media (max-width: 600px) {
+  .th-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.th-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.88rem;
+}
+.scam-alert {
+  border-color: rgba(255, 77, 106, 0.45) !important;
+  background: rgba(255, 77, 106, 0.08);
+}
+.scam-alert-title { font-weight: 700; margin-bottom: 0.35rem; }
+.scam-alert-verdict { font-weight: 700; margin-bottom: 0.5rem; }
+.scam-alert-list {
+  margin: 0.4rem 0 0.75rem 0.2rem;
+  padding-left: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.scam-alert-ai { margin: 0 0 0.75rem; font-size: 0.92rem; }
+.wc-lead { margin: 0.35rem 0 0.75rem; font-weight: 600; font-size: 0.95rem; }
+.wc-cols {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.wc-cols ul { margin: 0.25rem 0 0 1rem; padding: 0; }
+@media (max-width: 800px) {
+  .wc-cols { grid-template-columns: repeat(2, 1fr); }
+}
+.risk-hist-svg {
+  display: block;
+  margin: 0.5rem 0;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+.risk-hist-delta { font-size: 0.9rem; font-weight: 600; margin: 0.25rem 0 0; }
+.demo-row { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 0.35rem; }
+.demo-card {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-weight: 600;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.demo-card small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+}
+.demo-card:hover { transform: translateY(-1px); }
+.demo-card.low:hover { border-color: rgba(0, 240, 160, 0.5); }
+.demo-card.mid:hover { border-color: rgba(245, 166, 35, 0.5); }
+.demo-card.high:hover { border-color: rgba(255, 77, 106, 0.5); }
+
 /* Telegram Login in auth modal */
 .tg-login-wrap {
   margin-bottom: 0.85rem;
