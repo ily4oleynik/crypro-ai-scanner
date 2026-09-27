@@ -2356,6 +2356,33 @@ button.home-chip.example-token:hover,
 .demo-card.mid:hover { border-color: rgba(245, 166, 35, 0.5); }
 .demo-card.high:hover { border-color: rgba(255, 77, 106, 0.5); }
 
+/* AI chat chips */
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+.chat-chip {
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0, 240, 160, 0.06);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.chat-chip:hover {
+  border-color: var(--accent, #00f0a0);
+  background: rgba(0, 240, 160, 0.12);
+}
+.chat-msg .msg-bubble {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+
 /* Telegram Login in auth modal */
 .tg-login-wrap {
   margin-bottom: 0.85rem;
