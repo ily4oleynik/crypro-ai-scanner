@@ -1071,37 +1071,69 @@ app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
   }
 });
 
+/** Chat quotas: free trial 2/day, premium 20/day, pro unlimited */
+const chatQuota = new Map();
+function chatQuotaKey(req) {
+  if (req.user && req.user.id) return 'u:' + req.user.id;
+  return 'ip:' + clientIp(req);
+}
+function getChatQuota(req, plan) {
+  if (plan === 'pro') return { limit: 9999, used: 0, remaining: 9999, key: 'pro' };
+  const limit = plan === 'premium' ? 20 : 2;
+  const day = new Date().toISOString().slice(0, 10);
+  const key = chatQuotaKey(req) + ':' + day;
+  const used = chatQuota.get(key) || 0;
+  return { limit: limit, used: used, remaining: Math.max(0, limit - used), key: key };
+}
+function bumpChatQuota(key) {
+  if (!key || key === 'pro') return;
+  chatQuota.set(key, (chatQuota.get(key) || 0) + 1);
+}
+
 app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   const plan = getPlan(req.user);
-  if (plan !== 'pro' && plan !== 'premium') {
-    return res.status(403).json({
-      success: false,
-      error: 'AI-чат доступен с Premium (лимит) и Pro',
-      upsell: 'premium'
-    });
-  }
-  const { messages, context } = req.body;
+  const { messages, context } = req.body || {};
   if (!messages || !Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ success: false, error: 'Нет сообщений' });
   }
-  const maxMsgs = plan === 'pro' ? 12 : 6;
+  const quota = getChatQuota(req, plan);
+  if (quota.remaining <= 0) {
+    return res.status(403).json({
+      success: false,
+      error:
+        plan === 'free'
+          ? 'Лимит Free trial чата (2/день) исчерпан. Premium — 20 сообщений/день.'
+          : 'Дневной лимит чата исчерпан.',
+      upsell: 'premium',
+      remaining: 0,
+      limit: quota.limit
+    });
+  }
+  const maxMsgs = plan === 'pro' ? 12 : plan === 'premium' ? 8 : 4;
   try {
     const result = await aiService.chat(messages.slice(-maxMsgs), {
       ...(context || {}),
-      plan
+      plan: plan === 'free' ? 'free_trial' : plan
     });
+    bumpChatQuota(quota.key);
+    const after = getChatQuota(req, plan);
     res.json({
       success: true,
       reply: result.reply,
       demo: result.demo || false,
-      plan,
+      plan: plan,
+      remaining: after.remaining,
+      limit: after.limit,
       limitNote:
-        plan === 'premium'
-          ? 'Premium: analyst-format, короткий контекст. Pro — длиннее диалог.'
-          : null
+        plan === 'free'
+          ? 'Free trial: ' + after.remaining + '/' + after.limit + ' сегодня'
+          : plan === 'premium'
+            ? 'Premium: ' + after.remaining + '/' + after.limit + ' сегодня'
+            : null
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Ошибка AI' });
+    console.error('[chat]', error.message);
+    res.status(500).json({ success: false, error: 'Ошибка AI: ' + (error.message || '') });
   }
 });
 
