@@ -2236,35 +2236,70 @@ function initAIChat(data) {
   const plan = String(
     (data && data.plan) || currentPlan || (user && user.plan) || 'free'
   ).toLowerCase();
-  const allowed = plan === 'pro' || plan === 'premium' || plan === 'Premium' || plan === 'Pro';
+  const isPro = plan === 'pro';
+  const isPrem = plan === 'premium' || isPro;
   const title = section.querySelector('h3');
   if (title) {
-    title.textContent =
-      plan === 'pro' || plan === 'Pro'
-        ? 'AI Chat (Pro)'
-        : 'AI Chat (Premium · limited)';
+    title.textContent = isPro
+      ? 'AI Chat (Pro)'
+      : isPrem
+        ? 'AI Chat (Premium · limited)'
+        : 'AI Chat (Free trial · 2/day)';
   }
-  if (allowed) {
-    section.style.display = 'block';
-    currentTokenContext = {
-      token: data.token,
-      risk: data.risk,
-      security: data.security,
-      plan: data.plan
-    };
-    const msgs = document.getElementById('chat-messages');
-    if (msgs) {
-      msgs.innerHTML = '';
-      const tip = document.createElement('div');
-      tip.className = 'muted small';
-      tip.style.marginBottom = '0.5rem';
-      tip.textContent =
-        'Try: «Стоит ли брать?» — ответ в формате Contract/Liquidity/Holders + what would change my assessment';
-      msgs.appendChild(tip);
-    }
-    chatHistory = [];
-  } else {
-    section.style.display = 'none';
+  // Always show chat after a scan — free gets trial messages
+  section.style.display = 'block';
+  currentTokenContext = {
+    token: data.token,
+    risk: data.risk,
+    security: data.security,
+    plan: data.plan || plan
+  };
+  const msgs = document.getElementById('chat-messages');
+  if (msgs) {
+    msgs.innerHTML = '';
+    const chips = document.createElement('div');
+    chips.className = 'chat-chips';
+    const prompts = [
+      { ru: 'Стоит ли брать?', en: 'Should I buy?' },
+      { ru: 'Главные red flags', en: 'Main red flags' },
+      { ru: 'Honeypot / mint?', en: 'Honeypot / mint?' },
+      { ru: 'Какой размер безопасен?', en: 'Safe trade size?' },
+      { ru: 'Что поднимет риск?', en: 'What raises risk?' }
+    ];
+    const lang = (localStorage.getItem('lang') || 'ru') === 'en' ? 'en' : 'ru';
+    prompts.forEach(function (p) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chat-chip';
+      b.textContent = p[lang];
+      b.addEventListener('click', function () {
+        const input = document.getElementById('chat-input');
+        if (input) input.value = p[lang];
+        sendChatMessage();
+      });
+      chips.appendChild(b);
+    });
+    msgs.appendChild(chips);
+    const tip = document.createElement('div');
+    tip.className = 'muted small';
+    tip.id = 'chat-limit-note';
+    tip.style.marginBottom = '0.5rem';
+    tip.textContent = isPrem
+      ? lang === 'en'
+        ? 'Answers use this scan only · Contract / Liquidity / Holders'
+        : 'Ответы только по этому скану · Contract / Liquidity / Holders'
+      : lang === 'en'
+        ? 'Free trial: 2 messages/day. Structured answers from this scan.'
+        : 'Free trial: 2 сообщения/день. Ответы строго по данным этого скана.';
+    msgs.appendChild(tip);
+  }
+  chatHistory = [];
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) {
+    chatInput.placeholder =
+      (localStorage.getItem('lang') || 'ru') === 'en'
+        ? 'Ask about this token…'
+        : 'Спросите про этот токен…';
   }
 }
 
@@ -2274,21 +2309,25 @@ function toggleChat() {
   if (!windowEl) return;
   if (windowEl.style.display === 'none' || !windowEl.style.display) {
     windowEl.style.display = 'flex';
-    if (btn) btn.textContent = 'Hide';
+    if (btn) btn.textContent = (localStorage.getItem('lang') || 'ru') === 'en' ? 'Hide' : 'Скрыть';
   } else {
     windowEl.style.display = 'none';
-    if (btn) btn.textContent = 'Open chat';
+    if (btn) btn.textContent = (localStorage.getItem('lang') || 'ru') === 'en' ? 'Open chat' : 'Открыть чат';
   }
 }
 
 async function sendChatMessage() {
   const input = document.getElementById('chat-input');
-  const text = input.value.trim();
+  const text = input && input.value.trim();
   if (!text) return;
+  if (!currentTokenContext || !currentTokenContext.token) {
+    addChatMessage('ai', 'Сначала просканируйте токен — чат отвечает только по данным отчёта.');
+    return;
+  }
   addChatMessage('user', text);
   input.value = '';
   chatHistory.push({ role: 'user', content: text });
-  const loadingId = addChatMessage('ai', '...');
+  const loadingId = addChatMessage('ai', '…');
   try {
     const res = await fetch(API_BASE + '/api/ai/chat', {
       method: 'POST',
@@ -2296,29 +2335,58 @@ async function sendChatMessage() {
         'Content-Type': 'application/json',
         Authorization: token ? 'Bearer ' + token : ''
       },
-      body: JSON.stringify({ messages: chatHistory, context: currentTokenContext })
+      body: JSON.stringify({
+        messages: chatHistory,
+        context: currentTokenContext
+      })
     });
-    const data = await res.json();
+    const data = await res.json().catch(function () {
+      return {};
+    });
     removeChatMessage(loadingId);
     if (!data.success) {
-      addChatMessage('ai', data.error || 'AI chat requires Premium or Pro');
+      let err =
+        data.error ||
+        (res.status === 403
+          ? 'Лимит чата. Откройте Premium — 20 сообщений/день.'
+          : 'Ошибка AI');
+      if (data.remaining === 0 || res.status === 403) {
+        err +=
+          '\n\n<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button>';
+        addChatMessage('ai', err);
+        const last = document.querySelector('#chat-messages .chat-msg.ai:last-child .msg-bubble');
+        if (last && err.indexOf('<button') >= 0) last.innerHTML = err.replace(/\n/g, '<br>');
+      } else {
+        addChatMessage('ai', err);
+      }
       return;
     }
     addChatMessage('ai', data.reply);
     chatHistory.push({ role: 'assistant', content: data.reply });
+    const note = document.getElementById('chat-limit-note');
+    if (note && data.limit != null) {
+      note.textContent =
+        (data.limitNote || '') +
+        (data.remaining != null ? ' · осталось ' + data.remaining : '');
+    }
   } catch (err) {
     removeChatMessage(loadingId);
-    addChatMessage('ai', 'AI error');
+    addChatMessage('ai', 'Ошибка сети AI');
   }
 }
 
 function addChatMessage(role, text) {
   const container = document.getElementById('chat-messages');
+  if (!container) return 'msg-0';
   const id = 'msg-' + Date.now() + Math.random();
   const div = document.createElement('div');
   div.id = id;
   div.className = 'chat-msg ' + role;
-  div.innerHTML = '<div class="msg-bubble">' + text + '</div>';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.style.whiteSpace = 'pre-wrap';
+  bubble.textContent = String(text || '');
+  div.appendChild(bubble);
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
   return id;
