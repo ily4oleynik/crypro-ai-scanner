@@ -57,7 +57,7 @@ function pct(v) {
  */
 function normalizeSecurity(raw, chainId) {
   if (!raw || typeof raw !== 'object') {
-    return { available: false, chainId, flags: [], raw: null };
+    return { available: false, chainId, flags: [], meta: {}, raw: null };
   }
 
   const isOpenSource = yn(raw.is_open_source);
@@ -297,11 +297,15 @@ async function fetchTokenSecurity(chainIdOrName, contractAddress) {
     return fetchSolanaSecurity(address);
   }
 
-  const chainId = resolveChainId(chainIdOrName);
+  let chainId = resolveChainId(chainIdOrName);
+  // DexScreener may send odd chain ids; 0x addresses default to ethereum attempt
+  if (!chainId && address.toLowerCase().startsWith('0x')) {
+    chainId = '1';
+  }
   if (!chainId) {
     return {
       available: false,
-      error: 'Unsupported chain for GoPlus',
+      error: 'Unsupported chain for GoPlus: ' + String(chainIdOrName || ''),
       chainId: chainIdOrName,
       flags: []
     };
