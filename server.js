@@ -745,6 +745,7 @@ app.get(
   async (req, res) => {
     const { tokenAddress } = req.params;
     const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
+    const lang = String(req.query.lang || req.headers['accept-language'] || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
     if (!tokenAddress || tokenAddress.length < 8 || tokenAddress.length > 128) {
       return res.status(400).json({ success: false, error: 'Некорректный адрес' });
     }
@@ -847,7 +848,8 @@ app.get(
       const ai = await aiService.analyzeToken(
         base,
         { riskScore, riskLevel, reasons },
-        aiPlan
+        aiPlan,
+        lang
       );
 
       if (req.user?.id) {
@@ -1552,7 +1554,8 @@ function bumpChatQuota(key) {
 
 app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   const plan = getPlan(req.user);
-  const { messages, context } = req.body || {};
+  const { messages, context, lang: bodyLang } = req.body || {};
+  const lang = String(bodyLang || (context && context.lang) || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
   if (!messages || !Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ success: false, error: 'Нет сообщений' });
   }
@@ -1562,8 +1565,12 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
       success: false,
       error:
         plan === 'free'
-          ? 'Лимит Free trial чата (2/день) исчерпан. Premium — 20 сообщений/день.'
-          : 'Дневной лимит чата исчерпан.',
+          ? (String((req.body || {}).lang || '').startsWith('en')
+              ? 'Free trial chat limit (2/day) reached. Premium — 20 messages/day.'
+              : 'Лимит Free trial чата (2/день) исчерпан. Premium — 20 сообщений/день.')
+          : (String((req.body || {}).lang || '').startsWith('en')
+              ? 'Daily chat limit reached.'
+              : 'Дневной лимит чата исчерпан.'),
       upsell: 'premium',
       remaining: 0,
       limit: quota.limit
@@ -1573,6 +1580,7 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   try {
     const result = await aiService.chat(messages.slice(-maxMsgs), {
       ...(context || {}),
+      lang,
       plan: plan === 'free' ? 'free_trial' : plan
     });
     bumpChatQuota(quota.key);
@@ -1586,9 +1594,13 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
       limit: after.limit,
       limitNote:
         plan === 'free'
-          ? 'Free trial: ' + after.remaining + '/' + after.limit + ' сегодня'
+          ? (lang === 'en'
+              ? 'Free trial: ' + after.remaining + '/' + after.limit + ' today'
+              : 'Free trial: ' + after.remaining + '/' + after.limit + ' сегодня')
           : plan === 'premium'
-            ? 'Premium: ' + after.remaining + '/' + after.limit + ' сегодня'
+            ? (lang === 'en'
+                ? 'Premium: ' + after.remaining + '/' + after.limit + ' today'
+                : 'Premium: ' + after.remaining + '/' + after.limit + ' сегодня')
             : null
     });
   } catch (error) {
