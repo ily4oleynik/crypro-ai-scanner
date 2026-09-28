@@ -106,14 +106,16 @@ function parseCookies(req) {
 }
 
 function signUserToken(user) {
+  const owner = isOwnerEmail(user.email);
   return jwt.sign(
     {
       id: user.id,
       email: user.email || null,
-      plan: user.plan || 'free'
+      plan: owner ? 'pro' : String(user.plan || 'free').toLowerCase(),
+      isOwner: owner
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '30d' }
   );
 }
 
@@ -165,15 +167,51 @@ function authMiddleware(req, res, next) {
   }
   try {
     req.user = jwt.verify(raw, JWT_SECRET);
+    if (req.user && isOwnerEmail(req.user.email)) {
+      req.user.plan = 'pro';
+      req.user.isOwner = true;
+    }
   } catch (e) {
     req.user = { plan: 'free' };
   }
   next();
 }
 
-function getPlan(user) {
-  return String(user?.plan || 'free').toLowerCase();
+function ownerEmails() {
+  return String(process.env.OWNER_EMAILS || process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map(function (e) {
+      return e.trim().toLowerCase();
+    })
+    .filter(Boolean);
 }
+
+function isOwnerEmail(email) {
+  if (!email) return false;
+  return ownerEmails().includes(String(email).trim().toLowerCase());
+}
+
+function getPlan(user) {
+  if (!user) return 'free';
+  if (user.isOwner || isOwnerEmail(user.email)) return 'pro';
+  const p = String(user.plan || 'free').toLowerCase();
+  if (p === 'owner' || p === 'admin') return 'pro';
+  return p;
+}
+
+/** Ensure creator accounts stay on Pro in DB */
+async function ensureOwnerPlan(user) {
+  if (!user || !user.email || !isOwnerEmail(user.email)) return user;
+  try {
+    if (store.updateUserPlan) {
+      await store.updateUserPlan(user, 'pro');
+    }
+  } catch (e) {
+    console.warn('[owner] plan update:', e.message);
+  }
+  return Object.assign({}, user, { plan: 'pro', isOwner: true });
+}
+
 
 function createBybitSignature(apiSecret, payload) {
   return crypto.createHmac('sha256', apiSecret).update(payload).digest('hex');
@@ -399,17 +437,24 @@ app.post(
       if (!user || !(await store.verifyPassword(user, password))) {
         return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
       }
+      const owner = isOwnerEmail(user.email);
+      if (owner) {
+        try {
+          await store.updateUserPlan(user, 'pro');
+          user.plan = 'pro';
+        } catch (e) {}
+      }
+      const plan = owner ? 'pro' : user.plan || 'free';
       const tokenJwt = signUserToken({
         id: user.id,
         email: user.email,
-        plan: user.plan || 'free'
+        plan: plan
       });
       setAuthCookie(res, tokenJwt);
       res.json({
         success: true,
-        // token still returned for API clients; SPA should rely on httpOnly cookie
         token: tokenJwt,
-        user: { id: user.id, email: user.email, plan: user.plan || 'free' },
+        user: { id: user.id, email: user.email, plan: plan, isOwner: owner },
         auth: 'cookie'
       });
     } catch (e) {
@@ -460,13 +505,29 @@ app.post(
           error: 'Аккаунт с таким email уже есть. Войдите.'
         });
       }
-      const user = await store.createUser(email, password, 'free');
-      const tokenJwt = signUserToken({ id: user.id, email: user.email, plan: 'free' });
+      const owner = isOwnerEmail(email);
+      const startPlan = owner ? 'pro' : 'free';
+      const user = await store.createUser(email, password, startPlan);
+      if (owner) {
+        try {
+          await store.updateUserPlan(user, 'pro');
+        } catch (e) {}
+      }
+      const tokenJwt = signUserToken({
+        id: user.id,
+        email: user.email,
+        plan: startPlan
+      });
       setAuthCookie(res, tokenJwt);
       res.json({
         success: true,
         token: tokenJwt,
-        user: { id: user.id, email: user.email, plan: 'free' },
+        user: {
+          id: user.id,
+          email: user.email,
+          plan: startPlan,
+          isOwner: owner
+        },
         auth: 'cookie'
       });
     } catch (e) {
@@ -477,6 +538,42 @@ app.post(
 );
 
 
+
+/** Creator claim: set plan=pro for logged-in user if OWNER_SECRET matches */
+app.post('/api/admin/claim-owner', authMiddleware, async (req, res) => {
+  const secret = process.env.OWNER_SECRET || process.env.ADMIN_SECRET || '';
+  const given = String(req.body?.secret || req.headers['x-owner-secret'] || '');
+  if (!secret || given !== secret) {
+    return res.status(403).json({ success: false, error: 'Invalid owner secret' });
+  }
+  if (!req.user?.id) {
+    return res.status(401).json({ success: false, error: 'Login first' });
+  }
+  try {
+    await store.updateUserPlan(req.user, 'pro');
+    const email = req.user.email || '';
+    console.log('[owner] claimed by', email || req.user.id);
+    const tokenJwt = jwt.sign(
+      {
+        id: req.user.id,
+        email: email,
+        plan: 'pro',
+        isOwner: true
+      },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    setAuthCookie(res, tokenJwt);
+    res.json({
+      success: true,
+      user: { id: req.user.id, email: email, plan: 'pro', isOwner: true },
+      message: 'Owner access granted (Pro forever until you change OWNER_EMAILS)'
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
   if (!req.user?.id) {
     return res.json({ success: true, user: null });
@@ -484,6 +581,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     let plan = req.user.plan || 'free';
     let email = req.user.email || null;
+    let isOwner = false;
     if (email) {
       const u = await store.findUserByEmail(email);
       if (u) {
@@ -491,17 +589,27 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
         email = u.email || email;
       }
     }
+    if (isOwnerEmail(email)) {
+      isOwner = true;
+      plan = 'pro';
+      try {
+        await store.updateUserPlan({ id: req.user.id, email: email }, 'pro');
+      } catch (e) {}
+    }
     res.json({
       success: true,
-      user: { id: req.user.id, email: email, plan: plan }
+      user: { id: req.user.id, email: email, plan: plan, isOwner: isOwner }
     });
   } catch (e) {
+    const email = req.user.email || null;
+    const isOwner = isOwnerEmail(email);
     res.json({
       success: true,
       user: {
         id: req.user.id,
-        email: req.user.email || null,
-        plan: req.user.plan || 'free'
+        email: email,
+        plan: isOwner ? 'pro' : req.user.plan || 'free',
+        isOwner: isOwner
       }
     });
   }
@@ -565,7 +673,7 @@ app.post(
       const tokenJwt = signUserToken({
         id: user.id,
         email: user.email,
-        plan: user.plan || 'free'
+        plan: isOwnerEmail(user.email) ? 'pro' : (user.plan || 'free')
       });
       setAuthCookie(res, tokenJwt);
       res.json({
@@ -575,7 +683,7 @@ app.post(
         user: {
           id: user.id,
           email: user.email,
-          plan: user.plan || 'free',
+          plan: isOwnerEmail(user.email) ? 'pro' : (user.plan || 'free'),
           telegramId: String(data.id),
           name: [data.first_name, data.last_name].filter(Boolean).join(' ') || data.username || ''
         }
