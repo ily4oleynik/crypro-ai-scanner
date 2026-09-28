@@ -1946,6 +1946,35 @@ function whatWeCheckedHtml(security) {
   return html;
 }
 
+function identityBannerHtml(tok, security) {
+  const warnings =
+    (security && security.identityWarnings) ||
+    (security && security.flags || []).filter(function (f) {
+      return f && String(f.id || '').indexOf('identity') === 0;
+    });
+  if (!warnings || !warnings.length) {
+    // client-side fallback
+    const sym = String(tok && tok.symbol || '').toUpperCase();
+    const chain = String(tok && tok.chainId || '').toLowerCase();
+    const name = String(tok && tok.name || '').toLowerCase();
+    if ((sym === 'BTC' || name.indexOf('bitcoin') >= 0) && chain && chain !== 'bitcoin') {
+      warnings = [{
+        title: 'Not native Bitcoin',
+        text: 'Token «' + sym + '» on ' + chain + ' is not native BTC. High confusion risk.'
+      }];
+    }
+  }
+  if (!warnings || !warnings.length) return '';
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  let html = '<div class="identity-alert glass panel">';
+  html += '<div class="scam-alert-title">⚠ ' + (en ? 'Identity warning' : 'Предупреждение об идентичности') + '</div>';
+  warnings.forEach(function (w) {
+    html += '<p class="scam-alert-ai">' + safe(w.text || w.title || '') + '</p>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function scamAlertBannerHtml(tok, risk, security) {
   const score = Number(risk && risk.riskScore) || 0;
   if (score < 55) return '';
@@ -2113,6 +2142,7 @@ function renderTokenPage(data) {
     '<button type="button" class="btn-sm" style="margin-top:0.5rem;" onclick="addWatch(\'' + addr + '\',\'' + (tok.symbol || '') + '\',\'' + (tok.name || '') + '\')">' + tt('btn.watchlistAdd') + '</button>' +
     '<button type="button" class="btn-sm share-btn" style="margin-top:0.35rem;" onclick="shareReport()">' + tt('btn.share') + '</button>' +
     '</div></div>' +
+    identityBannerHtml(tok, data.security) +
     scamAlertBannerHtml(tok, r, data.security) +
     tokenHealthHtml(tok, r, data.security) +
     riskBreakdownHtml(tok, r, addr) +
