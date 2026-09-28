@@ -1,8 +1,22 @@
 const API_BASE = window.API_BASE || window.location.origin;
 
+/** Same-origin fetches with httpOnly cookie session */
+function apiFetch(path, options) {
+  options = options || {};
+  const headers = Object.assign({}, options.headers || {});
+  // Prefer cookie; keep Bearer only if still in memory during transition
+  if (token && !headers.Authorization) {
+    headers.Authorization = 'Bearer ' + token;
+  }
+  return fetch(API_BASE + path, Object.assign({}, options, {
+    credentials: 'include',
+    headers: headers
+  }));
+}
+
 let currentPlan = 'free';
 let user = null;
-let token = localStorage.getItem('token') || null;
+let token = null;
 let candleChart = null;
 let candleSeries = null;
 let volumeSeries = null;
@@ -15,17 +29,14 @@ let pendingPlan = null;
 let newsSource = 'all';
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Migrate off localStorage JWT — cookie is source of truth
   if (token) {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      user = { id: payload.id, email: payload.email, plan: payload.plan };
-      currentPlan = payload.plan || 'free';
-      updateAuthUI();
-    } catch (e) {
       localStorage.removeItem('token');
-      token = null;
-    }
+    } catch (e) {}
+    token = null;
   }
+  restoreSession();
 
   document.getElementById('nav-home')?.addEventListener('click', e => { e.preventDefault(); showPage('home'); });
   document.getElementById('nav-scanner')?.addEventListener('click', e => { e.preventDefault(); showPage('scanner'); });
@@ -78,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     try {
-      const res = await fetch(API_BASE + '/api/waitlist', {
+      const res = await apiFetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, plan: waitlistPlan })
@@ -321,7 +332,7 @@ async function loadTicker() {
   const inner = document.getElementById('ticker-inner');
   if (!inner) return;
   try {
-    const res = await fetch(API_BASE + '/api/ticker');
+    const res = await apiFetch('/api/ticker');
     const data = await res.json();
     const items = data.ticker || [];
     if (!items.length) {
@@ -366,7 +377,7 @@ async function loadTrending() {
   if (!grid) return;
   grid.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   try {
-    const res = await fetch(API_BASE + '/api/trending');
+    const res = await apiFetch('/api/trending');
     const data = await res.json();
     const tokens = data.tokens || [];
     if (!tokens.length) {
@@ -422,7 +433,7 @@ async function selectPlan(plan) {
 
 async function activatePlanDemo(plan) {
   try {
-    const res = await fetch(API_BASE + '/api/user/plan', {
+    const res = await apiFetch('/api/user/plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ plan })
@@ -439,8 +450,8 @@ async function activatePlanDemo(plan) {
       return;
     }
     if (data.token) {
-      token = data.token;
-      localStorage.setItem('token', token);
+      token = null;
+      try { localStorage.removeItem('token'); } catch (e) {}
     }
     currentPlan = data.plan || plan;
     if (user) user.plan = currentPlan;
@@ -487,7 +498,7 @@ async function applyDemoPlanButtons(allow) {
 
 async function loadPublicConfig() {
   try {
-    const res = await fetch(API_BASE + '/api/config/public');
+    const res = await apiFetch('/api/config/public');
     const data = await res.json();
     if (!data || !data.success) return;
     if (data.telegramBotUsername) {
@@ -526,7 +537,7 @@ async function onTelegramAuth(tgUser) {
     } else alert(msg);
   };
   try {
-    const res = await fetch(API_BASE + '/api/auth/telegram', {
+    const res = await apiFetch('/api/auth/telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tgUser)
@@ -536,8 +547,8 @@ async function onTelegramAuth(tgUser) {
       showErr(data.error || 'Telegram login failed');
       return;
     }
-    token = data.token;
-    localStorage.setItem('token', token);
+    token = null;
+    try { localStorage.removeItem('token'); } catch (e) {}
     user = data.user;
     currentPlan = (user && user.plan) || 'free';
     updateAuthUI();
@@ -599,7 +610,7 @@ async function handleAuth(e) {
       ? { email, password }
       : { email, password, acceptTerms: true };
 
-    const res = await fetch(API_BASE + '/api/auth/' + (isLogin ? 'login' : 'register'), {
+    const res = await apiFetch('/api/auth/' + (isLogin ? 'login' : 'register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -607,10 +618,10 @@ async function handleAuth(e) {
     const data = await res.json();
     if (!data.success) return showErr(data.error || 'Error');
 
-    token = data.token;
+    token = null;
     user = data.user;
-    currentPlan = data.user.plan || 'free';
-    localStorage.setItem('token', token);
+    currentPlan = (data.user && data.user.plan) || 'free';
+    try { localStorage.removeItem('token'); } catch (e) {}
     closeAuthModal();
     updateAuthUI();
     refreshUsage();
@@ -627,12 +638,35 @@ async function handleAuth(e) {
   }
 }
 
+async function restoreSession() {
+  try {
+    const res = await apiFetch('/api/auth/me');
+    const data = await res.json();
+    if (data && data.success && data.user && data.user.id) {
+      user = data.user;
+      currentPlan = data.user.plan || 'free';
+      token = null; // cookie carries session
+      updateAuthUI();
+      refreshUsage();
+    } else {
+      user = null;
+      currentPlan = 'free';
+      token = null;
+      updateAuthUI();
+    }
+  } catch (e) {
+    user = null;
+    token = null;
+  }
+}
+
 function logout() {
   token = null;
   user = null;
   currentPlan = 'free';
   pendingPlan = null;
-  localStorage.removeItem('token');
+  try { localStorage.removeItem('token'); } catch (e) {}
+  apiFetch('/api/auth/logout', { method: 'POST' }).catch(function () {});
   updateAuthUI();
   document.querySelectorAll('.plan-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.plan === 'free');
@@ -685,7 +719,7 @@ function showPage(page) {
 
 async function refreshUsage() {
   try {
-    const res = await fetch(API_BASE + '/api/usage', {
+    const res = await apiFetch('/api/usage', {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
@@ -712,7 +746,7 @@ async function refreshAccountPage() {
   if (emailEl) emailEl.textContent = user.email || '—';
   if (planEl) planEl.textContent = (user.plan || currentPlan || 'free').toUpperCase();
   try {
-    const res = await fetch(API_BASE + '/api/usage', {
+    const res = await apiFetch('/api/usage', {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
@@ -734,7 +768,7 @@ async function loadHighRiskSignals() {
   const box = document.getElementById('high-risk-grid');
   if (!box) return;
   try {
-    const res = await fetch(API_BASE + '/api/trending');
+    const res = await apiFetch('/api/trending');
     const data = await res.json();
     const list = (data.tokens || []).slice(0, 8);
     if (!list.length) {
@@ -793,7 +827,7 @@ async function loadHomeWatchlist() {
     return;
   }
   try {
-    const res = await fetch(API_BASE + '/api/watchlist', {
+    const res = await apiFetch('/api/watchlist', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -817,7 +851,7 @@ async function loadHomeHistory() {
     return;
   }
   try {
-    const res = await fetch(API_BASE + '/api/history', {
+    const res = await apiFetch('/api/history', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -854,7 +888,7 @@ async function analyzePortfolio(address) {
   if (!content) return;
   content.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch(API_BASE + '/api/portfolio/' + address, {
+    const res = await apiFetch('/api/portfolio/' + address, {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     const data = await res.json();
@@ -880,7 +914,7 @@ async function connectBybit(e) {
   submitBtn.textContent = 'Connecting...';
   submitBtn.disabled = true;
   try {
-    const res = await fetch(API_BASE + '/api/exchanges/bybit', {
+    const res = await apiFetch('/api/exchanges/bybit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ apiKey, apiSecret, limit: 15 })
@@ -916,7 +950,7 @@ async function loadNews(source) {
   if (!grid) return;
   grid.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const res = await fetch(API_BASE + '/api/news?source=' + encodeURIComponent(newsSource));
+    const res = await apiFetch('/api/news?source=' + encodeURIComponent(newsSource));
     const data = await res.json();
     if (!data.success || !data.news?.length) {
       grid.innerHTML = '<div class="error-card">No news</div>';
@@ -954,7 +988,7 @@ async function startScan() {
   if (chatSec) chatSec.style.display = 'none';
   chatHistory = [];
   try {
-    const res = await fetch(API_BASE + '/api/scan/' + encodeURIComponent(address) + '?plan=' + encodeURIComponent(currentPlan || 'free'), {
+    const res = await apiFetch('/api/scan/' + encodeURIComponent(address) + '?plan=' + encodeURIComponent(currentPlan || 'free'), {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     let data;
@@ -1014,7 +1048,7 @@ async function startScan() {
           plan: data.plan || currentPlan || 'free',
           scannedAt: new Date().toISOString()
         };
-        await fetch(API_BASE + '/api/history', {
+        await apiFetch('/api/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
           body: JSON.stringify(histItem)
@@ -1149,7 +1183,7 @@ function openDemoReport() {
   showPage('scanner');
   const results = document.getElementById('results');
   if (results) results.innerHTML = '<div class="loading glass">Loading Premium sample…</div>';
-  fetch(API_BASE + '/api/sample/premium')
+  apiFetch('/api/sample/premium')
     .then(function (r) {
       return r.json();
     })
@@ -1219,8 +1253,8 @@ async function fetchRealCandles(pairAddress, chainId, tf) {
   if (!pairAddress) return null;
   const map = { '1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w' };
   try {
-    const res = await fetch(
-      API_BASE + '/api/chart/' + encodeURIComponent(pairAddress) +
+    const res = await apiFetch(
+      '/api/chart/' + encodeURIComponent(pairAddress) +
       '?chain=' + encodeURIComponent(chainId || 'eth') +
       '&tf=' + (map[tf] || '1h')
     );
@@ -1646,8 +1680,8 @@ async function enrichSecurity(data, address) {
   if (!data) return data;
   const chain = (data.token && data.token.chainId) || detectChainFromAddress(address) || 'ethereum';
   try {
-    const res = await fetch(
-      API_BASE + '/api/security/' + encodeURIComponent(chain) + '/' + encodeURIComponent(address)
+    const res = await apiFetch(
+      '/api/security/' + encodeURIComponent(chain) + '/' + encodeURIComponent(address)
     );
     if (!res.ok) throw new Error('security ' + res.status);
     const body = await res.json();
@@ -2376,7 +2410,7 @@ async function sendChatMessage() {
   chatHistory.push({ role: 'user', content: text });
   const loadingId = addChatMessage('ai', '…');
   try {
-    const res = await fetch(API_BASE + '/api/ai/chat', {
+    const res = await apiFetch('/api/ai/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2451,7 +2485,7 @@ async function loadHistory() {
     return;
   }
   try {
-    const res = await fetch(API_BASE + '/api/history', {
+    const res = await apiFetch('/api/history', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -2501,7 +2535,7 @@ async function loadWatchlist() {
     return;
   }
   try {
-    const res = await fetch(API_BASE + '/api/watchlist', {
+    const res = await apiFetch('/api/watchlist', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -2524,7 +2558,7 @@ async function addWatch(address, symbol, name) {
   if (!user) return openAuthModal('Sign in to save Watchlist');
   if (!address) return;
   try {
-    const res = await fetch(API_BASE + '/api/watchlist', {
+    const res = await apiFetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify({ address, symbol, name })
@@ -2545,7 +2579,7 @@ async function addWatch(address, symbol, name) {
 }
 
 async function removeWatch(address) {
-  await fetch(API_BASE + '/api/watchlist/' + address, {
+  await apiFetch('/api/watchlist/' + address, {
     method: 'DELETE',
     headers: { Authorization: 'Bearer ' + token }
   });
@@ -2561,7 +2595,7 @@ async function loadAlerts() {
     return;
   }
   try {
-    const res = await fetch(API_BASE + '/api/alerts', {
+    const res = await apiFetch('/api/alerts', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -2587,7 +2621,7 @@ async function createAlert() {
   const type = document.getElementById('alert-type').value;
   const value = document.getElementById('alert-value').value;
   if (!address || value === '') return alert('Fill address and value');
-  const res = await fetch(API_BASE + '/api/alerts', {
+  const res = await apiFetch('/api/alerts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
     body: JSON.stringify({ type, address, symbol, value })
@@ -2604,7 +2638,7 @@ async function createAlert() {
 }
 
 async function removeAlertItem(id) {
-  await fetch(API_BASE + '/api/alerts/' + id, {
+  await apiFetch('/api/alerts/' + id, {
     method: 'DELETE',
     headers: { Authorization: 'Bearer ' + token }
   });
@@ -2639,7 +2673,7 @@ function startTgLinkPoll() {
       return;
     }
     try {
-      const res = await fetch(API_BASE + '/api/telegram/status', {
+      const res = await apiFetch('/api/telegram/status', {
         headers: { Authorization: 'Bearer ' + token }
       });
       const data = await res.json();
@@ -2675,7 +2709,7 @@ async function refreshTelegramStatus() {
   }
 
   try {
-    const res = await fetch(API_BASE + '/api/telegram/status', {
+    const res = await apiFetch('/api/telegram/status', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -2708,7 +2742,7 @@ async function refreshTelegramStatus() {
 async function connectTelegram() {
   if (!user) return openAuthModal('Sign in to connect Telegram');
   try {
-    const res = await fetch(API_BASE + '/api/telegram/link', {
+    const res = await apiFetch('/api/telegram/link', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token }
     });
@@ -2731,7 +2765,7 @@ async function connectTelegram() {
 async function disconnectTelegram() {
   try {
     stopTgPoll();
-    await fetch(API_BASE + '/api/telegram/link', {
+    await apiFetch('/api/telegram/link', {
       method: 'DELETE',
       headers: { Authorization: 'Bearer ' + token }
     });
@@ -2757,7 +2791,7 @@ async function runCompare() {
   const box = document.getElementById('compare-content');
   box.innerHTML = '<div class="loading">...</div>';
   try {
-    const res = await fetch(API_BASE + '/api/compare', {
+    const res = await apiFetch('/api/compare', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2807,7 +2841,7 @@ function openDemoReport() {
   showPage('scanner');
   const results = document.getElementById('results');
   if (results) results.innerHTML = '<div class="loading glass">Loading Premium sample…</div>';
-  fetch(API_BASE + '/api/sample/premium')
+  apiFetch('/api/sample/premium')
     .then(function (r) {
       return r.json();
     })
