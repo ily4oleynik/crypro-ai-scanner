@@ -2493,15 +2493,31 @@ function initAIChat(data) {
   ).toLowerCase();
   const isPro = plan === 'pro';
   const isPrem = plan === 'premium' || isPro;
+  const lang =
+    (typeof currentLang !== 'undefined' && currentLang) ||
+    localStorage.getItem('lang') ||
+    'ru';
+  const en = lang === 'en';
   const title = section.querySelector('h3');
   if (title) {
-    title.textContent = isPro
-      ? 'AI Chat (Pro)'
-      : isPrem
-        ? 'AI Chat (Premium · limited)'
-        : 'AI Chat (Free trial · 2/day)';
+    if (typeof t === 'function') {
+      title.textContent = isPro
+        ? t('chat.pro')
+        : isPrem
+          ? t('chat.premium')
+          : t('chat.freeTrial');
+    } else {
+      title.textContent = isPro
+        ? 'AI Chat (Pro)'
+        : isPrem
+          ? en
+            ? 'AI Chat (Premium · limited)'
+            : 'AI Chat (Premium · лимит)'
+          : en
+            ? 'AI Chat (Free trial · 2/day)'
+            : 'AI Chat (Free trial · 2/день)';
+    }
   }
-  // Always show chat after a scan — free gets trial messages
   section.style.display = 'block';
   currentTokenContext = {
     token: data.token,
@@ -2521,15 +2537,14 @@ function initAIChat(data) {
       { ru: 'Какой размер безопасен?', en: 'Safe trade size?' },
       { ru: 'Что поднимет риск?', en: 'What raises risk?' }
     ];
-    const lang = (localStorage.getItem('lang') || 'ru') === 'en' ? 'en' : 'ru';
     prompts.forEach(function (p) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'chat-chip';
-      b.textContent = p[lang];
+      b.textContent = en ? p.en : p.ru;
       b.addEventListener('click', function () {
         const input = document.getElementById('chat-input');
-        if (input) input.value = p[lang];
+        if (input) input.value = en ? p.en : p.ru;
         sendChatMessage();
       });
       chips.appendChild(b);
@@ -2540,10 +2555,10 @@ function initAIChat(data) {
     tip.id = 'chat-limit-note';
     tip.style.marginBottom = '0.5rem';
     tip.textContent = isPrem
-      ? lang === 'en'
+      ? en
         ? 'Answers use this scan only · Contract / Liquidity / Holders'
         : 'Ответы только по этому скану · Contract / Liquidity / Holders'
-      : lang === 'en'
+      : en
         ? 'Free trial: 2 messages/day. Structured answers from this scan.'
         : 'Free trial: 2 сообщения/день. Ответы строго по данным этого скана.';
     msgs.appendChild(tip);
@@ -2552,9 +2567,22 @@ function initAIChat(data) {
   const chatInput = document.getElementById('chat-input');
   if (chatInput) {
     chatInput.placeholder =
-      (localStorage.getItem('lang') || 'ru') === 'en'
-        ? 'Ask about this token…'
-        : 'Спросите про этот токен…';
+      typeof t === 'function'
+        ? t('chat.placeholder')
+        : en
+          ? 'Ask about this token…'
+          : 'Спросите про этот токен…';
+  }
+  const sendBtn = document.getElementById('chat-send');
+  if (sendBtn && typeof t === 'function') sendBtn.textContent = t('chat.send');
+  const toggleBtn = document.getElementById('toggle-chat');
+  if (toggleBtn && typeof t === 'function') {
+    const windowEl = document.getElementById('chat-window');
+    const open =
+      windowEl &&
+      windowEl.style.display !== 'none' &&
+      windowEl.style.display !== '';
+    toggleBtn.textContent = open ? t('chat.hide') : en ? 'Open chat' : 'Открыть чат';
   }
 }
 
