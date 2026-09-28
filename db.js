@@ -70,6 +70,19 @@ async function initDb() {
       alert_id TEXT NOT NULL,
       PRIMARY KEY (user_id, alert_id)
     );
+    CREATE TABLE IF NOT EXISTS risk_snapshots (
+      id SERIAL PRIMARY KEY,
+      address TEXT NOT NULL,
+      chain_id TEXT,
+      symbol TEXT,
+      risk_score INTEGER NOT NULL,
+      risk_level TEXT,
+      liquidity DOUBLE PRECISION,
+      price DOUBLE PRECISION,
+      recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS risk_snapshots_addr_time
+      ON risk_snapshots (address, recorded_at DESC);
   `);
 
   await query(`
