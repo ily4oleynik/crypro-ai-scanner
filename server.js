@@ -1609,6 +1609,17 @@ app.get('/api/portfolio/desk', authMiddleware, async (req, res) => {
     const worst = [...refreshed]
       .sort((a, b) => (b.lastRisk || 0) - (a.lastRisk || 0))
       .slice(0, 3);
+    // Pro: 30-day risk history for worst positions
+    const historyByAddress = {};
+    if (store.getRiskHistory) {
+      for (const w of worst) {
+        try {
+          historyByAddress[w.address] = await store.getRiskHistory(w.address, 720);
+        } catch (e) {
+          historyByAddress[w.address] = [];
+        }
+      }
+    }
     res.json({
       success: true,
       plan: 'pro',
@@ -1617,6 +1628,8 @@ app.get('/api/portfolio/desk', authMiddleware, async (req, res) => {
       riskLevel: avgRisk > 60 ? 'HIGH' : avgRisk > 35 ? 'MEDIUM' : 'LOW',
       highRiskCount: refreshed.filter((t) => (t.lastRisk || 0) > 60).length,
       worst,
+      historyByAddress,
+      portfolioAlertDelta: Number(process.env.PORTFOLIO_RISK_DELTA || 15),
       tokens: refreshed,
       source: 'portfolio'
     });
