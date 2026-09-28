@@ -44,6 +44,7 @@
         <a href="#" id="nav-watchlist">Watchlist</a>
         <a href="#" id="nav-history">History</a>
         <a href="#" id="nav-alerts">Alerts</a>
+        <a href="#" id="nav-portfolio">Portfolio</a>
         <a href="#" id="nav-compare">Compare</a>
         <a href="#" id="nav-account">Account</a>
       </nav>
@@ -74,7 +75,8 @@
         <a href="#" class="drawer-link" data-page="watchlist" id="drawer-watchlist"><span class="d-ico">★</span> Watchlist</a>
         <a href="#" class="drawer-link" data-page="history" id="drawer-history"><span class="d-ico">◷</span> History</a>
         <a href="#" class="drawer-link" data-page="alerts" id="drawer-alerts"><span class="d-ico">🔔</span> Alerts</a>
-        <a href="#" class="drawer-link" data-page="compare" id="drawer-compare"><span class="d-ico">⇄</span> Compare</a>
+        <a href="#" class="drawer-link" data-page="portfolio">Portfolio</a>
+        <a href="#" class="nav-link" data-page="compare" id="drawer-compare"><span class="d-ico">⇄</span> Compare</a>
         <a href="#" class="drawer-link" data-page="account" id="drawer-account"><span class="d-ico">👤</span> Account</a>
       </nav>
       <div class="nav-drawer-section">
@@ -358,6 +360,32 @@
       <div id="compare-content" style="margin-top:1rem"></div>
     </section>
 
+    
+    <section id="page-portfolio" class="page" style="display:none">
+      <div class="section-head">
+        <h2>Portfolio Risk Desk</h2>
+        <span class="badge pro-badge">Pro</span>
+      </div>
+      <p class="muted small" id="portfolio-desk-sub">Сводка риска по вашим позициям. Доступно на тарифе Pro.</p>
+      <div class="glass panel" style="margin-bottom:1rem">
+        <div class="hero-scan-row">
+          <input type="text" id="portfolio-add-input" placeholder="0x… add position" />
+          <button type="button" class="upgrade-btn" id="portfolio-add-btn">Add</button>
+        </div>
+        <div class="hero-scan-row" style="margin-top:0.6rem">
+          <textarea id="batch-scan-input" rows="2" placeholder="Batch scan: paste up to 25 addresses (Pro)" style="width:100%;min-height:64px"></textarea>
+        </div>
+        <button type="button" class="connect-btn" id="batch-scan-btn" style="margin-top:0.5rem">Batch scan</button>
+      </div>
+      <div id="portfolio-desk-summary" class="metrics-grid"></div>
+      <div id="portfolio-desk-list" style="margin-top:1rem"></div>
+      <div class="section-head" style="margin-top:1.5rem">
+        <h3>Early pairs</h3>
+        <button type="button" class="link-btn" id="refresh-new-pairs">Refresh</button>
+      </div>
+      <div id="new-pairs-grid" class="trending-grid"></div>
+    </section>
+
     <section id="page-account" class="page" style="display:none">
       <h2 class="page-title">Account</h2>
       <div class="account-grid">
@@ -487,7 +515,8 @@
             <li>AI-отчёт + chat 20 msg / день</li>
             <li>Telegram alerts (цена + risk + liq)</li>
             <li>History + watchlist до 30</li>
-            <li>Свечной график</li>
+            <li>Свечной график · ручные сканы</li>
+            <li class="muted">Не включает Portfolio Desk / batch / early feed</li>
           </ul>
           <button type="button" class="upgrade-btn full pay-plan-btn" data-plan="premium" style="display:none" onclick="startCheckout('premium')">Оплатить Premium · 29 $</button>
           <button type="button" class="connect-btn full waitlist-btn" data-plan="premium">Waitlist · $29</button>
@@ -497,14 +526,14 @@
         <div class="price-card" data-plan="pro">
           <h3>Pro</h3>
           <p class="plan-price">$79<span>/mo</span></p>
-          <p class="plan-pitch">Для трейдеров и аналитиков</p>
+          <p class="plan-pitch">Risk desk: портфель, радар, unlimited AI</p>
           <ul>
-            <li>До 500 сканов / день (fair use)</li>
-            <li>Всё из Premium</li>
-            <li>AI chat без дневного лимита msg</li>
-            <li>Алерты без отдельной очереди</li>
-            <li>Watchlist без лимита 30</li>
-            <li>Bybit read-only (опционально)</li>
+            <li><strong>Portfolio Risk Desk</strong> — score по позициям</li>
+            <li>Advanced alerts (score jump / risk / liq)</li>
+            <li>Unlimited AI + what-if / deep dive</li>
+            <li>Early / new pairs feed</li>
+            <li>Batch scan до 25 адресов</li>
+            <li>Risk history 30d · Bybit как источник портфеля</li>
           </ul>
           <button type="button" class="upgrade-btn full pay-plan-btn" data-plan="pro" style="display:none" onclick="startCheckout('pro')">Оплатить Pro · 79 $</button>
           <button type="button" class="connect-btn full waitlist-btn" data-plan="pro">Waitlist · $79</button>
