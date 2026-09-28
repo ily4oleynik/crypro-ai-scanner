@@ -201,6 +201,60 @@ async function incrementScan(user) {
   );
 }
 
+async function addRiskSnapshot(item) {
+  const address = String(item.address || '').trim();
+  if (!address) return;
+  try {
+    // throttle: one snapshot per address per ~30 min
+    const recent = await query(
+      `SELECT id FROM risk_snapshots
+       WHERE lower(address) = lower($1)
+         AND recorded_at > NOW() - INTERVAL '30 minutes'
+       LIMIT 1`,
+      [address]
+    );
+    if (recent.rows.length) return;
+    await query(
+      `INSERT INTO risk_snapshots
+        (address, chain_id, symbol, risk_score, risk_level, liquidity, price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        address,
+        item.chainId || null,
+        item.symbol || null,
+        item.riskScore != null ? Number(item.riskScore) : 0,
+        item.riskLevel || null,
+        item.liquidity != null ? Number(item.liquidity) : null,
+        item.price != null ? Number(item.price) : null
+      ]
+    );
+  } catch (e) {
+    console.error('[store] addRiskSnapshot:', e.message);
+  }
+}
+
+async function getRiskHistory(address, hours) {
+  const addr = String(address || '').trim();
+  if (!addr) return [];
+  const h = Math.min(168, Math.max(6, Number(hours) || 48));
+  try {
+    const r = await query(
+      `SELECT risk_score AS "riskScore", risk_level AS "riskLevel",
+              liquidity, price, recorded_at AS "at"
+       FROM risk_snapshots
+       WHERE lower(address) = lower($1)
+         AND recorded_at > NOW() - ($2 * INTERVAL '1 hour')
+       ORDER BY recorded_at ASC
+       LIMIT 200`,
+      [addr, h]
+    );
+    return r.rows;
+  } catch (e) {
+    console.error('[store] getRiskHistory:', e.message);
+    return [];
+  }
+}
+
 async function addHistory(user, item) {
   const id = uid(user);
   if (!id) return;
@@ -453,6 +507,8 @@ module.exports = {
   incrementScan,
   addHistory,
   getHistory,
+  addRiskSnapshot,
+  getRiskHistory,
   getWatchlist,
   addToWatchlist,
   removeFromWatchlist,
