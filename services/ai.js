@@ -285,6 +285,8 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
 
   async chat(messages, context) {
     context = context || {};
+    const whatIf = !!context.whatIf;
+    const portfolioAware = !!context.portfolioAware;
     const lang = String(context.lang || context.language || 'ru').toLowerCase().startsWith('en')
       ? 'en'
       : 'ru';
@@ -407,6 +409,16 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
         '4) Verdict one sentence (informational, not financial advice)\n' +
         '5) What would change the assessment\n' +
         'Forbidden: regulatory pressure, Ethereum scalability, generic market talk, residual risk always remains.\n' +
+        (whatIf
+          ? (lang === 'en'
+              ? 'Pro mode: if user asks what-if / position size, estimate exit risk vs liquidity (rough: size/liq ratio). Not financial advice.\n'
+              : 'Режим Pro: if what-if / размер позиции — оцени exit risk vs ликвидность (грубо size/liq). Не финсовет.\n')
+          : '') +
+        (portfolioAware
+          ? (lang === 'en'
+              ? 'You may compare multiple tokens if user pastes several symbols from their portfolio.\n'
+              : 'Можно сравнивать несколько токенов, если пользователь вставил их из портфеля.\n')
+          : '') +
         facts;
 
       const sliced = (messages || []).slice(-8).map(function (m, i, arr) {
