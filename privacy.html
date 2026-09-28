@@ -1,16 +1,63 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Privacy Policy — Crypto AI Scanner</title>
-<link rel="stylesheet" href="style.css"/></head>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — Crypto AI Scanner</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .legal { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .legal h1 { font-size: 1.6rem; margin: 0.75rem 0 0.35rem; }
+    .legal h2 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: var(--accent, #00f0a0); }
+    .legal p, .legal li { color: var(--muted, #888); line-height: 1.6; font-size: 0.95rem; }
+    .legal ul { margin: 0.35rem 0 0 1.1rem; }
+    .legal a { color: var(--accent, #00f0a0); }
+  </style>
+</head>
 <body>
-<div class="container" style="padding-top:2rem;max-width:720px">
-  <a href="/" class="text-link">← Back</a>
-  <h1 style="margin:1rem 0">Privacy Policy</h1>
-  <p class="muted">Last updated: 2026</p>
-  <div class="glass panel-block" style="margin-top:1rem">
-    <p>We process account email, scan history, watchlist, alerts and optional Telegram chat id to provide the service.</p>
-    <p style="margin-top:0.75rem">We do not sell personal data. API keys for exchanges are used only to fetch balances/trades you request and are not stored longer than needed for the session feature unless you explicitly save them (current build: request-time only).</p>
-    <p style="margin-top:0.75rem">Contact via Telegram channels listed on the site for privacy requests.</p>
+  <div class="legal">
+    <a href="/">← Crypto AI Scanner</a>
+    <h1>Privacy Policy / Политика конфиденциальности</h1>
+    <p>Last updated: 2026-09-28</p>
+
+    <h2>1. Operator</h2>
+    <p>Сервис Crypto AI Scanner («мы»). Контакт по вопросам данных: через Telegram-каналы на сайте или email, указанный в канале. Юридическое лицо / ИП будет указано после регистрации бизнеса и подключения платежей.</p>
+
+    <h2>2. What we process</h2>
+    <ul>
+      <li>Email и хеш пароля (аккаунт)</li>
+      <li>Telegram id / chat id (если вход или привязка бота)</li>
+      <li>История сканов, watchlist, алерты, выбран</li>
+      <li>Email waitlist (если оставили)</li>
+      <li>Технические логи: IP, User-Agent (ограниченно, для rate limit и безопасности)</li>
+      <li>localStorage: JWT, язык, локальная история риска на устройстве</li>
+    </ul>
+
+    <h2>3. Processors / third parties</h2>
+    <ul>
+      <li>Hosting: Railway (или аналог)</li>
+      <li>Market data: DexScreener</li>
+      <li>Security flags: GoPlus</li>
+      <li>AI text: Groq / OpenRouter (промпт содержит факты скана, не пароли)</li>
+      <li>Telegram Bot API (алерты, login widget)</li>
+    </ul>
+
+    <h2>4. Purpose</h2>
+    <p>Предоставление сканов, аккаунта, алертов, waitlist. Мы не продаём персональные данные.</p>
+
+    <h2>5. Exchange API keys (Bybit)</h2>
+    <p>Ключи передаются на сервер только для запроса, который вы инициируете. Текущая сборка не предназначена для долгого хранения ключей. Не передавайте ключи с правом вывода средств.</p>
+
+    <h2>6. Retention</h2>
+    <p>Аккаунт и связанные данные — пока аккаунт существует. Удаление: запрос через контакты выше. Логи — краткосрочно.</p>
+
+    <h2>7. Your rights</h2>
+    <p>Запрос на доступ / исправление / удаление данных аккаунта. Cookies: используем localStorage для сессии и настроек; отдельный cookie-banner может появиться позже.</p>
+
+    <h2>8. Security</h2>
+    <p>HTTPS, хеширование паролей, rate limits. Абсолютной безопасности не гарантируем.</p>
+
+    <p style="margin-top:2rem"><a href="/terms.html">Terms</a> · <a href="/trust.html">Trust Center</a> · <a href="/">Home</a></p>
   </div>
-</div>
-</body></html>
+</body>
+</html>
