@@ -874,7 +874,7 @@ async function loadHomeWatchlist() {
   const box = document.getElementById('home-watchlist');
   if (!box) return;
   if (!user || !token) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Sign in to save favorites</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
+    box.innerHTML = '<div class="empty-state-cta"><p>' + (typeof t === 'function' ? t('empty.watchlist') : 'Sign in to save favorites') + '</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">' + (typeof t === 'function' ? t('nav.login') : 'Login') + '</button></div>';
     return;
   }
   try {
@@ -1039,7 +1039,8 @@ async function startScan() {
   if (chatSec) chatSec.style.display = 'none';
   chatHistory = [];
   try {
-    const res = await apiFetch('/api/scan/' + encodeURIComponent(address) + '?plan=' + encodeURIComponent(currentPlan || 'free'), {
+    const _lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
+    const res = await apiFetch('/api/scan/' + encodeURIComponent(address) + '?plan=' + encodeURIComponent(currentPlan || 'free') + '&lang=' + encodeURIComponent(_lang), {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
     });
     let data;
@@ -2604,7 +2605,7 @@ async function sendChatMessage() {
   const text = input && input.value.trim();
   if (!text) return;
   if (!currentTokenContext || !currentTokenContext.token) {
-    addChatMessage('ai', 'Сначала просканируйте токен — чат отвечает только по данным отчёта.');
+    addChatMessage('ai', ((localStorage.getItem('lang')||'ru')==='en') ? 'Scan a token first — chat answers only from this report.' : 'Сначала просканируйте токен — чат отвечает только по данным отчёта.');
     return;
   }
   addChatMessage('user', text);
@@ -2620,7 +2621,13 @@ async function sendChatMessage() {
       },
       body: JSON.stringify({
         messages: chatHistory,
-        context: currentTokenContext
+        lang: (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru',
+        context: Object.assign({}, currentTokenContext || {}, {
+          lang: (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru',
+          token: (currentTokenContext && currentTokenContext.token) || null,
+          risk: (currentTokenContext && currentTokenContext.risk) || null,
+          security: (currentTokenContext && currentTokenContext.security) || null
+        })
       })
     });
     const data = await res.json().catch(function () {
@@ -2631,11 +2638,15 @@ async function sendChatMessage() {
       let err =
         data.error ||
         (res.status === 403
-          ? 'Лимит чата. Откройте Premium — 20 сообщений/день.'
-          : 'Ошибка AI');
+          ? ((localStorage.getItem('lang')||'ru')==='en'
+              ? 'Chat limit reached. Open Premium — 20 messages/day.'
+              : 'Лимит чата. Откройте Premium — 20 сообщений/день.')
+          : ((localStorage.getItem('lang')||'ru')==='en' ? 'AI error' : 'Ошибка AI'));
       if (data.remaining === 0 || res.status === 403) {
         err +=
-          '\n\n<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Открыть Premium</button>';
+          '\n\n<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">' +
+          ((localStorage.getItem('lang')||'ru')==='en' ? 'Open Premium' : 'Открыть Premium') +
+          '</button>';
         addChatMessage('ai', err);
         const last = document.querySelector('#chat-messages .chat-msg.ai:last-child .msg-bubble');
         if (last && err.indexOf('<button') >= 0) last.innerHTML = err.replace(/\n/g, '<br>');
@@ -2654,7 +2665,7 @@ async function sendChatMessage() {
     }
   } catch (err) {
     removeChatMessage(loadingId);
-    addChatMessage('ai', 'Ошибка сети AI');
+    addChatMessage('ai', ((localStorage.getItem('lang')||'ru')==='en') ? 'AI network error' : 'Ошибка сети AI');
   }
 }
 
@@ -2757,7 +2768,7 @@ async function loadWatchlist() {
 }
 
 async function addWatch(address, symbol, name) {
-  if (!user) return openAuthModal('Sign in to save Watchlist');
+  if (!user) return openAuthModal(typeof t === 'function' ? t('empty.watchlist') : 'Sign in to save Watchlist');
   if (!address) return;
   try {
     const res = await apiFetch('/api/watchlist', {
