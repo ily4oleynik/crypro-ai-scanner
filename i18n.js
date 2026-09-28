@@ -111,6 +111,15 @@ const I18N = {
     'auth.orEmail': 'или email',
     'auth.quick': 'Быстрый вход',
     'auth.forgot': 'Забыли пароль?',
+    'auth.passHint': 'Мин. 8 символов, буква + цифра',
+    'plans.title': 'Тарифы',
+    'plans.sub': 'Оплата ещё не подключена. Оставьте email в waitlist. Демо-тариф — только если включён на сервере.',
+    'chat.freeTrial': 'AI Chat (Free trial · 2/день)',
+    'chat.premium': 'AI Chat (Premium · limited)',
+    'chat.pro': 'AI Chat (Pro)',
+    'chat.hide': 'Скрыть',
+    'chat.placeholder': 'Спросите про этот токен…',
+    'chat.send': 'Отправить',
 
     'tg.strip': 'Каналы',
     'tg.hint': 'Алерты · разборы · дайджесты',
@@ -245,6 +254,15 @@ const I18N = {
     'auth.orEmail': 'or email',
     'auth.quick': 'Quick sign-in',
     'auth.forgot': 'Forgot password?',
+    'auth.passHint': 'Min 8 chars, letter + number',
+    'plans.title': 'Plans',
+    'plans.sub': 'Payments not connected yet. Join the waitlist. Demo plans only if enabled on the server.',
+    'chat.freeTrial': 'AI Chat (Free trial · 2/day)',
+    'chat.premium': 'AI Chat (Premium · limited)',
+    'chat.pro': 'AI Chat (Pro)',
+    'chat.hide': 'Hide',
+    'chat.placeholder': 'Ask about this token…',
+    'chat.send': 'Send',
 
     'tg.strip': 'Channels',
     'tg.hint': 'Alerts · digests · signal ideas',
@@ -297,8 +315,19 @@ function applyTranslations() {
     const key = el.getAttribute('data-i18n');
     if (!key) return;
     const val = t(key);
-    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
-    else el.textContent = val;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+      el.placeholder = val;
+      return;
+    }
+    // Terms line keeps links
+    if (key === 'auth.terms') {
+      const ru = (typeof currentLang !== 'undefined' ? currentLang : localStorage.getItem('lang')) !== 'en';
+      el.innerHTML = ru
+        ? 'Согласен с <a href="/terms.html" target="_blank" rel="noopener">условиями</a> и <a href="/privacy.html" target="_blank" rel="noopener">политикой конфиденциальности</a>'
+        : 'I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>';
+      return;
+    }
+    el.textContent = val;
   });
 
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
