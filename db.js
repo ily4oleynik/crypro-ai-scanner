@@ -83,6 +83,22 @@ async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS risk_snapshots_addr_time
       ON risk_snapshots (address, recorded_at DESC);
+    CREATE TABLE IF NOT EXISTS portfolio_positions (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      address TEXT NOT NULL,
+      chain_id TEXT,
+      symbol TEXT,
+      name TEXT,
+      note TEXT,
+      last_risk INTEGER,
+      last_liq DOUBLE PRECISION,
+      last_price DOUBLE PRECISION,
+      added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, address)
+    );
+    CREATE INDEX IF NOT EXISTS portfolio_user_idx ON portfolio_positions (user_id);
   `);
 
   await query(`
