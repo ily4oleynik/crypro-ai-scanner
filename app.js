@@ -3465,6 +3465,7 @@ async function loadPortfolioDesk() {
       summary.innerHTML = '';
       return;
     }
+    const delta = data.portfolioAlertDelta || 15;
     summary.innerHTML =
       '<div class="metric-card glass"><div class="metric-label">Portfolio risk</div><div class="metric-value">' +
       (data.portfolioRisk || 0) +
@@ -3475,9 +3476,45 @@ async function loadPortfolioDesk() {
       '<div class="metric-card glass"><div class="metric-label">High risk</div><div class="metric-value" style="color:#ff4d6a">' +
       (data.highRiskCount || 0) +
       '</div></div>' +
-      '<div class="metric-card glass"><div class="metric-label">Level</div><div class="metric-value">' +
-      (data.riskLevel || '—') +
+      '<div class="metric-card glass"><div class="metric-label">TG alert if risk +</div><div class="metric-value">' +
+      delta +
       '</div></div>';
+    // worst + 30d sparkline
+    if (data.worst && data.worst.length) {
+      let wh = '<div class="glass panel" style="margin:1rem 0;padding:1rem"><div class="muted small">Worst positions · risk history 30d</div>';
+      data.worst.forEach(function (w) {
+        const hist = (data.historyByAddress && data.historyByAddress[w.address]) || [];
+        const scores = hist.map(function (p) { return Number(p.riskScore) || 0; });
+        let spark = '';
+        if (scores.length >= 2) {
+          const maxS = Math.max.apply(null, scores.concat([100]));
+          const step = 120 / (scores.length - 1);
+          let d = '';
+          scores.forEach(function (sc, i) {
+            const x = i * step;
+            const y = 36 - (sc / maxS) * 28;
+            d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+          });
+          spark =
+            '<svg width="120" height="40" viewBox="0 0 120 40"><path d="' +
+            d +
+            '" fill="none" stroke="#00f0a0" stroke-width="2"/></svg>';
+        } else {
+          spark = '<span class="muted small">Need more scans for chart</span>';
+        }
+        wh +=
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem">' +
+          '<div><strong>' +
+          (w.symbol || 'TOKEN') +
+          '</strong> · ' +
+          (w.lastRisk || '—') +
+          '/100</div>' +
+          spark +
+          '</div>';
+      });
+      wh += '</div>';
+      summary.innerHTML += wh;
+    }
     if (!data.tokens || !data.tokens.length) {
       list.innerHTML =
         '<p class="muted">' +
