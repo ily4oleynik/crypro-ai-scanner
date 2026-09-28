@@ -340,9 +340,30 @@ async function fetchTokenSecurity(chainIdOrName, contractAddress) {
       result[address.toLowerCase()] ||
       result[address] ||
       (keys.length ? result[keys[0]] : null);
-    return normalizeSecurity(raw, chainId);
+    let sec = normalizeSecurity(raw, chainId);
+    // Always attempt secondary honeypot simulation for 0x addresses
+    const hp = await fetchHoneypotIs(address);
+    if (hp) {
+      sec = mergeHoneypotSecondary(sec, hp);
+    }
+    return sec;
   } catch (e) {
     console.error('[GoPlus]', e.response?.status || e.message);
+    // Still try honeypot.is if GoPlus failed
+    const hp = await fetchHoneypotIs(address);
+    if (hp) {
+      return mergeHoneypotSecondary(
+        {
+          available: true,
+          chainId,
+          source: 'honeypot.is',
+          flags: [],
+          meta: { isHoneypot: null, isMintable: null },
+          error: e.response?.data?.message || e.message
+        },
+        hp
+      );
+    }
     return {
       available: false,
       error: e.response?.data?.message || e.message,
@@ -350,6 +371,51 @@ async function fetchTokenSecurity(chainIdOrName, contractAddress) {
       flags: []
     };
   }
+}
+
+function mergeHoneypotSecondary(sec, hp) {
+  sec = sec || { available: true, flags: [], meta: {} };
+  sec.meta = sec.meta || {};
+  sec.flags = Array.isArray(sec.flags) ? sec.flags.slice() : [];
+  if (hp.isHoneypot === true) {
+    sec.meta.isHoneypot = true;
+    sec.riskBonus = (sec.riskBonus || 0) + 30;
+    sec.flags = sec.flags.filter(function (f) { return f.id !== 'honeypot'; });
+    sec.flags.unshift({
+      id: 'honeypot',
+      label: 'Honeypot',
+      status: 'bad',
+      text: 'Honeypot simulation failed sell (honeypot.is)'
+    });
+  } else if (hp.isHoneypot === false && sec.meta.isHoneypot == null) {
+    sec.meta.isHoneypot = false;
+    const has = sec.flags.some(function (f) { return f.id === 'honeypot'; });
+    if (!has) {
+      sec.flags.unshift({
+        id: 'honeypot',
+        label: 'Honeypot',
+        status: 'ok',
+        text: 'Sell simulation OK (honeypot.is)'
+      });
+    } else {
+      sec.flags = sec.flags.map(function (f) {
+        if (f.id === 'honeypot' && f.status === 'warn') {
+          return {
+            id: 'honeypot',
+            label: 'Honeypot',
+            status: 'ok',
+            text: 'Sell simulation OK (honeypot.is)'
+          };
+        }
+        return f;
+      });
+    }
+  }
+  if (hp.buyTax != null) sec.meta.buyTax = hp.buyTax;
+  if (hp.sellTax != null) sec.meta.sellTax = hp.sellTax;
+  sec.available = true;
+  sec.honeypotSource = hp.source;
+  return sec;
 }
 
 async function fetchSolanaSecurity(mint) {
@@ -389,8 +455,44 @@ async function fetchSolanaSecurity(mint) {
   }
 }
 
+
+/**
+ * Secondary honeypot check (Ethereum-style 0x) via honeypot.is
+ * Best-effort; never throws to caller beyond return shape.
+ */
+async function fetchHoneypotIs(address) {
+  const addr = String(address || '').trim();
+  if (!addr.toLowerCase().startsWith('0x') || addr.length < 10) {
+    return null;
+  }
+  try {
+    const res = await axios.get('https://api.honeypot.is/v2/IsHoneypot', {
+      params: { address: addr },
+      timeout: 10000,
+      headers: { Accept: 'application/json' }
+    });
+    const d = res.data || {};
+    const sim = d.honeypotResult || d;
+    const isHp =
+      sim.isHoneypot === true ||
+      d.IsHoneypot === true ||
+      String(sim.honeypotReason || '').length > 0 && sim.isHoneypot !== false;
+    return {
+      isHoneypot: isHp === true ? true : sim.isHoneypot === false ? false : null,
+      buyTax: pct(sim.buyTax || d.buyTax),
+      sellTax: pct(sim.sellTax || d.sellTax),
+      source: 'honeypot.is',
+      raw: d
+    };
+  } catch (e) {
+    console.warn('[honeypot.is]', e.response?.status || e.message);
+    return null;
+  }
+}
+
 module.exports = {
   fetchTokenSecurity,
+  fetchHoneypotIs,
   resolveChainId,
   normalizeSecurity,
   CHAIN_IDS
