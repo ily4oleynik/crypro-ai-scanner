@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nav-watchlist')?.addEventListener('click', e => { e.preventDefault(); showPage('watchlist'); loadWatchlist(); });
   document.getElementById('nav-history')?.addEventListener('click', e => { e.preventDefault(); showPage('history'); loadHistory(); });
   document.getElementById('nav-alerts')?.addEventListener('click', e => { e.preventDefault(); showPage('alerts'); loadAlerts(); });
+  document.getElementById('nav-portfolio')?.addEventListener('click', e => { e.preventDefault(); showPage('portfolio'); });
   document.getElementById('nav-compare')?.addEventListener('click', e => { e.preventDefault(); showPage('compare'); });
   document.getElementById('nav-account')?.addEventListener('click', e => { e.preventDefault(); showPage('account'); });
 
@@ -754,7 +755,7 @@ function updateAuthUI() {
 }
 
 function showPage(page) {
-  ['home', 'scanner', 'watchlist', 'history', 'alerts', 'compare', 'account'].forEach(p => {
+  ['home', 'scanner', 'watchlist', 'history', 'alerts', 'portfolio', 'compare', 'account'].forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) el.style.display = p === page ? 'block' : 'none';
   });
@@ -766,6 +767,10 @@ function showPage(page) {
   if (page === 'history') loadHistory();
   if (page === 'watchlist') typeof loadWatchlist === 'function' && loadWatchlist();
   if (page === 'scanner') typeof renderScannerEmpty === 'function' && renderScannerEmpty();
+  if (page === 'portfolio') {
+    if (typeof loadPortfolioDesk === 'function') loadPortfolioDesk();
+    if (typeof loadNewPairs === 'function') loadNewPairs();
+  }
 }
 
 async function refreshUsage() {
@@ -3401,3 +3406,208 @@ document.getElementById('auth-password')?.addEventListener('input', function () 
   hint.textContent = (!okLen ? 'Min 8 characters. ' : '') + (!okMix ? 'Need letter + number.' : (okLen ? 'Password looks ok.' : ''));
   hint.style.color = okLen && okMix ? 'var(--accent, #00f0a0)' : 'var(--muted)';
 });
+
+
+/* ===== PRO Portfolio Risk Desk ===== */
+async function loadPortfolioDesk() {
+  const summary = document.getElementById('portfolio-desk-summary');
+  const list = document.getElementById('portfolio-desk-list');
+  if (!summary || !list) return;
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  if (!user) {
+    summary.innerHTML = '';
+    list.innerHTML =
+      '<div class="empty-state-cta"><p>' +
+      (en ? 'Sign in with Pro to use Portfolio Risk Desk' : 'Войдите с Pro для Portfolio Risk Desk') +
+      '</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Pro</button></div>';
+    return;
+  }
+  summary.innerHTML = '<div class="muted small">Loading…</div>';
+  try {
+    const res = await apiFetch('/api/portfolio/desk');
+    const data = await res.json();
+    if (!data.success) {
+      list.innerHTML =
+        '<div class="empty-state-cta"><p>' +
+        (data.error || 'Pro required') +
+        '</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Pro · $79</button></div>';
+      summary.innerHTML = '';
+      return;
+    }
+    summary.innerHTML =
+      '<div class="metric-card glass"><div class="metric-label">Portfolio risk</div><div class="metric-value">' +
+      (data.portfolioRisk || 0) +
+      '/100</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Positions</div><div class="metric-value">' +
+      (data.tokenCount || 0) +
+      '</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">High risk</div><div class="metric-value" style="color:#ff4d6a">' +
+      (data.highRiskCount || 0) +
+      '</div></div>' +
+      '<div class="metric-card glass"><div class="metric-label">Level</div><div class="metric-value">' +
+      (data.riskLevel || '—') +
+      '</div></div>';
+    if (!data.tokens || !data.tokens.length) {
+      list.innerHTML =
+        '<p class="muted">' +
+        (en
+          ? 'Add contract addresses below. They become your monitored positions.'
+          : 'Добавьте адреса контрактов — это ваши позиции для мониторинга.') +
+        '</p>';
+      return;
+    }
+    list.innerHTML = data.tokens
+      .map(function (t) {
+        const risk = t.lastRisk != null ? t.lastRisk : '—';
+        const col =
+          (t.lastRisk || 0) > 60 ? '#ff4d6a' : (t.lastRisk || 0) > 35 ? '#f5a623' : '#00f0a0';
+        return (
+          '<div class="token-row glass" style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;margin-bottom:0.5rem">' +
+          '<div><strong>' +
+          (t.symbol || 'TOKEN') +
+          '</strong> <span class="muted small">' +
+          (t.name || '') +
+          '</span><br><span class="muted small">' +
+          (t.address || '').slice(0, 10) +
+          '…</span></div>' +
+          '<div style="text-align:right"><div style="color:' +
+          col +
+          ';font-weight:700">' +
+          risk +
+          '/100</div>' +
+          '<button type="button" class="text-link" onclick="startScan(\'' +
+          (t.address || '') +
+          '\')">Scan</button> · ' +
+          '<button type="button" class="text-link" onclick="removePortfolioPos(\'' +
+          (t.address || '') +
+          '\')">Remove</button></div></div>'
+        );
+      })
+      .join('');
+  } catch (e) {
+    list.innerHTML = '<p class="muted">Error loading desk</p>';
+  }
+}
+
+async function addPortfolioPos() {
+  const input = document.getElementById('portfolio-add-input');
+  const address = input && input.value.trim();
+  if (!address) return;
+  const res = await apiFetch('/api/portfolio/positions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: address })
+  });
+  const data = await res.json();
+  if (!data.success) {
+    if (data.upsell) openPricing('pro');
+    else alert(data.error || 'Failed');
+    return;
+  }
+  if (input) input.value = '';
+  loadPortfolioDesk();
+}
+
+async function removePortfolioPos(address) {
+  await apiFetch('/api/portfolio/positions/' + encodeURIComponent(address), {
+    method: 'DELETE'
+  });
+  loadPortfolioDesk();
+}
+
+async function runBatchScan() {
+  const ta = document.getElementById('batch-scan-input');
+  const text = ta && ta.value;
+  if (!text || !text.trim()) return;
+  const res = await apiFetch('/api/batch-scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ addresses: text })
+  });
+  const data = await res.json();
+  const list = document.getElementById('portfolio-desk-list');
+  if (!data.success) {
+    if (data.upsell) openPricing('pro');
+    else alert(data.error || 'Batch failed');
+    return;
+  }
+  list.innerHTML =
+    '<h4>Batch results</h4>' +
+    (data.results || [])
+      .map(function (r) {
+        if (!r.ok) return '<div class="muted">' + r.address + ' — ' + (r.error || 'fail') + '</div>';
+        return (
+          '<div class="token-row glass" style="padding:0.6rem 1rem;margin:0.35rem 0">' +
+          '<strong>' +
+          (r.symbol || '') +
+          '</strong> risk ' +
+          r.riskScore +
+          ' · liq $' +
+          Math.round(r.liquidity || 0) +
+          ' <button type="button" class="text-link" onclick="startScan(\'' +
+          r.address +
+          '\')">Open</button></div>'
+        );
+      })
+      .join('');
+}
+
+async function loadNewPairs() {
+  const grid = document.getElementById('new-pairs-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="muted small">Loading…</div>';
+  try {
+    const res = await apiFetch('/api/new-pairs');
+    const data = await res.json();
+    if (!data.success) {
+      grid.innerHTML =
+        '<div class="empty-state-cta"><p>' +
+        (data.error || 'Pro only') +
+        '</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Pro</button></div>';
+      return;
+    }
+    if (!data.pairs || !data.pairs.length) {
+      grid.innerHTML = '<p class="muted">No pairs right now</p>';
+      return;
+    }
+    grid.innerHTML = data.pairs
+      .map(function (p) {
+        return (
+          '<div class="glass panel" style="padding:0.75rem;cursor:pointer" onclick="startScan(\'' +
+          p.address +
+          '\')"><strong>' +
+          (p.symbol || 'TOKEN') +
+          '</strong><div class="muted small">Risk ' +
+          (p.riskScore || '—') +
+          ' · Liq $' +
+          Math.round(p.liquidity || 0) +
+          '</div></div>'
+        );
+      })
+      .join('');
+  } catch (e) {
+    grid.innerHTML = '<p class="muted">Failed</p>';
+  }
+}
+
+document.getElementById('portfolio-add-btn')?.addEventListener('click', addPortfolioPos);
+document.getElementById('batch-scan-btn')?.addEventListener('click', runBatchScan);
+document.getElementById('refresh-new-pairs')?.addEventListener('click', loadNewPairs);
+
+// hook page switch
+const _origShowPage = typeof showPage === 'function' ? showPage : null;
+if (_origShowPage) {
+  window.showPage = function (name) {
+    _origShowPage(name);
+    if (name === 'portfolio') {
+      loadPortfolioDesk();
+      loadNewPairs();
+    }
+  };
+}
+
+window.loadPortfolioDesk = loadPortfolioDesk;
+window.addPortfolioPos = addPortfolioPos;
+window.removePortfolioPos = removePortfolioPos;
+window.runBatchScan = runBatchScan;
+window.loadNewPairs = loadNewPairs;
