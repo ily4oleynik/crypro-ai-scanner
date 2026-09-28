@@ -429,27 +429,27 @@
     <div class="modal-content glass">
       <button type="button" class="modal-close" id="modal-close">&times;</button>
       <div class="auth-tabs">
-        <button type="button" class="auth-tab active" data-mode="login">Login</button>
-        <button type="button" class="auth-tab" data-mode="register">Register</button>
+        <button type="button" class="auth-tab active" data-mode="login" data-i18n="auth.login">Login</button>
+        <button type="button" class="auth-tab" data-mode="register" data-i18n="auth.register">Register</button>
       </div>
-      <h2 id="auth-title">Login</h2>
+      <h2 id="auth-title" data-i18n="auth.login">Login</h2>
       <div id="tg-login-wrap" class="tg-login-wrap">
-        <p class="muted small" style="margin-bottom:0.5rem;text-align:center">Быстрый вход</p>
+        <p class="muted small" data-i18n="auth.quick" style="margin-bottom:0.5rem;text-align:center">Quick sign-in</p>
         <div id="tg-login-widget" class="tg-login-widget"></div>
-        <div class="auth-or"><span>или email</span></div>
+        <div class="auth-or"><span data-i18n="auth.orEmail">or email</span></div>
       </div>
       <form id="auth-form" autocomplete="on">
         <input type="email" id="auth-email" data-i18n-placeholder="auth.email" placeholder="Email" autocomplete="email" required />
         <input type="password" id="auth-password" data-i18n-placeholder="auth.password" placeholder="Password" autocomplete="current-password" required />
-        <div id="auth-pass-hint" class="auth-pass-hint muted small" style="display:none;margin:-0.3rem 0 0.5rem;">Min 8 chars, letter + number</div>
+        <div id="auth-pass-hint" class="auth-pass-hint muted small" data-i18n="auth.passHint" style="display:none;margin:-0.3rem 0 0.5rem;">Min 8 chars, letter + number</div>
         <input type="password" id="auth-password2" data-i18n-placeholder="auth.password2" placeholder="Confirm password" style="display:none" autocomplete="new-password" />
         <label class="auth-terms" id="auth-terms-wrap" style="display:none">
           <input type="checkbox" id="auth-terms" />
           <span data-i18n="auth.terms">I agree to the <a href="/terms.html" target="_blank">Terms</a> and <a href="/privacy.html" target="_blank">Privacy Policy</a></span>
         </label>
         <p class="auth-error" id="auth-error" style="display:none"></p>
-        <button type="submit" class="upgrade-btn full" id="auth-submit">Login</button>
-      <p id="forgot-wrap" class="muted small" style="margin-top:0.5rem;text-align:center;"><a href="#" id="forgot-password">Forgot password?</a></p>
+        <button type="submit" class="upgrade-btn full" id="auth-submit" data-i18n="auth.submitLogin">Login</button>
+      <p id="forgot-wrap" class="muted small" style="margin-top:0.5rem;text-align:center;"><a href="#" id="forgot-password" data-i18n="auth.forgot">Forgot password?</a></p>
       </form>
       <p class="muted small" id="auth-hint" style="display:none"></p>
     </div>
@@ -459,8 +459,8 @@
   <div class="modal-overlay" id="pricing-modal" style="display:none">
     <div class="modal-content plans-list plans-horizontal">
       <button type="button" class="modal-close" id="pricing-close">&times;</button>
-      <h2 class="plans-title">Plans</h2>
-      <p class="muted small plans-sub">Оплата ещё не подключена. Оставьте email в waitlist. Демо-тариф доступен только если включён на сервере.</p>
+      <h2 class="plans-title" data-i18n="plans.title">Plans</h2>
+      <p class="muted small plans-sub" data-i18n="plans.sub">Payments not connected yet. Join the waitlist. Demo plans only if enabled on the server.</p>
 
       <div class="pricing-grid">
         <div class="price-card" data-plan="free">
