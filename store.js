@@ -255,6 +255,95 @@ async function getRiskHistory(address, hours) {
   }
 }
 
+
+async function getPortfolio(user) {
+  const id = uid(user);
+  if (!id) return [];
+  try {
+    const r = await query(
+      `SELECT id, address, chain_id AS "chainId", symbol, name, note,
+              last_risk AS "lastRisk", last_liq AS "lastLiq", last_price AS "lastPrice",
+              added_at AS "addedAt", updated_at AS "updatedAt"
+       FROM portfolio_positions WHERE user_id = $1
+       ORDER BY last_risk DESC NULLS LAST, id DESC
+       LIMIT 100`,
+      [id]
+    );
+    return r.rows;
+  } catch (e) {
+    console.error('[store] getPortfolio:', e.message);
+    return [];
+  }
+}
+
+async function addPortfolioPosition(user, item) {
+  const id = uid(user);
+  if (!id || !item || !item.address) return null;
+  const address = String(item.address).trim();
+  await query(
+    `INSERT INTO portfolio_positions
+      (user_id, address, chain_id, symbol, name, note, last_risk, last_liq, last_price)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT (user_id, address) DO UPDATE SET
+       symbol = COALESCE(EXCLUDED.symbol, portfolio_positions.symbol),
+       name = COALESCE(EXCLUDED.name, portfolio_positions.name),
+       chain_id = COALESCE(EXCLUDED.chain_id, portfolio_positions.chain_id),
+       note = COALESCE(EXCLUDED.note, portfolio_positions.note),
+       last_risk = COALESCE(EXCLUDED.last_risk, portfolio_positions.last_risk),
+       last_liq = COALESCE(EXCLUDED.last_liq, portfolio_positions.last_liq),
+       last_price = COALESCE(EXCLUDED.last_price, portfolio_positions.last_price),
+       updated_at = NOW()
+     RETURNING id`,
+    [
+      id,
+      address,
+      item.chainId || null,
+      item.symbol || null,
+      item.name || null,
+      item.note || null,
+      item.lastRisk != null ? Number(item.lastRisk) : null,
+      item.lastLiq != null ? Number(item.lastLiq) : null,
+      item.lastPrice != null ? Number(item.lastPrice) : null
+    ]
+  );
+  return true;
+}
+
+async function removePortfolioPosition(user, address) {
+  const id = uid(user);
+  if (!id || !address) return;
+  await query(
+    `DELETE FROM portfolio_positions WHERE user_id = $1 AND lower(address) = lower($2)`,
+    [id, String(address)]
+  );
+}
+
+async function updatePortfolioSnapshot(user, address, snap) {
+  const id = uid(user);
+  if (!id || !address) return;
+  await query(
+    `UPDATE portfolio_positions SET
+       last_risk = COALESCE($3, last_risk),
+       last_liq = COALESCE($4, last_liq),
+       last_price = COALESCE($5, last_price),
+       symbol = COALESCE($6, symbol),
+       name = COALESCE($7, name),
+       chain_id = COALESCE($8, chain_id),
+       updated_at = NOW()
+     WHERE user_id = $1 AND lower(address) = lower($2)`,
+    [
+      id,
+      String(address),
+      snap.riskScore != null ? Number(snap.riskScore) : null,
+      snap.liquidity != null ? Number(snap.liquidity) : null,
+      snap.price != null ? Number(snap.price) : null,
+      snap.symbol || null,
+      snap.name || null,
+      snap.chainId || null
+    ]
+  );
+}
+
 async function addHistory(user, item) {
   const id = uid(user);
   if (!id) return;
@@ -523,5 +612,9 @@ module.exports = {
   getDigestUsers,
   wasAlertFired,
   markAlertFired,
-  addWaitlist
+  addWaitlist,
+  getPortfolio,
+  addPortfolioPosition,
+  removePortfolioPosition,
+  updatePortfolioSnapshot
 };
