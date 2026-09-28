@@ -73,6 +73,14 @@ async function checkAlerts() {
         } else if (type === 'liquidity_below' && liq > 0 && liq <= value) {
           hit = true;
           detail = `Liquidity $${Math.round(liq)} ≤ $${value}`;
+        } else if (type === 'score_jump' && riskScore != null) {
+          // value = min delta points vs last stored on alert (we use alert.value as threshold delta from baseline 40)
+          const baseline = Number(alert.baseline) || 40;
+          const delta = riskScore - baseline;
+          if (delta >= value) {
+            hit = true;
+            detail = `Risk jumped ${baseline} → ${riskScore} (+${delta})`;
+          }
         }
 
         if (!hit) continue;
