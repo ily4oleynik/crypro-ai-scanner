@@ -29,12 +29,39 @@ try {
 }
 
 const app = express();
+app.disable('x-powered-by');
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'crypto-ai-scanner-secret-key-change-me-in-production';
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static(__dirname));
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((x) => x.trim())
+  .filter(Boolean);
+app.use(
+  cors(
+    allowedOrigins.length
+      ? {
+          origin: function (origin, cb) {
+            if (!origin || allowedOrigins.indexOf(origin) !== -1) cb(null, true);
+            else cb(null, false);
+          },
+          credentials: true
+        }
+      : undefined
+  )
+);
+app.use(express.json({ limit: '256kb' }));
+app.use(function securityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+// Block leaking package manifests
+app.get(['/package.json', '/package-lock.json', '/.env'], function (req, res) {
+  res.status(404).end();
+});
+app.use(express.static(__dirname, { index: ['index.html'], dotfiles: 'deny' }));
 
 const tgLinkCodes = new Map();
 const rateBuckets = new Map();
@@ -171,7 +198,7 @@ app.post(
   '/api/auth/login',
   rateLimit({
     windowMs: 15 * 60_000,
-    max: 30,
+    max: 8,
     keyFn: (req) => 'login:' + clientIp(req)
   }),
   async (req, res) => {
@@ -370,6 +397,109 @@ app.post('/api/user/plan', authMiddleware, async (req, res) => {
   }
 });
 
+function buildHeuristicSecurity(base, identity) {
+  const liq = Number(base.liquidity) || 0;
+  const flags = [
+    {
+      id: 'source',
+      label: 'Data source',
+      status: 'warn',
+      text: 'GoPlus unavailable — heuristic only (not a honeypot simulation)'
+    },
+    {
+      id: 'liquidity',
+      label: 'Liquidity',
+      status: liq < 10000 ? 'bad' : liq < 50000 ? 'warn' : 'ok',
+      text: liq > 0 ? '$' + Math.round(liq).toLocaleString('en-US') : 'Unknown'
+    },
+    {
+      id: 'honeypot',
+      label: 'Honeypot',
+      status: 'warn',
+      text: 'Simulation N/A — verify sell on explorer/simulator'
+    },
+    {
+      id: 'mint',
+      label: 'Mint / Own',
+      status: 'warn',
+      text: 'Unknown without GoPlus — check contract'
+    }
+  ];
+  if (identity && identity.warnings) {
+    identity.warnings.forEach(function (w) {
+      flags.unshift({
+        id: w.id,
+        label: w.title,
+        status: 'bad',
+        text: w.text
+      });
+    });
+  }
+  return {
+    available: true,
+    source: 'heuristic',
+    flags: flags,
+    identityWarnings: (identity && identity.warnings) || [],
+    meta: {
+      isHoneypot: null,
+      isMintable: null,
+      heuristic: true
+    }
+  };
+}
+
+function detectIdentityRisks(base, tokenAddress) {
+  const reasons = [];
+  const warnings = [];
+  const sym = String(base.symbol || '').toUpperCase();
+  const name = String(base.name || '').toLowerCase();
+  const chain = String(base.chainId || '').toLowerCase();
+  const isBtcName =
+    sym === 'BTC' ||
+    sym === 'WBTC' ||
+    name.includes('bitcoin') ||
+    name === 'btc';
+  const isEthName = sym === 'ETH' || name === 'ethereum' || name === 'ether';
+  const isSolName = sym === 'SOL' || name === 'solana';
+  if (isBtcName && chain && chain !== 'bitcoin' && !chain.includes('bitcoin')) {
+    const msg =
+      '⚠ IDENTITY: «' +
+      (base.symbol || 'BTC') +
+      '» on ' +
+      chain +
+      ' is NOT native Bitcoin (token/wrapper/bridge). Verify contract.';
+    reasons.push(msg);
+    warnings.push({
+      id: 'identity_btc',
+      severity: 'high',
+      title: 'Not native Bitcoin',
+      text: msg
+    });
+  }
+  if (isEthName && chain && chain !== 'ethereum' && !chain.startsWith('eth')) {
+    const msg =
+      '⚠ IDENTITY: «ETH» on ' + chain + ' is not native Ether on Ethereum L1.';
+    reasons.push(msg);
+    warnings.push({
+      id: 'identity_eth',
+      severity: 'high',
+      title: 'Not native ETH',
+      text: msg
+    });
+  }
+  if (isSolName && chain && chain !== 'solana') {
+    const msg = '⚠ IDENTITY: «SOL» on ' + chain + ' is not native Solana SOL.';
+    reasons.push(msg);
+    warnings.push({
+      id: 'identity_sol',
+      severity: 'high',
+      title: 'Not native SOL',
+      text: msg
+    });
+  }
+  return { reasons, warnings, bonus: warnings.length ? 25 : 0 };
+}
+
 /* ===================== SCAN ===================== */
 
 app.get(
@@ -429,12 +559,21 @@ app.get(
       let riskScore = risk.riskScore;
       let riskLevel = risk.riskLevel;
       const reasons = Array.isArray(risk.reasons) ? [...risk.reasons] : [];
+      const identity = detectIdentityRisks(base, tokenAddress);
+      if (identity.reasons.length) {
+        identity.reasons.forEach((r) => reasons.unshift(r));
+        riskScore = Math.min(95, riskScore + identity.bonus);
+        if (riskScore >= 70) riskLevel = 'HIGH';
+        else if (riskScore >= 40) riskLevel = 'MEDIUM';
+      }
 
       // GoPlus on-chain (best-effort, does not fail the scan)
       let securityOnchain = null;
       if (goplus) {
         try {
-          securityOnchain = await goplus.fetchTokenSecurity(base.chainId, tokenAddress);
+          // Prefer pair base token address; map dex chain names for GoPlus
+          const secAddr = base.address || tokenAddress;
+          securityOnchain = await goplus.fetchTokenSecurity(base.chainId, secAddr);
           if (securityOnchain?.riskBonus) {
             riskScore = Math.min(95, riskScore + Number(securityOnchain.riskBonus));
             if (riskScore >= 70) riskLevel = 'HIGH';
@@ -453,6 +592,23 @@ app.get(
         } catch (e) {
           console.warn('[scan goplus]', e.message);
         }
+      }
+
+      // If GoPlus empty — still return heuristic flags (honest, not marketed as GoPlus)
+      if (!securityOnchain || !securityOnchain.available) {
+        securityOnchain = buildHeuristicSecurity(base, identity);
+      } else if (identity.warnings && identity.warnings.length) {
+        securityOnchain.identityWarnings = identity.warnings;
+        securityOnchain.flags = (securityOnchain.flags || []).concat(
+          identity.warnings.map(function (w) {
+            return {
+              id: w.id,
+              label: w.title,
+              status: 'bad',
+              text: w.text
+            };
+          })
+        );
       }
 
       const aiPlan = plan === 'pro' ? 'pro' : plan === 'premium' ? 'premium' : 'free';
@@ -518,12 +674,16 @@ app.get(
           risk: riskPayload,
           ai: aiPayload,
           // Full GoPlus first-pass on Free (honeypot/tax/mint/ownership/LP)
-          security: securityOnchain || {
-            available: false,
-            contractVerified: base.isVerified,
-            flags: []
-          },
-          // charts / deep holders still locked
+          security: Object.assign(
+            {
+              available: false,
+              contractVerified: base.isVerified,
+              flags: [],
+              identityWarnings: identity.warnings || []
+            },
+            securityOnchain || {},
+            { identityWarnings: identity.warnings || [] }
+          ),
           locked: {
             charts: true,
             advancedHolders: true,
