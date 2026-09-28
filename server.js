@@ -55,6 +55,22 @@ app.use(function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // CSP: allow self + TG widget + charts CDNs used by index
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'self'",
+      "form-action 'self'",
+      "img-src 'self' data: https: blob:",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "script-src 'self' 'unsafe-inline' https://telegram.org https://unpkg.com https://cdn.jsdelivr.net",
+      "connect-src 'self' https://api.dexscreener.com https://api.gopluslabs.io https://api.honeypot.is https://api.telegram.org https://api.groq.com https://openrouter.ai https://*.railway.app",
+      "frame-src https://oauth.telegram.org https://telegram.org"
+    ].join('; ')
+  );
   next();
 });
 // Block leaking package manifests
@@ -72,14 +88,83 @@ const PLAN_LIMITS = {
   pro: { watchlist: 999999, historyDays: null }
 };
 
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  const out = {};
+  header.split(';').forEach(function (part) {
+    const i = part.indexOf('=');
+    if (i === -1) return;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch (e) {
+      out[k] = v;
+    }
+  });
+  return out;
+}
+
+function signUserToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email || null,
+      plan: user.plan || 'free'
+    },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+function setAuthCookie(res, tokenJwt) {
+  const secure =
+    String(process.env.COOKIE_SECURE || '').toLowerCase() === 'true' ||
+    process.env.NODE_ENV === 'production';
+  const parts = [
+    'cas_token=' + encodeURIComponent(tokenJwt),
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=' + String(7 * 24 * 60 * 60)
+  ];
+  if (secure) parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearAuthCookie(res) {
+  const secure =
+    String(process.env.COOKIE_SECURE || '').toLowerCase() === 'true' ||
+    process.env.NODE_ENV === 'production';
+  const parts = [
+    'cas_token=',
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=0'
+  ];
+  if (secure) parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function extractBearer(req) {
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) return authHeader.slice(7).trim();
+  return null;
+}
+
 function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
+  let raw = extractBearer(req);
+  if (!raw) {
+    const cookies = parseCookies(req);
+    raw = cookies.cas_token || null;
+  }
+  if (!raw) {
     req.user = { plan: 'free' };
     return next();
   }
   try {
-    req.user = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+    req.user = jwt.verify(raw, JWT_SECRET);
   } catch (e) {
     req.user = { plan: 'free' };
   }
@@ -208,15 +293,18 @@ app.post(
       if (!user || !(await store.verifyPassword(user, password))) {
         return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
       }
-      const token = jwt.sign(
-        { id: user.id, email: user.email, plan: user.plan || 'free' },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const tokenJwt = signUserToken({
+        id: user.id,
+        email: user.email,
+        plan: user.plan || 'free'
+      });
+      setAuthCookie(res, tokenJwt);
       res.json({
         success: true,
-        token,
-        user: { id: user.id, email: user.email, plan: user.plan || 'free' }
+        // token still returned for API clients; SPA should rely on httpOnly cookie
+        token: tokenJwt,
+        user: { id: user.id, email: user.email, plan: user.plan || 'free' },
+        auth: 'cookie'
       });
     } catch (e) {
       console.error(e);
@@ -267,15 +355,13 @@ app.post(
         });
       }
       const user = await store.createUser(email, password, 'free');
-      const token = jwt.sign(
-        { id: user.id, email: user.email, plan: 'free' },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const tokenJwt = signUserToken({ id: user.id, email: user.email, plan: 'free' });
+      setAuthCookie(res, tokenJwt);
       res.json({
         success: true,
-        token,
-        user: { id: user.id, email: user.email, plan: 'free' }
+        token: tokenJwt,
+        user: { id: user.id, email: user.email, plan: 'free' },
+        auth: 'cookie'
       });
     } catch (e) {
       console.error(e);
@@ -283,6 +369,42 @@ app.post(
     }
   }
 );
+
+
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  if (!req.user?.id) {
+    return res.json({ success: true, user: null });
+  }
+  try {
+    let plan = req.user.plan || 'free';
+    let email = req.user.email || null;
+    if (email) {
+      const u = await store.findUserByEmail(email);
+      if (u) {
+        plan = u.plan || plan;
+        email = u.email || email;
+      }
+    }
+    res.json({
+      success: true,
+      user: { id: req.user.id, email: email, plan: plan }
+    });
+  } catch (e) {
+    res.json({
+      success: true,
+      user: {
+        id: req.user.id,
+        email: req.user.email || null,
+        plan: req.user.plan || 'free'
+      }
+    });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookie(res);
+  res.json({ success: true });
+});
 
 /** Verify Telegram Login Widget payload (HMAC-SHA256) */
 function verifyTelegramLogin(data) {
@@ -334,14 +456,16 @@ app.post(
         return res.status(500).json({ success: false, error: 'Не удалось создать аккаунт' });
       }
 
-      const tokenJwt = jwt.sign(
-        { id: user.id, email: user.email, plan: user.plan || 'free' },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const tokenJwt = signUserToken({
+        id: user.id,
+        email: user.email,
+        plan: user.plan || 'free'
+      });
+      setAuthCookie(res, tokenJwt);
       res.json({
         success: true,
         token: tokenJwt,
+        auth: 'cookie',
         user: {
           id: user.id,
           email: user.email,
@@ -379,17 +503,19 @@ app.post('/api/user/plan', authMiddleware, async (req, res) => {
     if (!updated) {
       return res.status(500).json({ success: false, error: 'Не удалось обновить тариф' });
     }
-    const tokenJwt = jwt.sign(
-      { id: updated.id, email: updated.email, plan: updated.plan },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const tokenJwt = signUserToken({
+      id: updated.id,
+      email: updated.email,
+      plan: updated.plan
+    });
+    setAuthCookie(res, tokenJwt);
     res.json({
       success: true,
       plan: updated.plan,
       token: tokenJwt,
       user: { id: updated.id, email: updated.email, plan: updated.plan },
-      note: allowDemo ? 'Демо-активация (ALLOW_DEMO_PLANS=true)' : undefined
+      note: allowDemo ? 'Демо-активация (ALLOW_DEMO_PLANS=true)' : undefined,
+      auth: 'cookie'
     });
   } catch (e) {
     console.error(e);
