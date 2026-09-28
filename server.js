@@ -110,7 +110,8 @@ app.get('/api/config/public', (req, res) => {
     success: true,
     telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || 'aicryptoscreenerbot',
     channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
-    channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
+    channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en',
+    allowDemoPlans: String(process.env.ALLOW_DEMO_PLANS || '').toLowerCase() === 'true'
   });
 });
 
@@ -337,6 +338,15 @@ app.post('/api/user/plan', authMiddleware, async (req, res) => {
   if (!['free', 'premium', 'pro'].includes(plan)) {
     return res.status(400).json({ success: false, error: 'Неверный тариф' });
   }
+  // Production: disable free self-upgrade to paid until payments
+  const allowDemo = String(process.env.ALLOW_DEMO_PLANS || '').toLowerCase() === 'true';
+  if (!allowDemo && plan !== 'free') {
+    return res.status(403).json({
+      success: false,
+      error: 'Демо-тарифы отключены. Оставьте email в waitlist — оплата скоро.',
+      waitlist: true
+    });
+  }
   try {
     const updated = await store.updateUserPlan(req.user, plan);
     if (!updated) {
@@ -352,7 +362,7 @@ app.post('/api/user/plan', authMiddleware, async (req, res) => {
       plan: updated.plan,
       token: tokenJwt,
       user: { id: updated.id, email: updated.email, plan: updated.plan },
-      note: 'Демо-активация до оплаты'
+      note: allowDemo ? 'Демо-активация (ALLOW_DEMO_PLANS=true)' : undefined
     });
   } catch (e) {
     console.error(e);
@@ -733,7 +743,8 @@ app.get('/api/telegram/status', authMiddleware, async (req, res) => {
     chatId: chatId || null,
     channelUrl: getChannelUrl() || 'https://t.me/Crypto_AI_Scanner',
     channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
-    channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en'
+    channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en',
+    allowDemoPlans: String(process.env.ALLOW_DEMO_PLANS || '').toLowerCase() === 'true'
   });
 });
 
