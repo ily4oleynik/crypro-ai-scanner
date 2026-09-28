@@ -1,5 +1,5 @@
 /**
- * Alert worker: price / risk / liquidity thresholds → Telegram
+ * Alert worker: price / risk / liquidity + Pro portfolio risk-change → Telegram
  */
 const axios = require('axios');
 const store = require('./store');
@@ -12,6 +12,7 @@ try {
 }
 
 const INTERVAL_MS = Number(process.env.ALERT_INTERVAL_MS || 60000);
+const PORTFOLIO_DELTA = Number(process.env.PORTFOLIO_RISK_DELTA || 15);
 
 async function fetchDexPair(address) {
   const res = await axios.get(
@@ -33,6 +34,16 @@ async function estimateRisk(pair) {
   if (fdv > 0 && liq > 0 && fdv / liq > 50 && liq < 500000) score += 15;
   if (vol < 5000 && liq < 100000) score += 8;
   return Math.max(5, Math.min(95, score));
+}
+
+async function fireOnce(userId, alertKey, chatId, text) {
+  if (store.wasAlertFired && store.markAlertFired) {
+    const fired = await store.wasAlertFired(String(userId), alertKey);
+    if (fired) return false;
+    await store.markAlertFired(String(userId), alertKey);
+  }
+  if (sendMessage) await sendMessage(chatId, text);
+  return true;
 }
 
 async function checkAlerts() {
@@ -74,7 +85,6 @@ async function checkAlerts() {
           hit = true;
           detail = `Liquidity $${Math.round(liq)} ≤ $${value}`;
         } else if (type === 'score_jump' && riskScore != null) {
-          // value = min delta points vs last stored on alert (we use alert.value as threshold delta from baseline 40)
           const baseline = Number(alert.baseline) || 40;
           const delta = riskScore - baseline;
           if (delta >= value) {
@@ -85,37 +95,98 @@ async function checkAlerts() {
 
         if (!hit) continue;
 
-        // de-dupe via store if available
-        if (typeof store.wasAlertFired === 'function') {
-          const fired = await store.wasAlertFired(user, alert.id);
-          if (fired) continue;
-          await store.markAlertFired(user, alert.id);
+        const alertId = String(alert.id || alert.address + ':' + type);
+        const sym = alert.symbol || pair.baseToken?.symbol || 'TOKEN';
+        const text =
+          `🚨 <b>Alert · ${sym}</b>\n` +
+          `${detail}\n` +
+          `<code>${alert.address}</code>\n` +
+          `Crypto AI Scanner`;
+        await fireOnce(user.id, alertId + ':' + Math.floor(Date.now() / 3600000), chatId, text);
+      } catch (err) {
+        console.error('[Alerts] item:', err.message);
+      }
+    }
+  }
+
+  // Pro: portfolio risk-change monitoring
+  await checkPortfolioRiskChanges();
+}
+
+async function checkPortfolioRiskChanges() {
+  if (!sendMessage || !store.getProPortfolioWatch) return;
+  let watch = [];
+  try {
+    watch = await store.getProPortfolioWatch();
+  } catch (e) {
+    console.error('[Alerts] portfolio watch:', e.message);
+    return;
+  }
+  for (const user of watch || []) {
+    const chatId = user.telegramChatId;
+    if (!chatId) continue;
+    for (const pos of user.positions || []) {
+      try {
+        const pair = await fetchDexPair(pos.address);
+        if (!pair) continue;
+        const liq = Number(pair.liquidity?.usd) || 0;
+        const price = Number(pair.priceUsd) || 0;
+        const riskScore = await estimateRisk(pair);
+        if (riskScore == null) continue;
+        const prev = pos.lastRisk != null ? Number(pos.lastRisk) : null;
+        const sym = pos.symbol || pair.baseToken?.symbol || 'TOKEN';
+
+        if (store.updatePortfolioSnapshot) {
+          await store.updatePortfolioSnapshot(
+            { id: user.id },
+            pos.address,
+            {
+              riskScore,
+              liquidity: liq,
+              price,
+              symbol: sym,
+              name: pair.baseToken?.name || pos.name,
+              chainId: pair.chainId || pos.chainId
+            }
+          );
         }
 
-        const sym = alert.symbol || pair.baseToken?.symbol || 'TOKEN';
-        await sendMessage(
-          chatId,
-          `🚨 <b>Alert · ${sym}</b>\n` +
-            `${detail}\n` +
-            `Type: <code>${type}</code>\n` +
-            `<code>${alert.address}</code>\n\n` +
-            `<i>Not financial advice.</i>`
-        );
+        if (prev == null) continue;
+        const delta = riskScore - prev;
+        if (delta < PORTFOLIO_DELTA) continue;
+
+        const key =
+          'pf:' +
+          String(user.id) +
+          ':' +
+          String(pos.address).toLowerCase() +
+          ':' +
+          Math.floor(Date.now() / (6 * 3600000));
+        const text =
+          `⚠️ <b>Portfolio risk ↑ · ${sym}</b>\n` +
+          `Score ${prev} → <b>${riskScore}</b> (+${delta})\n` +
+          `Liq $${Math.round(liq).toLocaleString('en-US')}\n` +
+          `<code>${pos.address}</code>\n` +
+          `Pro Risk Desk · Crypto AI Scanner`;
+        await fireOnce(user.id, key, chatId, text);
       } catch (e) {
-        console.error('[Alerts] item', e.message);
+        console.error('[Alerts] portfolio pos:', e.message);
       }
     }
   }
 }
 
 function startAlertWorker() {
+  if (!sendMessage) {
+    console.log('[Alerts] No telegram sendMessage — worker idle');
+    return;
+  }
   console.log('[Alerts] Worker started, interval', INTERVAL_MS, 'ms');
-  setTimeout(() => {
+  const loop = () => {
     checkAlerts().catch(() => {});
-  }, 5000);
-  setInterval(() => {
-    checkAlerts().catch(() => {});
-  }, INTERVAL_MS);
+  };
+  setTimeout(loop, 5000);
+  setInterval(loop, INTERVAL_MS);
 }
 
-module.exports = { startAlertWorker, checkAlerts };
+module.exports = { startAlertWorker, checkAlerts, checkPortfolioRiskChanges };
