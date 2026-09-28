@@ -2418,3 +2418,55 @@ button.home-chip.example-token:hover,
 .auth-or span {
   flex-shrink: 0;
 }
+
+
+/* === MOBILE DENSITY PASS === */
+@media (max-width: 700px) {
+  .container { padding: 0.85rem 0.9rem 2.5rem; }
+  .hero h1 { font-size: 1.55rem !important; line-height: 1.25; }
+  .hero-sub { font-size: 0.95rem; }
+  .hero-scan { padding: 0.75rem; }
+  .hero-scan-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .hero-scan-row input,
+  .hero-scan-row button {
+    width: 100%;
+  }
+  .token-header { gap: 0.75rem; }
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem;
+  }
+  .metric-card, .metrics-grid .glass {
+    padding: 0.75rem !important;
+  }
+  .security-flags, .sec-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  #results { padding-bottom: 3rem; }
+  .scan-input-row, .scanner-input-row {
+    flex-wrap: wrap;
+  }
+  .scan-input-row input, #token-input {
+    min-width: 0;
+    flex: 1 1 100%;
+    font-size: 16px; /* iOS zoom fix */
+  }
+  .pricing-cards, .plans-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .plan-card { max-width: 100%; }
+  .nav-drawer, .mobile-nav-panel {
+    max-height: 80vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .live-ticker { font-size: 0.78rem; }
+  .ai-chat-section textarea, #chat-input {
+    font-size: 16px;
+  }
+}
