@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="description" content="AI crypto token risk scanner — smart-contract risk, AI verdict, alerts. Check before you buy." />
-  <title>Crypto AI Scanner — Institutional Token Intelligence</title>
+  <title>Crypto AI Scanner — Token Risk & AI Analysis</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -99,8 +99,8 @@
     <!-- ===== HOME ===== -->
     <section id="page-home" class="page" style="display:block">
       <div class="hero">
-        <div class="hero-badge">Institutional AI · On-chain risk</div>
-        <h1>Institutional-grade Crypto Intelligence</h1>
+        <div class="hero-badge" data-i18n="hero.badge">AI · On-chain риск</div>
+        <h1 data-i18n="hero.title">Не влетай в скам. Проверь токен за 10 секунд</h1>
         <p class="hero-sub" data-i18n="hero.sub">Риск смарт-контракта + AI-вердикт + алерты — выявляем риски до входа. Это не гарантия и не совет «покупать».</p>
         <p class="hero-proof">Сделано для тех, кто уже обжигался на скамах</p>
 
@@ -129,10 +129,11 @@
             <div class="risk-pill risk-MEDIUM">Risk 42 · MEDIUM</div>
           </div>
           <div class="hp-metrics">
-            <div><span>Liquidity</span><strong>Healthy</strong></div>
-            <div><span>AI</span><strong class="ok">Cautious OK</strong></div>
-            <div><span>Scam prob.</span><strong>~12%</strong></div>
+            <div><span>Liquidity</span><strong>OK</strong></div>
+            <div><span>AI</span><strong class="ok">MEDIUM</strong></div>
+            <div><span>Flags</span><strong>GoPlus</strong></div>
           </div>
+          <p class="muted small" style="margin-top:0.5rem"><a href="/methodology.html">Как считается риск</a></p>
         </div>
       </div>
 
@@ -419,7 +420,7 @@
     </div>
     <div class="footer-bottom">
       <span>© 2026 Crypto AI Scanner</span>
-      <span class="muted small" data-i18n="footer.payments">Оплата скоро. После входа можно демо-переключить тариф.</span>
+      <span class="muted small" data-i18n="footer.payments">Оплата скоро. Waitlist на сайте · демо-тариф только в dev.</span>
     </div>
   </footer>
 
@@ -459,7 +460,7 @@
     <div class="modal-content plans-list plans-horizontal">
       <button type="button" class="modal-close" id="pricing-close">&times;</button>
       <h2 class="plans-title">Plans</h2>
-      <p class="muted small plans-sub">Оплата ещё не подключена. Можно демо-переключить тариф после входа или оставить email в waitlist.</p>
+      <p class="muted small plans-sub">Оплата ещё не подключена. Оставьте email в waitlist. Демо-тариф доступен только если включён на сервере.</p>
 
       <div class="pricing-grid">
         <div class="price-card" data-plan="free">
@@ -469,8 +470,8 @@
           <ul>
             <li>5 сканов / день</li>
             <li>Risk score + разбивка</li>
-            <li>Honeypot / tax / mint flags</li>
-            <li>Короткий AI</li>
+            <li>Honeypot / tax / mint / ownership / LP (если API отдаёт)</li>
+            <li>Короткий AI + 2 msg chat trial / день</li>
           </ul>
           <button type="button" class="connect-btn full pricing-pick" data-plan="free">Остаться на Free</button>
         </div>
@@ -483,13 +484,13 @@
           <ul>
             <li>50 сканов / день</li>
             <li>Полный security + holders</li>
-            <li>AI-отчёт + limited chat</li>
-            <li>Telegram alerts (цена + risk)</li>
-            <li>History + watchlist 30</li>
+            <li>AI-отчёт + chat 20 msg / день</li>
+            <li>Telegram alerts (цена + risk + liq)</li>
+            <li>History + watchlist до 30</li>
             <li>Свечной график</li>
           </ul>
-          <button type="button" class="upgrade-btn full pricing-pick" data-plan="premium">Демо Premium</button>
-          <button type="button" class="connect-btn full waitlist-btn" data-plan="premium" style="margin-top:0.5rem">Waitlist · $29</button>
+          <button type="button" class="connect-btn full waitlist-btn" data-plan="premium">Waitlist · $29</button>
+          <button type="button" class="upgrade-btn full pricing-pick demo-plan-btn" data-plan="premium" style="margin-top:0.5rem;display:none">Демо Premium</button>
         </div>
 
         <div class="price-card" data-plan="pro">
@@ -497,16 +498,15 @@
           <p class="plan-price">$79<span>/mo</span></p>
           <p class="plan-pitch">Для трейдеров и аналитиков</p>
           <ul>
-            <li>Unlimited scans</li>
+            <li>До 500 сканов / день (fair use)</li>
             <li>Всё из Premium</li>
-            <li>Длинный AI analyst chat</li>
-            <li>Priority alerts</li>
-            <li>Unlimited watchlist</li>
-            <li>Bybit read-only</li>
-            <li>Скоро: export / bulk</li>
+            <li>AI chat без дневного лимита msg</li>
+            <li>Алерты без отдельной очереди</li>
+            <li>Watchlist без лимита 30</li>
+            <li>Bybit read-only (опционально)</li>
           </ul>
-          <button type="button" class="upgrade-btn full pricing-pick" data-plan="pro">Демо Pro</button>
-          <button type="button" class="connect-btn full waitlist-btn" data-plan="pro" style="margin-top:0.5rem">Waitlist · $79</button>
+          <button type="button" class="connect-btn full waitlist-btn" data-plan="pro">Waitlist · $79</button>
+          <button type="button" class="upgrade-btn full pricing-pick demo-plan-btn" data-plan="pro" style="margin-top:0.5rem;display:none">Демо Pro</button>
         </div>
       </div>
 
