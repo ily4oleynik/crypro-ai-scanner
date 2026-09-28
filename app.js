@@ -584,6 +584,7 @@ async function onTelegramAuth(tgUser) {
     token = null;
     try { localStorage.removeItem('token'); } catch (e) {}
     user = data.user;
+      if (data.user && data.user.isOwner) user.isOwner = true;
     currentPlan = (user && user.plan) || 'free';
     updateAuthUI();
     closeAuthModal();
@@ -654,6 +655,7 @@ async function handleAuth(e) {
 
     token = null;
     user = data.user;
+      if (data.user && data.user.isOwner) user.isOwner = true;
     currentPlan = (data.user && data.user.plan) || 'free';
     try { localStorage.removeItem('token'); } catch (e) {}
     closeAuthModal();
@@ -696,6 +698,7 @@ async function restoreSession() {
     const data = await res.json();
     if (data && data.success && data.user && data.user.id) {
       user = data.user;
+      if (data.user && data.user.isOwner) user.isOwner = true;
       currentPlan = data.user.plan || 'free';
       token = null; // cookie carries session
       updateAuthUI();
@@ -789,18 +792,46 @@ async function refreshUsage() {
   } catch (e) {}
 }
 
+async function claimOwnerAccess() {
+  const secret = prompt('Owner secret (from Railway OWNER_SECRET):');
+  if (!secret) return;
+  try {
+    const res = await apiFetch('/api/admin/claim-owner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: secret })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.error || 'Denied');
+      return;
+    }
+    if (data.user) {
+      user = data.user;
+      if (data.user && data.user.isOwner) user.isOwner = true;
+      currentPlan = 'pro';
+    }
+    alert('Owner / Pro access OK');
+    refreshAccountPage();
+    refreshUsage();
+  } catch (e) {
+    alert('Network error');
+  }
+}
+window.claimOwnerAccess = claimOwnerAccess;
+
 async function refreshAccountPage() {
   const emailEl = document.getElementById('acc-email');
   const planEl = document.getElementById('acc-plan');
   const scansEl = document.getElementById('acc-scans');
   if (!user) {
     if (emailEl) emailEl.textContent = '—';
-    if (planEl) planEl.textContent = 'FREE';
+    if (planEl) planEl.textContent = ((user && user.isOwner) ? 'OWNER · ' : '') + 'FREE';
     if (scansEl) scansEl.textContent = '—';
     return;
   }
   if (emailEl) emailEl.textContent = user.email || '—';
-  if (planEl) planEl.textContent = (user.plan || currentPlan || 'free').toUpperCase();
+  if (planEl) planEl.textContent = ((user && user.isOwner) ? 'OWNER · ' : '') + (user.plan || currentPlan || 'free').toUpperCase();
   try {
     const res = await apiFetch('/api/usage', {
       headers: token ? { Authorization: 'Bearer ' + token } : {}
