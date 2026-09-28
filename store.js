@@ -236,7 +236,7 @@ async function addRiskSnapshot(item) {
 async function getRiskHistory(address, hours) {
   const addr = String(address || '').trim();
   if (!addr) return [];
-  const h = Math.min(168, Math.max(6, Number(hours) || 48));
+  const h = Math.min(720, Math.max(6, Number(hours) || 48));
   try {
     const r = await query(
       `SELECT risk_score AS "riskScore", risk_level AS "riskLevel",
@@ -255,6 +255,42 @@ async function getRiskHistory(address, hours) {
   }
 }
 
+
+
+async function getProPortfolioWatch() {
+  try {
+    const r = await query(
+      `SELECT u.id, u.email, u.plan, u.telegram_chat_id AS "telegramChatId"
+       FROM users u
+       WHERE lower(COALESCE(u.plan, 'free')) IN ('pro', 'owner', 'admin')
+         AND u.telegram_chat_id IS NOT NULL
+         AND u.telegram_chat_id <> ''`
+    );
+    const out = [];
+    for (const row of r.rows) {
+      const positions = await query(
+        `SELECT address, symbol, name, chain_id AS "chainId",
+                last_risk AS "lastRisk", last_liq AS "lastLiq", last_price AS "lastPrice"
+         FROM portfolio_positions
+         WHERE user_id::text = $1
+         LIMIT 50`,
+        [String(row.id)]
+      );
+      if (!positions.rows.length) continue;
+      out.push({
+        id: row.id,
+        email: row.email,
+        plan: row.plan,
+        telegramChatId: row.telegramChatId,
+        positions: positions.rows
+      });
+    }
+    return out;
+  } catch (e) {
+    console.error('[store] getProPortfolioWatch:', e.message);
+    return [];
+  }
+}
 
 async function getPortfolio(user) {
   const id = uid(user);
@@ -616,5 +652,6 @@ module.exports = {
   getPortfolio,
   addPortfolioPosition,
   removePortfolioPosition,
-  updatePortfolioSnapshot
+  updatePortfolioSnapshot,
+  getProPortfolioWatch
 };
