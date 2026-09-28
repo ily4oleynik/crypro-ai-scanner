@@ -1423,17 +1423,154 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
   }
 });
 
+
+/* ===================== PRO: Portfolio Risk Desk ===================== */
+app.get('/api/portfolio/desk', authMiddleware, async (req, res) => {
+  const plan = getPlan(req.user);
+  if (plan !== 'pro') {
+    return res.status(403).json({
+      success: false,
+      locked: true,
+      upsell: 'pro',
+      error: 'Portfolio Risk Desk is Pro-only'
+    });
+  }
+  if (!req.user?.id) {
+    return res.status(401).json({ success: false, error: 'Login required' });
+  }
+  try {
+    const positions = (await store.getPortfolio(req.user)) || [];
+    // optional light refresh of top positions
+    const refreshed = [];
+    for (const p of positions.slice(0, 15)) {
+      let row = { ...p };
+      try {
+        const dx = await axios.get(
+          `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(p.address)}`,
+          { timeout: 5000 }
+        );
+        const pair = dx.data?.pairs?.[0];
+        if (pair) {
+          const liq = Number(pair.liquidity?.usd) || 0;
+          const price = Number(pair.priceUsd) || 0;
+          let riskScore = 35;
+          if (liq < 10000) riskScore += 30;
+          else if (liq < 50000) riskScore += 18;
+          else if (liq < 200000) riskScore += 8;
+          const fdv = Number(pair.fdv) || 0;
+          if (fdv > 0 && liq > 0 && fdv / liq > 50 && liq < 500000) riskScore += 15;
+          riskScore = Math.max(5, Math.min(95, riskScore));
+          row = {
+            ...row,
+            symbol: pair.baseToken?.symbol || row.symbol,
+            name: pair.baseToken?.name || row.name,
+            chainId: pair.chainId || row.chainId,
+            lastRisk: riskScore,
+            lastLiq: liq,
+            lastPrice: price,
+            riskLevel: riskScore > 60 ? 'HIGH' : riskScore > 35 ? 'MEDIUM' : 'LOW'
+          };
+          if (store.updatePortfolioSnapshot) {
+            await store.updatePortfolioSnapshot(req.user, p.address, {
+              riskScore,
+              liquidity: liq,
+              price,
+              symbol: row.symbol,
+              name: row.name,
+              chainId: row.chainId
+            });
+          }
+        }
+      } catch (e) {
+        row.riskLevel =
+          (row.lastRisk || 0) > 60 ? 'HIGH' : (row.lastRisk || 0) > 35 ? 'MEDIUM' : 'LOW';
+      }
+      refreshed.push(row);
+    }
+    // append rest without refresh
+    for (const p of positions.slice(15)) {
+      refreshed.push({
+        ...p,
+        riskLevel: (p.lastRisk || 0) > 60 ? 'HIGH' : (p.lastRisk || 0) > 35 ? 'MEDIUM' : 'LOW'
+      });
+    }
+    const scores = refreshed.map((t) => Number(t.lastRisk) || 50);
+    const avgRisk = scores.length
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+    const worst = [...refreshed]
+      .sort((a, b) => (b.lastRisk || 0) - (a.lastRisk || 0))
+      .slice(0, 3);
+    res.json({
+      success: true,
+      plan: 'pro',
+      tokenCount: refreshed.length,
+      portfolioRisk: avgRisk,
+      riskLevel: avgRisk > 60 ? 'HIGH' : avgRisk > 35 ? 'MEDIUM' : 'LOW',
+      highRiskCount: refreshed.filter((t) => (t.lastRisk || 0) > 60).length,
+      worst,
+      tokens: refreshed,
+      source: 'portfolio'
+    });
+  } catch (e) {
+    console.error('[portfolio desk]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/portfolio/positions', authMiddleware, async (req, res) => {
+  if (getPlan(req.user) !== 'pro') {
+    return res.status(403).json({ success: false, upsell: 'pro', error: 'Pro only' });
+  }
+  if (!req.user?.id) return res.status(401).json({ success: false, error: 'Login required' });
+  const address = String(req.body?.address || '').trim();
+  if (!address || address.length < 8) {
+    return res.status(400).json({ success: false, error: 'Invalid address' });
+  }
+  try {
+    await store.addPortfolioPosition(req.user, {
+      address,
+      chainId: req.body.chainId,
+      symbol: req.body.symbol,
+      name: req.body.name,
+      note: req.body.note,
+      lastRisk: req.body.riskScore,
+      lastLiq: req.body.liquidity,
+      lastPrice: req.body.price
+    });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.delete('/api/portfolio/positions/:address', authMiddleware, async (req, res) => {
+  if (getPlan(req.user) !== 'pro') {
+    return res.status(403).json({ success: false, upsell: 'pro' });
+  }
+  await store.removePortfolioPosition(req.user, req.params.address);
+  res.json({ success: true });
+});
+
+/** Legacy wallet demo — Premium+ still gets mock if not Pro desk */
 app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
   const plan = getPlan(req.user);
   if (plan === 'free') {
     return res.json({ success: true, locked: true, message: 'Портфель доступен с Premium' });
   }
+  if (plan === 'pro' && store.getPortfolio) {
+    // redirect semantics: use desk
+    return res.json({
+      success: true,
+      plan,
+      message: 'Use /api/portfolio/desk for Risk Desk',
+      redirect: '/api/portfolio/desk'
+    });
+  }
   const tokens = [
     { symbol: 'ETH', name: 'Ethereum', value: 6420, riskLevel: 'LOW', riskScore: 15 },
     { symbol: 'USDC', name: 'USD Coin', value: 2800, riskLevel: 'LOW', riskScore: 8 },
-    { symbol: 'LINK', name: 'Chainlink', value: 1950, riskLevel: 'LOW', riskScore: 27 },
-    { symbol: 'ARB', name: 'Arbitrum', value: 870, riskLevel: 'MEDIUM', riskScore: 41 },
-    { symbol: 'PEPE', name: 'Pepe', value: 480, riskLevel: 'HIGH', riskScore: 78 }
+    { symbol: 'LINK', name: 'Chainlink', value: 1950, riskLevel: 'LOW', riskScore: 27 }
   ];
   const totalValue = tokens.reduce((s, t) => s + t.value, 0);
   const avgRisk = Math.round(tokens.reduce((s, t) => s + t.riskScore, 0) / tokens.length);
@@ -1442,19 +1579,125 @@ app.get('/api/portfolio/:address', authMiddleware, async (req, res) => {
     plan,
     totalValue,
     tokenCount: tokens.length,
-    highRiskCount: tokens.filter((t) => t.riskLevel === 'HIGH').length,
+    highRiskCount: 0,
     portfolioRisk: avgRisk,
-    riskLevel: avgRisk > 60 ? 'HIGH' : avgRisk > 35 ? 'MEDIUM' : 'LOW',
+    riskLevel: 'LOW',
     tokens,
     source: 'demo'
   });
 });
 
-app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
-  if (getPlan(req.user) === 'free') {
+/** Pro: batch scan up to 25 addresses */
+app.post(
+  '/api/batch-scan',
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 5, keyFn: (req) => 'batch:' + clientIp(req) }),
+  async (req, res) => {
+    if (getPlan(req.user) !== 'pro') {
+      return res.status(403).json({ success: false, upsell: 'pro', error: 'Batch scan is Pro-only' });
+    }
+    let addresses = req.body?.addresses;
+    if (typeof addresses === 'string') {
+      addresses = addresses.split(/[\s,;]+/).map((a) => a.trim()).filter(Boolean);
+    }
+    if (!Array.isArray(addresses) || !addresses.length) {
+      return res.status(400).json({ success: false, error: 'addresses[] required' });
+    }
+    addresses = [...new Set(addresses.map((a) => String(a).trim()))].slice(0, 25);
+    const results = [];
+    for (const address of addresses) {
+      try {
+        const dx = await axios.get(
+          `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`,
+          { timeout: 6000 }
+        );
+        const pair = dx.data?.pairs?.[0];
+        if (!pair) {
+          results.push({ address, ok: false, error: 'not_found' });
+          continue;
+        }
+        const liq = Number(pair.liquidity?.usd) || 0;
+        const price = Number(pair.priceUsd) || 0;
+        let riskScore = 35;
+        if (liq < 10000) riskScore += 30;
+        else if (liq < 50000) riskScore += 18;
+        else if (liq < 200000) riskScore += 8;
+        const fdv = Number(pair.fdv) || 0;
+        if (fdv > 0 && liq > 0 && fdv / liq > 50 && liq < 500000) riskScore += 15;
+        riskScore = Math.max(5, Math.min(95, riskScore));
+        results.push({
+          address,
+          ok: true,
+          symbol: pair.baseToken?.symbol,
+          name: pair.baseToken?.name,
+          chainId: pair.chainId,
+          price,
+          liquidity: liq,
+          riskScore,
+          riskLevel: riskScore > 60 ? 'HIGH' : riskScore > 35 ? 'MEDIUM' : 'LOW'
+        });
+      } catch (e) {
+        results.push({ address, ok: false, error: e.message });
+      }
+    }
+    res.json({ success: true, count: results.length, results });
+  }
+);
+
+/** Pro: early / new pairs feed (DexScreener boosts + new) */
+app.get('/api/new-pairs', authMiddleware, async (req, res) => {
+  if (getPlan(req.user) !== 'pro') {
     return res.status(403).json({
       success: false,
-      error: 'Bybit доступен с Pro',
+      upsell: 'pro',
+      error: 'Early pairs feed is Pro-only'
+    });
+  }
+  try {
+    const r = await axios.get('https://api.dexscreener.com/token-boosts/top/v1', {
+      timeout: 8000
+    });
+    const list = Array.isArray(r.data) ? r.data : [];
+    const out = [];
+    for (const item of list.slice(0, 12)) {
+      const address = item.tokenAddress;
+      if (!address) continue;
+      try {
+        const dx = await axios.get(
+          `https://api.dexscreener.com/latest/dex/tokens/${address}`,
+          { timeout: 5000 }
+        );
+        const pair = dx.data?.pairs?.[0];
+        if (!pair) continue;
+        const liq = Number(pair.liquidity?.usd) || 0;
+        let riskScore = 40;
+        if (liq < 20000) riskScore += 25;
+        else if (liq < 100000) riskScore += 12;
+        out.push({
+          address,
+          chainId: item.chainId || pair.chainId,
+          symbol: pair.baseToken?.symbol,
+          name: pair.baseToken?.name,
+          price: pair.priceUsd,
+          liquidity: liq,
+          volume24h: pair.volume?.h24,
+          riskScore: Math.min(95, riskScore),
+          riskLevel: riskScore > 60 ? 'HIGH' : 'MEDIUM'
+        });
+      } catch (_) {}
+    }
+    res.json({ success: true, pairs: out, pro: true });
+  } catch (e) {
+    res.json({ success: false, pairs: [], error: e.message });
+  }
+});
+
+
+app.post('/api/exchanges/bybit', authMiddleware, async (req, res) => {
+  if (getPlan(req.user) !== 'pro') {
+    return res.status(403).json({
+      success: false,
+      error: 'Bybit is a Pro portfolio source',
       upsell: 'pro'
     });
   }
@@ -1581,7 +1824,9 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
     const result = await aiService.chat(messages.slice(-maxMsgs), {
       ...(context || {}),
       lang,
-      plan: plan === 'free' ? 'free_trial' : plan
+      plan: plan === 'free' ? 'free_trial' : plan,
+      whatIf: plan === 'pro',
+      portfolioAware: plan === 'pro'
     });
     bumpChatQuota(quota.key);
     const after = getChatQuota(req, plan);
