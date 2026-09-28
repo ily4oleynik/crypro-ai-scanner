@@ -102,20 +102,20 @@
         <div class="hero-badge" data-i18n="hero.badge">AI · On-chain риск</div>
         <h1 data-i18n="hero.title">Не влетай в скам. Проверь токен за 10 секунд</h1>
         <p class="hero-sub" data-i18n="hero.sub">Риск смарт-контракта + AI-вердикт + алерты — выявляем риски до входа. Это не гарантия и не совет «покупать».</p>
-        <p class="hero-proof">Сделано для тех, кто уже обжигался на скамах</p>
+        <p class="hero-proof" data-i18n="hero.proof">Сделано для тех, кто уже обжигался на скамах</p>
 
         <!-- Inline scan = conversion focus -->
         <div class="hero-scan glass">
           <div class="hero-scan-row">
             <input type="text" id="home-token-input" placeholder="0x… contract address" autocomplete="off" />
-            <button type="button" class="upgrade-btn" id="home-scan-btn">Сканировать бесплатно</button>
+            <button type="button" class="upgrade-btn" id="home-scan-btn" data-i18n="hero.scanFree">Сканировать бесплатно</button>
           </div>
           <div class="hero-scan-meta">
-            <button type="button" class="text-link" id="go-scanner-btn">Пример: LINK</button>
+            <button type="button" class="text-link" id="go-scanner-btn" data-i18n="hero.tryLink">Пример: LINK</button>
             <span class="dot">·</span>
-            <button type="button" class="text-link" id="example-report-btn">Посмотреть пример полного анализа</button>
+            <button type="button" class="text-link" id="example-report-btn" data-i18n="hero.exampleReport">Посмотреть пример полного анализа</button>
             <span class="dot">·</span>
-            <button type="button" class="text-link" id="try-link-btn">Открыть сканер</button>
+            <button type="button" class="text-link" id="try-link-btn" data-i18n="hero.openScanner">Открыть сканер</button>
           </div>
         </div>
 
@@ -133,45 +133,45 @@
             <div><span>AI</span><strong class="ok">MEDIUM</strong></div>
             <div><span>Flags</span><strong>GoPlus</strong></div>
           </div>
-          <p class="muted small" style="margin-top:0.5rem"><a href="/methodology.html">Как считается риск</a></p>
+          <p class="muted small" style="margin-top:0.5rem"><a href="/methodology.html" data-i18n="hero.methodology">Как считается риск</a></p>
         </div>
       </div>
 
       <div class="how-grid">
         <div class="how-card glass">
           <div class="how-num">01</div>
-          <h3>Вставь адрес</h3>
-          <p>Контракт токена — за секунды, без регистрации для базового риска.</p>
+          <h3 data-i18n="how.s1t">Вставь адрес</h3>
+          <p data-i18n="how.s1p">Контракт токена — за секунды, без регистрации для базового риска.</p>
         </div>
         <div class="how-card glass">
           <div class="how-num">02</div>
-          <h3>Риск + AI</h3>
-          <p>Скор, liquidity, pressure и вердикт модели — до покупки.</p>
+          <h3 data-i18n="how.s2t">Риск + AI</h3>
+          <p data-i18n="how.s2p">Скор, ликвидность и вердикт модели — до покупки.</p>
         </div>
         <div class="how-card glass">
           <div class="how-num">03</div>
-          <h3>Watchlist + TG</h3>
-          <p>Избранное и алерты в Telegram, когда цена или риск меняются.</p>
+          <h3 data-i18n="how.s3t">Watchlist + TG</h3>
+          <p data-i18n="how.s3p">Избранное и алерты в Telegram, когда цена или риск меняются.</p>
         </div>
       </div>
 
       <div class="sell-strip glass">
         <div class="sell-copy">
-          <h3>После 1–2 сканов обычно не хватает глубины</h3>
-          <p class="muted">Free — быстрый риск. Premium — полный разбор, алерты, история и сравнение.</p>
+          <h3 data-i18n="sell.title">После 1–2 сканов обычно не хватает глубины</h3>
+          <p class="muted" data-i18n="sell.sub">Free — быстрый риск. Premium — полный разбор, алерты, история и сравнение.</p>
         </div>
-        <button type="button" class="upgrade-btn plan-btn" data-plan="premium">Смотреть тарифы</button>
+        <button type="button" class="upgrade-btn plan-btn" data-plan="premium" data-i18n="sell.cta">Смотреть тарифы</button>
       </div>
 
       <div class="section-head">
-        <h2>Trending markets</h2>
-        <button type="button" class="link-btn" id="refresh-trending">Refresh</button>
+        <h2 data-i18n="home.trending">Trending markets</h2>
+        <button type="button" class="link-btn" id="refresh-trending" data-i18n="home.refresh">Refresh</button>
       </div>
       <div class="trending-grid" id="trending-grid"></div>
 
       <div class="section-head" style="margin-top:1.5rem">
-        <h2>High risk signals</h2>
-        <span class="muted small">Live-ish · from trending pairs</span>
+        <h2 data-i18n="home.highRisk">High risk signals</h2>
+        <span class="muted small" data-i18n="home.highRiskSub">Live-ish · from trending pairs</span>
       </div>
       <div class="high-risk-grid" id="high-risk-grid">
         <div class="muted small">Loading…</div>
