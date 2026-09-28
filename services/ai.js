@@ -348,12 +348,45 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
         'Reasons: ' +
         (Array.isArray(risk.reasons) ? risk.reasons.slice(0, 5).join('; ') : '');
 
-      const msgs = [{ role: 'system', content: systemPrompt }].concat(
-        (messages || []).slice(-10)
-      );
+      // Force model to see numbers in the last user turn as well
+      const dataBlock =
+        '[SCAN_DATA] symbol=' +
+        (tok.symbol || 'n/a') +
+        ' chain=' +
+        (tok.chainId || 'n/a') +
+        ' price=' +
+        (tok.price != null ? tok.price : 'n/a') +
+        ' liquidity_usd=' +
+        (tok.liquidity != null ? tok.liquidity : 'n/a') +
+        ' volume24h=' +
+        (tok.volume24h != null ? tok.volume24h : 'n/a') +
+        ' fdv=' +
+        (tok.fdv != null ? tok.fdv : 'n/a') +
+        ' riskScore=' +
+        (risk.riskScore != null ? risk.riskScore : 'n/a') +
+        ' honeypot=' +
+        String(meta.isHoneypot) +
+        ' mintable=' +
+        String(meta.isMintable) +
+        ' top10Pct=' +
+        (meta.top10Pct != null ? meta.top10Pct : 'n/a') +
+        ' security_available=' +
+        String(!!sec.available);
+
+      const sliced = (messages || []).slice(-10).map(function (m, i, arr) {
+        if (i === arr.length - 1 && m.role === 'user') {
+          return {
+            role: 'user',
+            content: dataBlock + '\n\nQuestion: ' + String(m.content || '')
+          };
+        }
+        return m;
+      });
+
+      const msgs = [{ role: 'system', content: systemPrompt }].concat(sliced);
       const reply = this.groqKey
         ? await this.callGroq(msgs)
-        : await this.callOpenRouter(systemPrompt + '\n\nUser: ' + lastText);
+        : await this.callOpenRouter(systemPrompt + '\n\n' + dataBlock + '\n\nUser: ' + lastText);
       return { reply, demo: false };
     } catch (e) {
       console.error('AI chat error:', e.message);
