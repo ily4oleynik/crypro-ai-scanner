@@ -11,7 +11,9 @@ class AIService {
     console.log('[AI] GROQ_API_KEY loaded:', this.groqKey ? 'YES' : 'NO');
   }
 
-  async analyzeToken(tokenData, riskReport, plan) {
+  async analyzeToken(tokenData, riskReport, plan, lang) {
+    lang = String(lang || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
+    const langRule = lang === 'en' ? 'Write the entire analysis in English only.' : 'Пиши весь анализ только на русском.';
     const td = tokenData || {};
     const rr = riskReport || {};
     const p = String(plan || 'free').toLowerCase();
@@ -275,129 +277,199 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
     return s;
   }
 
+  num(v) {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
   async chat(messages, context) {
     context = context || {};
+    const lang = String(context.lang || context.language || 'ru').toLowerCase().startsWith('en')
+      ? 'en'
+      : 'ru';
     const last = (messages || []).filter((m) => m.role === 'user').pop();
     const lastText = last ? last.content : '';
-    const tokRaw = context.token || {};
+
+    // Accept nested token OR flat context (auditors / old clients)
+    const tokRaw = context.token && typeof context.token === 'object' ? context.token : context;
+    const risk = context.risk && typeof context.risk === 'object' ? context.risk : {};
+    const sec =
+      context.security && typeof context.security === 'object' ? context.security : {};
+    const meta = sec.meta && typeof sec.meta === 'object' ? sec.meta : {};
+
     const tok = {
-      symbol: this.sanitizeField(tokRaw.symbol, 24),
-      name: this.sanitizeField(tokRaw.name, 64),
-      chainId: this.sanitizeField(tokRaw.chainId, 24),
-      price: tokRaw.price,
-      liquidity: tokRaw.liquidity,
-      volume24h: tokRaw.volume24h,
-      fdv: tokRaw.fdv,
-      marketCap: tokRaw.marketCap,
-      address: this.sanitizeField(tokRaw.address, 80)
+      symbol: this.sanitizeField(tokRaw.symbol || context.symbol, 24),
+      name: this.sanitizeField(tokRaw.name || context.name, 64),
+      chainId: this.sanitizeField(tokRaw.chainId || context.chainId, 24),
+      address: this.sanitizeField(tokRaw.address || context.address, 80),
+      price: this.num(tokRaw.price != null ? tokRaw.price : context.price),
+      liquidity: this.num(
+        tokRaw.liquidity != null ? tokRaw.liquidity : context.liquidity
+      ),
+      volume24h: this.num(
+        tokRaw.volume24h != null ? tokRaw.volume24h : context.volume24h
+      ),
+      fdv: this.num(tokRaw.fdv != null ? tokRaw.fdv : context.fdv),
+      marketCap: this.num(
+        tokRaw.marketCap != null ? tokRaw.marketCap : context.marketCap
+      )
     };
-    const risk = context.risk || {};
-    const sec = context.security || {};
-    const meta = sec.meta || {};
+    const riskScore = this.num(risk.riskScore != null ? risk.riskScore : context.riskScore);
+    const riskLevel = risk.riskLevel || context.riskLevel || '';
+    const reasons = Array.isArray(risk.reasons)
+      ? risk.reasons
+      : Array.isArray(context.reasons)
+        ? context.reasons
+        : [];
+    const flags = Array.isArray(sec.flags) ? sec.flags : [];
+    const flagLine = flags
+      .slice(0, 8)
+      .map(function (f) {
+        return (f.label || f.id || '') + ':' + (f.status || '') + ' ' + (f.text || '');
+      })
+      .join(' | ');
+
+    const hasScan =
+      !!(tok.symbol || tok.address) &&
+      (tok.liquidity != null || riskScore != null || sec.available === true || flags.length);
+
+    // Deterministic facts — model must not invent n/a when we have numbers
+    const facts =
+      'FACTS (authoritative, never say n/a if a value is present here):\n' +
+      'symbol=' +
+      (tok.symbol || 'n/a') +
+      '\nname=' +
+      (tok.name || '') +
+      '\nchain=' +
+      (tok.chainId || 'n/a') +
+      '\naddress=' +
+      (tok.address || 'n/a') +
+      '\nprice_usd=' +
+      (tok.price != null ? tok.price : 'n/a') +
+      '\nliquidity_usd=' +
+      (tok.liquidity != null ? tok.liquidity : 'n/a') +
+      '\nvolume24h_usd=' +
+      (tok.volume24h != null ? tok.volume24h : 'n/a') +
+      '\nfdv_usd=' +
+      (tok.fdv != null ? tok.fdv : 'n/a') +
+      '\nmarketCap_usd=' +
+      (tok.marketCap != null ? tok.marketCap : 'n/a') +
+      '\nriskScore=' +
+      (riskScore != null ? riskScore : 'n/a') +
+      '\nriskLevel=' +
+      (riskLevel || 'n/a') +
+      '\nhoneypot=' +
+      String(meta.isHoneypot) +
+      '\nmintable=' +
+      String(meta.isMintable) +
+      '\nrenounced=' +
+      String(meta.renounced) +
+      '\nbuyTax=' +
+      (meta.buyTax != null ? meta.buyTax : 'n/a') +
+      '\nsellTax=' +
+      (meta.sellTax != null ? meta.sellTax : 'n/a') +
+      '\ntop10Pct=' +
+      (meta.top10Pct != null ? meta.top10Pct : 'n/a') +
+      '\nholderCount=' +
+      (meta.holderCount != null ? meta.holderCount : 'n/a') +
+      '\nsecurity_available=' +
+      String(!!sec.available) +
+      '\nsecurity_source=' +
+      (sec.source || 'n/a') +
+      '\nflags=' +
+      (flagLine || 'none') +
+      '\nreasons=' +
+      (reasons.slice(0, 6).join('; ') || 'none');
 
     if (!this.groqKey && !this.openRouterKey) {
       return {
-        reply: this.chatFallback(lastText, tok, risk, meta),
+        reply: this.chatFallback(lastText, tok, { riskScore, riskLevel, reasons }, meta, lang),
         demo: true
       };
     }
+
     try {
+      const langLine =
+        lang === 'en'
+          ? 'Reply ONLY in English. No Russian words.'
+          : 'Отвечай ТОЛЬКО на русском. Без английских абзацев (тикеры/цифры можно EN).';
+
       const systemPrompt =
-        'Ты AI-аналитик рисков Crypto AI Scanner. Язык ответа = язык вопроса (RU/EN).\n' +
-        'ТОЛЬКО данные скана ниже. Не выдумывай honeypot/mint/holders если n/a или unknown — скажи прямо.\n' +
-        'Не подмешивай общие знания о тикере, если они противоречат скану.\n' +
-        'Структура (коротко, без markdown ** #):\n' +
-        '1) Contract — известно / неизвестно\n' +
-        '2) Liquidity — цифры из отчёта\n' +
-        '3) Holders / Ownership\n' +
-        '4) Вердикт в 1 предложении (не покупай/продавай)\n' +
-        '5) Что изменило бы оценку — 1–2 триггера\n' +
-        'Запрещено: прямые финансовые советы, residual risk always remains.\n' +
-        'Данные токена:\n' +
-        'Symbol: ' +
-        (tok.symbol || 'n/a') +
-        ' Name: ' +
-        (tok.name || '') +
+        'You are Crypto AI Scanner risk analyst.\n' +
+        langLine +
         '\n' +
-        'Chain: ' +
-        (tok.chainId || 'n/a') +
-        ' Price: $' +
-        (tok.price != null ? tok.price : 'n/a') +
-        '\n' +
-        'Risk score: ' +
-        (risk.riskScore != null ? risk.riskScore : '—') +
-        '/100 Level: ' +
-        (risk.riskLevel || '—') +
-        '\n' +
-        'Liquidity: ' +
-        (tok.liquidity != null ? tok.liquidity : 'n/a') +
-        ' Vol24h: ' +
-        (tok.volume24h != null ? tok.volume24h : 'n/a') +
-        ' FDV: ' +
-        (tok.fdv != null ? tok.fdv : 'n/a') +
-        '\n' +
-        'Honeypot: ' +
-        String(meta.isHoneypot) +
-        ' Mintable: ' +
-        String(meta.isMintable) +
-        ' Top10%: ' +
-        (meta.top10Pct != null ? meta.top10Pct : 'n/a') +
-        ' Sell tax: ' +
-        (meta.sellTax != null ? meta.sellTax : 'n/a') +
-        '\n' +
-        'Reasons: ' +
-        (Array.isArray(risk.reasons) ? risk.reasons.slice(0, 5).join('; ') : '');
+        'Use ONLY the FACTS block. If liquidity_usd is a number, you MUST cite it — never write Liquidity n/a.\n' +
+        'If honeypot is false, say sell simulation OK / not honeypot. If true, warn.\n' +
+        'If security_available is false, say simulation limited — do not invent holders.\n' +
+        'Structure:\n' +
+        '1) Contract\n2) Liquidity (numbers)\n3) Holders / Ownership\n' +
+        '4) Verdict one sentence (informational, not financial advice)\n' +
+        '5) What would change the assessment\n' +
+        'Forbidden: regulatory pressure, Ethereum scalability, generic market talk, residual risk always remains.\n' +
+        facts;
 
-      // Force model to see numbers in the last user turn as well
-      const dataBlock =
-        '[SCAN_DATA] symbol=' +
-        (tok.symbol || 'n/a') +
-        ' chain=' +
-        (tok.chainId || 'n/a') +
-        ' price=' +
-        (tok.price != null ? tok.price : 'n/a') +
-        ' liquidity_usd=' +
-        (tok.liquidity != null ? tok.liquidity : 'n/a') +
-        ' volume24h=' +
-        (tok.volume24h != null ? tok.volume24h : 'n/a') +
-        ' fdv=' +
-        (tok.fdv != null ? tok.fdv : 'n/a') +
-        ' riskScore=' +
-        (risk.riskScore != null ? risk.riskScore : 'n/a') +
-        ' honeypot=' +
-        String(meta.isHoneypot) +
-        ' mintable=' +
-        String(meta.isMintable) +
-        ' top10Pct=' +
-        (meta.top10Pct != null ? meta.top10Pct : 'n/a') +
-        ' security_available=' +
-        String(!!sec.available);
-
-      const sliced = (messages || []).slice(-10).map(function (m, i, arr) {
+      const sliced = (messages || []).slice(-8).map(function (m, i, arr) {
         if (i === arr.length - 1 && m.role === 'user') {
           return {
             role: 'user',
-            content: dataBlock + '\n\nQuestion: ' + String(m.content || '')
+            content:
+              facts +
+              '\n\nUser question (' +
+              lang +
+              '): ' +
+              String(m.content || '')
           };
         }
-        return m;
+        return { role: m.role, content: String(m.content || '').slice(0, 2000) };
       });
 
       const msgs = [{ role: 'system', content: systemPrompt }].concat(sliced);
-      const reply = this.groqKey
+      let reply = this.groqKey
         ? await this.callGroq(msgs)
-        : await this.callOpenRouter(systemPrompt + '\n\n' + dataBlock + '\n\nUser: ' + lastText);
+        : await this.callOpenRouter(systemPrompt + '\n\nUser: ' + lastText);
+
+      // Safety net: if model still says n/a but we have liq
+      if (
+        tok.liquidity != null &&
+        /liquidity[^\n]{0,40}(n\/a|неизвестн|unknown)/i.test(reply)
+      ) {
+        const liqStr = Math.round(tok.liquidity).toLocaleString('en-US');
+        reply =
+          (lang === 'en'
+            ? '1) Contract — data from scan (see flags)\n2) Liquidity — $' +
+              liqStr +
+              ' USD\n'
+            : '1) Contract — по данным скана (см. flags)\n2) Liquidity — $' +
+              liqStr +
+              ' USD\n') + reply;
+      }
+
+      if (!hasScan) {
+        reply =
+          (lang === 'en'
+            ? 'No scan snapshot was attached. Open a token report first.\n\n'
+            : 'Нет данных скана в запросе. Сначала откройте отчёт токена.\n\n') + reply;
+      }
+
       return { reply, demo: false };
     } catch (e) {
       console.error('AI chat error:', e.message);
       return {
-        reply: this.chatFallback(lastText, tok, risk, meta) + '\n\n(Ошибка API: ' + e.message + ')',
+        reply: this.chatFallback(
+          lastText,
+          tok,
+          { riskScore, riskLevel, reasons },
+          meta,
+          lang
+        ),
         demo: true
       };
     }
   }
 
-  chatFallback(lastText, tok, risk, meta) {
+  chatFallback(lastText, tok, risk, meta, lang) {
+    lang = lang === 'en' ? 'en' : 'ru';
     const score = Number(risk.riskScore) || 50;
     const liq = Number(tok.liquidity) || 0;
     const top = meta.top10Pct;
