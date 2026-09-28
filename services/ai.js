@@ -266,11 +266,31 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
     };
   }
 
+
+  sanitizeField(v, maxLen) {
+    let s = String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').trim();
+    // strip instruction-like prefixes from untrusted token metadata
+    s = s.replace(/(ignore|system|prompt|instruction)\s*:/gi, '');
+    if (s.length > (maxLen || 80)) s = s.slice(0, maxLen || 80);
+    return s;
+  }
+
   async chat(messages, context) {
     context = context || {};
     const last = (messages || []).filter((m) => m.role === 'user').pop();
     const lastText = last ? last.content : '';
-    const tok = context.token || {};
+    const tokRaw = context.token || {};
+    const tok = {
+      symbol: this.sanitizeField(tokRaw.symbol, 24),
+      name: this.sanitizeField(tokRaw.name, 64),
+      chainId: this.sanitizeField(tokRaw.chainId, 24),
+      price: tokRaw.price,
+      liquidity: tokRaw.liquidity,
+      volume24h: tokRaw.volume24h,
+      fdv: tokRaw.fdv,
+      marketCap: tokRaw.marketCap,
+      address: this.sanitizeField(tokRaw.address, 80)
+    };
     const risk = context.risk || {};
     const sec = context.security || {};
     const meta = sec.meta || {};
