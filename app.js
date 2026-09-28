@@ -429,6 +429,12 @@ async function activatePlanDemo(plan) {
     });
     const data = await res.json();
     if (!data.success) {
+      if (data.waitlist) {
+        const box = document.getElementById('waitlist-box');
+        if (box) box.style.display = 'block';
+        alert(data.error || 'Демо отключено. Используйте waitlist.');
+        return;
+      }
       alert(data.error || 'Could not change plan');
       return;
     }
@@ -445,7 +451,7 @@ async function activatePlanDemo(plan) {
     closePricing();
     refreshAccountPage();
     refreshUsage();
-    alert(currentPlan.toUpperCase() + ' saved (demo until payments).');
+    alert(currentPlan.toUpperCase() + ' активирован (demo mode).');
   } catch (e) {
     alert('Network error');
   }
@@ -473,14 +479,25 @@ function openAuthModal(hintText) {
 
 let tgBotUsername = localStorage.getItem('tg_bot_username') || 'aicryptoscreenerbot';
 
+async function applyDemoPlanButtons(allow) {
+  document.querySelectorAll('.demo-plan-btn').forEach(function (b) {
+    b.style.display = allow ? 'block' : 'none';
+  });
+}
+
 async function loadPublicConfig() {
   try {
     const res = await fetch(API_BASE + '/api/config/public');
     const data = await res.json();
-    if (data.success && data.telegramBotUsername) {
+    if (!data || !data.success) return;
+    if (data.telegramBotUsername) {
       tgBotUsername = data.telegramBotUsername;
       localStorage.setItem('tg_bot_username', tgBotUsername);
     }
+    window.__allowDemoPlans = !!data.allowDemoPlans;
+    document.querySelectorAll('.demo-plan-btn').forEach(function (b) {
+      b.style.display = window.__allowDemoPlans ? 'block' : 'none';
+    });
   } catch (e) {}
 }
 
