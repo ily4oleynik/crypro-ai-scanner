@@ -2470,3 +2470,65 @@ button.home-chip.example-token:hover,
     font-size: 16px;
   }
 }
+
+/* === AI CHAT WOW === */
+#ai-chat-section {
+  margin-top: 1.25rem;
+  border: 1px solid rgba(0, 240, 160, 0.25);
+  box-shadow: 0 0 24px rgba(0, 240, 160, 0.08);
+  border-radius: 16px;
+  padding: 1rem 1.1rem 1.15rem;
+}
+#chat-window {
+  min-height: 280px;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 280px;
+  padding: 0.5rem 0;
+}
+.chat-msg.user { display: flex; justify-content: flex-end; margin: 0.4rem 0; }
+.chat-msg.ai { display: flex; justify-content: flex-start; margin: 0.4rem 0; }
+.chat-msg .msg-bubble {
+  max-width: 92%;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.chat-msg.user .msg-bubble {
+  background: rgba(0, 240, 160, 0.15);
+  border: 1px solid rgba(0, 240, 160, 0.35);
+}
+.chat-msg.ai .msg-bubble {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.chat-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
+.chat-chip {
+  border: 1px solid rgba(0, 240, 160, 0.3);
+  background: transparent;
+  color: #e4e4f0;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.chat-chip:hover { background: rgba(0, 240, 160, 0.12); }
+.chat-quota-bar {
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  margin: 0.35rem 0 0.6rem;
+  overflow: hidden;
+}
+.chat-quota-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #00f0a0, #00d4ff);
+}
