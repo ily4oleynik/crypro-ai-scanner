@@ -215,11 +215,117 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+
+/* ===================== BILLING (skeleton — enable with PAYMENTS_ENABLED=true) ===================== */
+app.get('/api/billing/status', authMiddleware, (req, res) => {
+  const paymentsEnabled =
+    String(process.env.PAYMENTS_ENABLED || '').toLowerCase() === 'true' &&
+    !!(process.env.YOOKASSA_SHOP_ID && process.env.YOOKASSA_SECRET_KEY);
+  res.json({
+    success: true,
+    paymentsEnabled,
+    provider: paymentsEnabled ? 'yookassa' : null,
+    plan: req.user?.plan || 'free',
+    message: paymentsEnabled
+      ? 'Payments ready'
+      : 'Payments not enabled — use waitlist'
+  });
+});
+
+app.post(
+  '/api/billing/create-payment',
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 5, keyFn: (req) => 'pay:' + clientIp(req) }),
+  async (req, res) => {
+    const paymentsEnabled =
+      String(process.env.PAYMENTS_ENABLED || '').toLowerCase() === 'true' &&
+      !!(process.env.YOOKASSA_SHOP_ID && process.env.YOOKASSA_SECRET_KEY);
+    if (!paymentsEnabled) {
+      return res.status(503).json({
+        success: false,
+        error: 'Оплата ещё не подключена. Оставьте email в waitlist.',
+        waitlist: true
+      });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, error: 'Войдите в аккаунт' });
+    }
+    const plan = String(req.body.plan || '').toLowerCase();
+    const prices = { premium: 2900, pro: 7900 }; // RUB kopecks x100 -> 29.00 / 79.00 if using rubles as major - YooKassa uses minor units
+    // YooKassa amount value is string major units "29.00"
+    const amounts = { premium: '29.00', pro: '79.00' };
+    if (!amounts[plan]) {
+      return res.status(400).json({ success: false, error: 'Неверный тариф' });
+    }
+    try {
+      const idempotenceKey = crypto.randomUUID();
+      const shopId = process.env.YOOKASSA_SHOP_ID;
+      const secret = process.env.YOOKASSA_SECRET_KEY;
+      const returnUrl =
+        process.env.PAYMENT_RETURN_URL ||
+        process.env.PUBLIC_URL ||
+        'https://crypro-ai-scanner-production-6ecd.up.railway.app/';
+      const auth = Buffer.from(shopId + ':' + secret).toString('base64');
+      const payload = {
+        amount: { value: amounts[plan], currency: 'RUB' },
+        confirmation: { type: 'redirect', return_url: returnUrl + '?paid=1&plan=' + plan },
+        capture: true,
+        description: 'Crypto AI Scanner ' + plan,
+        metadata: { userId: String(req.user.id), plan: plan, email: req.user.email || '' }
+      };
+      const r = await axios.post('https://api.yookassa.ru/v3/payments', payload, {
+        headers: {
+          Authorization: 'Basic ' + auth,
+          'Content-Type': 'application/json',
+          'Idempotence-Key': idempotenceKey
+        },
+        timeout: 15000
+      });
+      const conf = r.data && r.data.confirmation;
+      res.json({
+        success: true,
+        paymentId: r.data.id,
+        confirmationUrl: conf && conf.confirmation_url
+      });
+    } catch (e) {
+      console.error('[billing]', e.response?.data || e.message);
+      res.status(500).json({
+        success: false,
+        error: e.response?.data?.description || e.message || 'Payment error'
+      });
+    }
+  }
+);
+
+app.post('/api/billing/webhook', express.json(), async (req, res) => {
+  // YooKassa notification — verify in production via IP allowlist / secret
+  try {
+    const event = req.body || {};
+    const obj = event.object || {};
+    if (event.event === 'payment.succeeded' && obj.metadata) {
+      const userId = obj.metadata.userId;
+      const plan = String(obj.metadata.plan || '').toLowerCase();
+      if (userId && (plan === 'premium' || plan === 'pro')) {
+        await store.updateUserPlan({ id: userId }, plan);
+        console.log('[billing] plan updated', userId, plan);
+      }
+    }
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('[billing webhook]', e.message);
+    res.status(200).json({ ok: true });
+  }
+});
+
 /* ===================== PUBLIC ===================== */
 
 app.get('/api/config/public', (req, res) => {
+  const paymentsEnabled =
+    String(process.env.PAYMENTS_ENABLED || '').toLowerCase() === 'true' &&
+    !!(process.env.YOOKASSA_SHOP_ID && process.env.YOOKASSA_SECRET_KEY);
   res.json({
     success: true,
+    paymentsEnabled,
     telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || 'aicryptoscreenerbot',
     channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
     channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en',
@@ -755,6 +861,22 @@ app.get(
           plan
         });
       }
+      // Global risk history for charts (throttled in store)
+      try {
+        if (store.addRiskSnapshot) {
+          await store.addRiskSnapshot({
+            address: base.address || tokenAddress,
+            chainId: base.chainId,
+            symbol: base.symbol,
+            riskScore,
+            riskLevel,
+            liquidity: base.liquidity,
+            price: base.price
+          });
+        }
+      } catch (e) {
+        console.warn('[risk snapshot]', e.message);
+      }
 
       const currentUsage = await store.canScan({
         ...req.user,
@@ -1095,8 +1217,24 @@ app.get('/api/news', async (req, res) => {
   }
 });
 
-app.get('/api/ticker', async (req, res) => {
+app.get('/api/risk-history/:address', async (req, res) => {
   try {
+    const address = req.params.address;
+    const hours = Number(req.query.hours) || 48;
+    if (!address || address.length < 8) {
+      return res.status(400).json({ success: false, points: [] });
+    }
+    const points = store.getRiskHistory
+      ? await store.getRiskHistory(address, hours)
+      : [];
+    res.json({ success: true, address, hours, points });
+  } catch (e) {
+    res.json({ success: false, points: [], error: e.message });
+  }
+});
+
+app.get('/api/ticker', async (req, res) => {
+  async function fromCoinGecko() {
     const r = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
       params: {
         ids: 'bitcoin,ethereum,solana',
@@ -1106,38 +1244,63 @@ app.get('/api/ticker', async (req, res) => {
       timeout: 8000
     });
     const d = r.data || {};
-    res.json({
-      success: true,
-      ticker: [
-        {
-          id: 'btc',
-          symbol: 'BTC',
-          price: d.bitcoin?.usd ?? null,
-          change24h: d.bitcoin?.usd_24h_change ?? null
-        },
-        {
-          id: 'eth',
-          symbol: 'ETH',
-          price: d.ethereum?.usd ?? null,
-          change24h: d.ethereum?.usd_24h_change ?? null
-        },
-        {
-          id: 'sol',
-          symbol: 'SOL',
-          price: d.solana?.usd ?? null,
-          change24h: d.solana?.usd_24h_change ?? null
-        }
-      ]
-    });
+    return [
+      {
+        id: 'btc',
+        symbol: 'BTC',
+        price: d.bitcoin?.usd ?? null,
+        change24h: d.bitcoin?.usd_24h_change ?? null
+      },
+      {
+        id: 'eth',
+        symbol: 'ETH',
+        price: d.ethereum?.usd ?? null,
+        change24h: d.ethereum?.usd_24h_change ?? null
+      },
+      {
+        id: 'sol',
+        symbol: 'SOL',
+        price: d.solana?.usd ?? null,
+        change24h: d.solana?.usd_24h_change ?? null
+      }
+    ];
+  }
+  async function fromDex() {
+    // Popular liquid pairs as fallback when CoinGecko rate-limits
+    const urls = [
+      ['btc', 'BTC', 'https://api.dexscreener.com/latest/dex/tokens/0x2260fac5e5542a773aa44fbcfedf7c193bc2c599'],
+      ['eth', 'ETH', 'https://api.dexscreener.com/latest/dex/tokens/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'],
+      ['sol', 'SOL', 'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112']
+    ];
+    const out = [];
+    for (const [id, symbol, url] of urls) {
+      try {
+        const r = await axios.get(url, { timeout: 6000 });
+        const pair = (r.data && r.data.pairs && r.data.pairs[0]) || {};
+        out.push({
+          id,
+          symbol,
+          price: pair.priceUsd != null ? Number(pair.priceUsd) : null,
+          change24h: pair.priceChange && pair.priceChange.h24 != null ? Number(pair.priceChange.h24) : null
+        });
+      } catch (e) {
+        out.push({ id, symbol, price: null, change24h: null });
+      }
+    }
+    return out;
+  }
+  try {
+    let ticker = await fromCoinGecko();
+    const ok = ticker.some((t) => t.price != null && t.price > 0);
+    if (!ok) ticker = await fromDex();
+    res.json({ success: true, ticker });
   } catch (e) {
-    res.json({
-      success: true,
-      ticker: [
-        { id: 'btc', symbol: 'BTC', price: null, change24h: null },
-        { id: 'eth', symbol: 'ETH', price: null, change24h: null },
-        { id: 'sol', symbol: 'SOL', price: null, change24h: null }
-      ]
-    });
+    try {
+      const ticker = await fromDex();
+      res.json({ success: true, ticker, source: 'dexscreener' });
+    } catch (e2) {
+      res.json({ success: false, ticker: [], error: 'ticker_unavailable' });
+    }
   }
 });
 
