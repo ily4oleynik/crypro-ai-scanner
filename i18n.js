@@ -153,7 +153,7 @@ const I18N = {
     'nav.compare': 'Compare',
     'nav.account': 'Account',
 
-    'hero.badge': 'Institutional AI · On-chain risk',
+    'hero.badge': 'AI · On-chain risk',
     'hero.title': 'Check a token in seconds — before you buy',
     'hero.sub': 'Smart-contract risk + AI verdict + alerts — we surface risks before entry. Not financial advice and not a guarantee.',
     'hero.proof': 'Built for people who already got burned by scams',
