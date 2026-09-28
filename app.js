@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     token = null;
   }
   restoreSession();
+  setTimeout(handleDeepLinkScan, 600);
 
   document.getElementById('nav-home')?.addEventListener('click', e => { e.preventDefault(); showPage('home'); });
   document.getElementById('nav-scanner')?.addEventListener('click', e => { e.preventDefault(); showPage('scanner'); });
@@ -334,9 +335,11 @@ async function loadTicker() {
   try {
     const res = await apiFetch('/api/ticker');
     const data = await res.json();
-    const items = data.ticker || [];
+    const items = (data.ticker || []).filter(function (t) {
+      return t && t.price != null && Number(t.price) > 0;
+    });
     if (!items.length) {
-      inner.innerHTML = '<span class="ticker-item">Markets unavailable</span>';
+      inner.innerHTML = '<span class="ticker-item muted">Markets loading…</span>';
       inner.style.animation = 'none';
       return;
     }
@@ -344,7 +347,7 @@ async function loadTicker() {
       const ch = t.change24h;
       const cls = ch > 0 ? 'ticker-up' : ch < 0 ? 'ticker-down' : '';
       const sign = ch > 0 ? '+' : '';
-      const price = t.price == null ? '—' : t.price >= 100
+      const price = t.price >= 100
         ? t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })
         : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
       const chStr = ch == null ? '' : '<span class="' + cls + '">' + sign + Number(ch).toFixed(2) + '%</span>';
@@ -506,11 +509,41 @@ async function loadPublicConfig() {
       localStorage.setItem('tg_bot_username', tgBotUsername);
     }
     window.__allowDemoPlans = !!data.allowDemoPlans;
+    window.__paymentsEnabled = !!data.paymentsEnabled;
     document.querySelectorAll('.demo-plan-btn').forEach(function (b) {
       b.style.display = window.__allowDemoPlans ? 'block' : 'none';
     });
+    document.querySelectorAll('.pay-plan-btn').forEach(function (b) {
+      b.style.display = window.__paymentsEnabled ? 'block' : 'none';
+    });
   } catch (e) {}
 }
+
+async function startCheckout(plan) {
+  plan = plan || 'premium';
+  if (!user) {
+    openAuthModal('Sign in to subscribe');
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/billing/create-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan: plan })
+    });
+    const data = await res.json();
+    if (data.confirmationUrl) {
+      window.location.href = data.confirmationUrl;
+      return;
+    }
+    alert(data.error || 'Payment unavailable — use waitlist');
+    const box = document.getElementById('waitlist-box');
+    if (box) box.style.display = 'block';
+  } catch (e) {
+    alert('Network error');
+  }
+}
+window.startCheckout = startCheckout;
 
 function mountTelegramLoginWidget() {
   const box = document.getElementById('tg-login-widget');
@@ -636,6 +669,24 @@ async function handleAuth(e) {
   } catch (err) {
     showErr('Connection error');
   }
+}
+
+function handleDeepLinkScan() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const addr = params.get('scan') || params.get('address');
+    if (!addr || addr.length < 8) return;
+    const input = document.getElementById('token-input') || document.getElementById('home-token-input');
+    if (input) input.value = addr;
+    showPage('scanner');
+    setTimeout(function () {
+      if (typeof startScan === 'function') startScan();
+      else {
+        const btn = document.getElementById('scan-btn') || document.getElementById('analyze-btn');
+        if (btn) btn.click();
+      }
+    }, 500);
+  } catch (e) {}
 }
 
 async function restoreSession() {
@@ -1768,41 +1819,48 @@ function shareReport() {
   }
   const tok = data.token;
   const r = data.risk || {};
+  const sec = data.security || {};
+  const addr = tok.address || '';
+  const shareUrl =
+    window.location.origin +
+    '/?scan=' +
+    encodeURIComponent(addr) +
+    (tok.chainId ? '&chain=' + encodeURIComponent(tok.chainId) : '');
+
   const canvas = document.createElement('canvas');
   canvas.width = 900;
-  canvas.height = 480;
+  canvas.height = 520;
   const ctx = canvas.getContext('2d');
-  // background
   ctx.fillStyle = '#0b0e11';
-  ctx.fillRect(0, 0, 900, 480);
-  // card
+  ctx.fillRect(0, 0, 900, 520);
   ctx.fillStyle = '#12161c';
-  roundRect(ctx, 40, 40, 820, 400, 20);
+  roundRect(ctx, 40, 40, 820, 440, 20);
   ctx.fill();
   ctx.strokeStyle = '#1e2438';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // accent line
   ctx.fillStyle = '#00f0a0';
-  ctx.fillRect(40, 40, 8, 400);
+  ctx.fillRect(40, 40, 8, 440);
 
   ctx.fillStyle = '#e4e4f0';
   ctx.font = 'bold 28px Inter, system-ui, sans-serif';
-  ctx.fillText((tok.symbol || 'TOKEN') + '  ' + (tok.name || ''), 70, 100);
+  const title = ((tok.symbol || 'TOKEN') + '  ' + (tok.name || '')).slice(0, 42);
+  ctx.fillText(title, 70, 100);
 
   ctx.fillStyle = '#888';
   ctx.font = '16px Inter, system-ui, sans-serif';
   const chain = tok.chainId ? String(tok.chainId).toUpperCase() : '';
-  ctx.fillText(chain + (tok.pairAddress ? '  ·  ' + String(tok.pairAddress).slice(0, 10) + '…' : ''), 70, 130);
+  ctx.fillText(chain + (addr ? '  ·  ' + String(addr).slice(0, 12) + '…' : ''), 70, 130);
 
   const score = Number(r.riskScore) || 0;
+  const level = String(r.riskLevel || '').toUpperCase() || (score >= 61 ? 'HIGH' : score >= 31 ? 'MEDIUM' : 'LOW');
   const col = score >= 61 ? '#ff4d6a' : score >= 31 ? '#f5a623' : '#00f0a0';
   ctx.fillStyle = col;
   ctx.font = 'bold 64px Inter, system-ui, sans-serif';
   ctx.fillText(String(score), 70, 220);
   ctx.fillStyle = '#888';
   ctx.font = '18px Inter, system-ui, sans-serif';
-  ctx.fillText('/ 100 risk', 70 + ctx.measureText(String(score)).width + 12, 220);
+  ctx.fillText('/ 100  ·  ' + level, 70 + ctx.measureText(String(score)).width + 12, 220);
 
   ctx.fillStyle = '#e4e4f0';
   ctx.font = '20px Inter, system-ui, sans-serif';
@@ -1810,23 +1868,74 @@ function shareReport() {
   ctx.fillText('Liquidity  ' + formatNum(tok.liquidity), 70, 315);
   ctx.fillText('Volume 24h  ' + formatNum(tok.volume24h), 70, 350);
 
+  // top flags
+  const flags = (sec.flags || []).filter(function (f) {
+    return f && (f.status === 'bad' || f.status === 'warn');
+  }).slice(0, 3);
+  ctx.fillStyle = '#aaa';
+  ctx.font = '15px Inter, system-ui, sans-serif';
+  if (flags.length) {
+    ctx.fillText(
+      flags
+        .map(function (f) {
+          return (f.status === 'bad' ? '● ' : '○ ') + (f.label || f.id || '');
+        })
+        .join('   '),
+      70,
+      390
+    );
+  } else {
+    ctx.fillText('Flags: see full report on site', 70, 390);
+  }
+
   ctx.fillStyle = '#00f0a0';
   ctx.font = 'bold 18px Inter, system-ui, sans-serif';
-  ctx.fillText('Crypto AI Scanner', 70, 400);
+  ctx.fillText('Crypto AI Scanner', 70, 440);
   ctx.fillStyle = '#666';
-  ctx.font = '14px Inter, system-ui, sans-serif';
-  ctx.fillText('Not financial advice · DYOR', 250, 400);
+  ctx.font = '13px Inter, system-ui, sans-serif';
+  ctx.fillText('Not financial advice · DYOR', 260, 440);
 
-  canvas.toBlob(function (blob) {
+  function doneBlob(blob) {
     if (!blob) return;
+    const file = new File([blob], (tok.symbol || 'token') + '-risk.png', {
+      type: 'image/png'
+    });
+    const navShare =
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [file] });
+    if (navShare) {
+      navigator
+        .share({
+          title: (tok.symbol || 'Token') + ' risk ' + score + '/100',
+          text: 'Risk report · Crypto AI Scanner',
+          url: shareUrl,
+          files: [file]
+        })
+        .catch(function () {
+          downloadBlob(blob, file.name);
+        });
+    } else {
+      downloadBlob(blob, file.name);
+      try {
+        if (navigator.clipboard && shareUrl) {
+          navigator.clipboard.writeText(shareUrl);
+        }
+      } catch (e) {}
+    }
+    if (typeof showToast === 'function') {
+      showToast('PNG + link ready');
+    }
+  }
+  function downloadBlob(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = (tok.symbol || 'token') + '-risk-report.png';
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
-    if (typeof showToast === 'function') showToast('Report saved as PNG');
-  });
+  }
+  canvas.toBlob(doneBlob, 'image/png');
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -2121,7 +2230,72 @@ function riskHistoryHtml(address, score) {
       '</p>';
   }
   html += '</div>';
+  // hydrate from server snapshots (async)
+  setTimeout(function () {
+    hydrateRiskHistoryFromServer(address, score);
+  }, 300);
   return html;
+}
+
+async function hydrateRiskHistoryFromServer(address, score) {
+  if (!address) return;
+  try {
+    const res = await apiFetch(
+      '/api/risk-history/' + encodeURIComponent(address) + '?hours=48'
+    );
+    const data = await res.json();
+    const points = (data && data.points) || [];
+    if (points.length < 2) return;
+    const scores = points.map(function (p) {
+      return Number(p.riskScore) || 0;
+    });
+    const first = scores[0];
+    const last = scores[scores.length - 1];
+    const delta = last - first;
+    const maxS = Math.max.apply(null, scores.concat([100]));
+    const w = 280;
+    const h = 72;
+    const step = scores.length > 1 ? w / (scores.length - 1) : w;
+    let d = '';
+    scores.forEach(function (s, i) {
+      const x = i * step;
+      const y = h - (s / maxS) * (h - 8) - 4;
+      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+    });
+    const box = document.querySelector('.risk-history');
+    if (!box) return;
+    const en =
+      ((typeof currentLang !== 'undefined' && currentLang) ||
+        localStorage.getItem('lang') ||
+        'ru') === 'en';
+    let html =
+      '<div class="muted small">' +
+      (en ? 'Risk history (server, 48h)' : 'История риска (сервер, 48ч)') +
+      '</div>';
+    html +=
+      '<svg class="risk-hist-svg" viewBox="0 0 ' +
+      w +
+      ' ' +
+      h +
+      '" width="100%" height="72" preserveAspectRatio="none"><path d="' +
+      d +
+      '" fill="none" stroke="#00f0a0" stroke-width="2"/></svg>';
+    if (Math.abs(delta) >= 5) {
+      html +=
+        '<p class="risk-hist-delta" style="color:' +
+        (delta > 0 ? '#ff4d6a' : '#00f0a0') +
+        '">' +
+        (delta > 0 ? '⚠️ ' : '✅ ') +
+        first +
+        ' → ' +
+        last +
+        ' (' +
+        (delta > 0 ? '+' : '') +
+        delta +
+        ')</p>';
+    }
+    box.innerHTML = html;
+  } catch (e) {}
 }
 
 function demoTokensHtml() {
