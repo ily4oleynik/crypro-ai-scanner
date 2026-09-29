@@ -2532,3 +2532,42 @@ button.home-chip.example-token:hover,
   height: 100%;
   background: linear-gradient(90deg, #00f0a0, #00d4ff);
 }
+
+/* === COMPARE TABLE === */
+.cmp-table-wrap { overflow-x: auto; }
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.cmp-table th, .cmp-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.cmp-table th { color: var(--muted); font-weight: 500; }
+.cmp-best { color: #00f0a0; }
+.cmp-blur {
+  filter: blur(4px);
+  user-select: none;
+  opacity: 0.7;
+}
+.cmp-locked-row td.cmp-blur { background: rgba(0,0,0,0.15); }
+.cmp-verdict {
+  margin-bottom: 0.85rem;
+  line-height: 1.45;
+}
+.cmp-upsell {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 600px) {
+  .cmp-table { font-size: 0.8rem; }
+}
