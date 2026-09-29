@@ -349,13 +349,25 @@
     </section>
 
     <section id="page-compare" class="page" style="display:none">
-      <h2 class="page-title">Compare</h2>
+      <h2 class="page-title" data-i18n="compare.title">Сравнение токенов</h2>
+      <p class="muted small" data-i18n="compare.sub" style="margin-bottom:1rem">2–3 контракта side-by-side: risk, flags, ликвидность</p>
       <div class="glass panel-block">
+        <div class="cmp-chips" id="cmp-chips" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.75rem">
+          <button type="button" class="chat-chip" data-cmp="0x514910771AF9Ca656af840dff83E8264EcF986CA">LINK</button>
+          <button type="button" class="chat-chip" data-cmp="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48">USDC</button>
+          <button type="button" class="chat-chip" data-cmp="0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984">UNI</button>
+          <button type="button" class="chat-chip" data-cmp="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2">WETH</button>
+        </div>
+        <div class="cmp-actions" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem">
+          <button type="button" class="connect-btn" id="cmp-from-history" data-i18n="compare.fromHistory">Из истории</button>
+          <button type="button" class="connect-btn" id="cmp-from-watch" data-i18n="compare.fromWatch">Из watchlist</button>
+          <button type="button" class="text-link" id="cmp-swap" title="Swap A↔B">⇄ A↔B</button>
+        </div>
         <div class="form-stack">
-          <input type="text" id="cmp-1" placeholder="Address 1" />
-          <input type="text" id="cmp-2" placeholder="Address 2" />
-          <input type="text" id="cmp-3" placeholder="Address 3 (optional)" />
-          <button type="button" class="upgrade-btn" id="cmp-btn">Compare</button>
+          <input type="text" id="cmp-1" data-i18n-placeholder="compare.a1" placeholder="Адрес 1" />
+          <input type="text" id="cmp-2" data-i18n-placeholder="compare.a2" placeholder="Адрес 2" />
+          <input type="text" id="cmp-3" data-i18n-placeholder="compare.a3" placeholder="Адрес 3 (опционально)" />
+          <button type="button" class="upgrade-btn" id="cmp-btn" data-i18n="compare.run">Сравнить</button>
         </div>
       </div>
       <div id="compare-content" style="margin-top:1rem"></div>
@@ -388,32 +400,75 @@
     </section>
 
     <section id="page-account" class="page" style="display:none">
-      <h2 class="page-title">Account</h2>
-      <div class="account-grid">
-        <div class="glass panel-block">
-          <h3>Profile</h3>
-          <div class="account-row"><span>Email</span><strong id="acc-email">—</strong></div>
-          <div class="account-row"><span>Plan</span><strong id="acc-plan">FREE</strong></div>
-          <div class="account-row"><span>Scans today</span><strong id="acc-scans">—</strong></div>
-          <div class="btn-row">
-            <button type="button" class="upgrade-btn plan-btn" data-plan="premium">Upgrade</button>
-            <button type="button" class="connect-btn" id="acc-logout">Logout</button>
+      <h2 class="page-title" data-i18n="nav.account">Кабинет</h2>
+
+      <div id="acc-guest" class="glass panel" style="display:none;padding:1.5rem;text-align:center;margin-bottom:1rem">
+        <p data-i18n="account.guest">Войдите, чтобы видеть лимиты, Telegram и историю</p>
+        <button type="button" class="upgrade-btn" onclick="openAuthModal()" data-i18n="nav.login" style="margin-top:0.75rem">Войти</button>
+      </div>
+
+      <div id="acc-hero" class="glass panel" style="padding:1rem 1.2rem;margin-bottom:1rem;display:none">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.75rem;align-items:center">
+          <div>
+            <div id="acc-email" style="font-weight:600">—</div>
+            <div class="muted small"><span id="acc-plan">FREE</span> · <span id="acc-scans">0/5</span> <span data-i18n="account.scansToday">сканов сегодня</span></div>
           </div>
-          <p class="muted small" style="margin-top:0.75rem">
-            <button type="button" class="text-link" id="claim-owner-btn" onclick="claimOwnerAccess()">Creator access (OWNER_SECRET)</button>
-          </p>
+          <button type="button" class="upgrade-btn plan-btn" data-plan="premium" data-i18n="account.upgrade">Улучшить план</button>
         </div>
+        <div class="usage-bars" style="margin-top:0.85rem">
+          <div class="muted small">Scans</div>
+          <div class="chat-quota-bar"><span id="acc-scan-bar" style="width:0%"></span></div>
+          <div class="muted small" style="margin-top:0.4rem">AI chat</div>
+          <div class="chat-quota-bar"><span id="acc-chat-bar" style="width:0%"></span></div>
+          <div class="muted small" id="acc-chat-label" style="margin-top:0.25rem">—</div>
+        </div>
+      </div>
+
+      <div class="account-grid" id="acc-grid" style="display:none">
         <div class="glass panel-block">
-          <h3>Wallet</h3>
-          <button type="button" class="connect-btn" id="connect-wallet">Connect MetaMask</button>
+          <h3 data-i18n="account.telegram">Telegram</h3>
+          <p class="muted small" id="acc-tg-status">—</p>
+          <div class="btn-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.4rem">
+            <button type="button" class="connect-btn" id="acc-tg-connect">Connect</button>
+            <button type="button" class="connect-btn" id="acc-tg-test" style="display:none">Test alert</button>
+            <a class="text-link" href="https://t.me/aicryptoscreenerbot" target="_blank" rel="noopener">Open bot</a>
+          </div>
+          <div class="account-row" style="margin-top:0.75rem"><span data-i18n="account.alerts">Алерты</span><strong id="acc-alert-count">0</strong></div>
+          <div class="account-row"><span>Watchlist</span><strong id="acc-watch-count">0</strong></div>
+        </div>
+
+        <div class="glass panel-block">
+          <h3 data-i18n="account.activity">Активность</h3>
+          <div id="acc-recent" class="muted small">—</div>
+          <div class="btn-row" style="margin-top:0.75rem">
+            <button type="button" class="text-link" onclick="showPage('history')" data-i18n="nav.history">История</button>
+            <button type="button" class="text-link" onclick="showPage('watchlist')" data-i18n="nav.watchlist">Избранное</button>
+            <button type="button" class="text-link" onclick="showPage('alerts')" data-i18n="nav.alerts">Алерты</button>
+          </div>
+        </div>
+
+        <div class="glass panel-block">
+          <h3 data-i18n="account.wallet">Кошелёк</h3>
+          <p class="muted small" data-i18n="account.walletHint">Опционально — для будущего portfolio on-chain</p>
+          <button type="button" class="connect-btn" id="connect-wallet" data-i18n="account.connectMm">Подключить MetaMask</button>
           <div id="portfolio-section" style="display:none;margin-top:1rem">
             <div id="portfolio-content"></div>
           </div>
         </div>
+
         <div class="glass panel-block">
-          <h3>Exchanges</h3>
-          <div id="connected-exchanges"><p class="muted">Nothing connected</p></div>
+          <h3 data-i18n="account.exchanges">Биржи</h3>
+          <p class="muted small" data-i18n="account.bybitHint">Bybit read-only · только Pro · ключи не для торговли</p>
+          <div id="connected-exchanges"><p class="muted" data-i18n="account.nothingConnected">Ничего не подключено</p></div>
           <button type="button" class="connect-btn" id="connect-bybit-btn" style="margin-top:0.75rem">+ Connect Bybit</button>
+        </div>
+
+        <div class="glass panel-block">
+          <h3 data-i18n="account.session">Сессия</h3>
+          <button type="button" class="connect-btn" id="acc-logout" data-i18n="nav.logout">Выйти</button>
+          <p class="muted small owner-only" id="claim-owner-wrap" style="margin-top:0.75rem;display:none">
+            <button type="button" class="text-link" id="claim-owner-btn" onclick="claimOwnerAccess()">Creator access</button>
+          </p>
         </div>
       </div>
     </section>
