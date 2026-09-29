@@ -1131,7 +1131,27 @@ app.get(
 );
 
 app.get('/api/usage', authMiddleware, async (req, res) => {
-  res.json({ success: true, usage: await store.canScan(req.user) });
+  const plan = getPlan(req.user);
+  const usage = await store.canScan(req.user);
+  const chat = getChatQuota(req, plan);
+  let watchCount = 0;
+  let alertCount = 0;
+  try {
+    if (req.user?.id) {
+      const wl = await store.getWatchlist(req.user);
+      watchCount = (wl || []).length;
+      const al = await store.getAlerts(req.user);
+      alertCount = (al || []).length;
+    }
+  } catch (e) {}
+  res.json({
+    success: true,
+    usage: usage,
+    chat: { used: chat.used, limit: chat.limit, remaining: chat.remaining },
+    watchCount,
+    alertCount,
+    plan
+  });
 });
 
 app.get('/api/history', authMiddleware, async (req, res) => {
@@ -1199,13 +1219,8 @@ app.delete('/api/alerts/:id', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/compare', authMiddleware, async (req, res) => {
-  if (getPlan(req.user) === 'free') {
-    return res.status(403).json({
-      success: false,
-      error: 'Сравнение токенов доступно с Premium',
-      upsell: 'premium'
-    });
-  }
+  const plan = getPlan(req.user);
+  const isPrem = plan === 'premium' || plan === 'pro';
   const { addresses } = req.body;
   if (!Array.isArray(addresses) || addresses.length < 2 || addresses.length > 3) {
     return res.status(400).json({ success: false, error: 'Передайте 2–3 адреса' });
@@ -1213,25 +1228,93 @@ app.post('/api/compare', authMiddleware, async (req, res) => {
   try {
     const results = [];
     for (const addr of addresses) {
-      const dex = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, {
-        timeout: 8000
-      });
+      const address = String(addr || '').trim();
+      if (!address) continue;
+      const dex = await axios.get(
+        `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`,
+        { timeout: 8000 }
+      );
       const pair = dex.data.pairs?.[0] || {};
+      const liq = Number(pair.liquidity?.usd) || 0;
+      const vol = Number(pair.volume?.h24) || 0;
+      const fdv = Number(pair.fdv) || 0;
+      const price = Number(pair.priceUsd) || 0;
+      let riskScore = 35;
+      if (liq < 10000) riskScore += 30;
+      else if (liq < 50000) riskScore += 18;
+      else if (liq < 200000) riskScore += 8;
+      if (fdv > 0 && liq > 0 && fdv / liq > 50 && liq < 500000) riskScore += 15;
+      if (vol < 5000 && liq < 100000) riskScore += 8;
+      riskScore = Math.max(5, Math.min(95, riskScore));
+      const fdvLiq = liq > 0 && fdv > 0 ? Math.round((fdv / liq) * 10) / 10 : null;
+
+      let security = { available: false, meta: {} };
+      if (goplus && isPrem) {
+        try {
+          const chain = pair.chainId || 'ethereum';
+          security = await goplus.fetchTokenSecurity(chain, address);
+        } catch (e) {}
+      } else if (goplus && !isPrem) {
+        // Free: still try quick security for honesty of preview
+        try {
+          const chain = pair.chainId || 'ethereum';
+          security = await goplus.fetchTokenSecurity(chain, address);
+        } catch (e) {}
+      }
+
+      const meta = security.meta || {};
       results.push({
-        address: addr,
+        address,
         symbol: pair.baseToken?.symbol || 'TOKEN',
         name: pair.baseToken?.name || '',
-        price: pair.priceUsd || 0,
-        liquidity: pair.liquidity?.usd || 0,
-        volume24h: pair.volume?.h24 || 0,
-        fdv: pair.fdv || 0
+        chainId: pair.chainId || '',
+        price,
+        liquidity: liq,
+        volume24h: vol,
+        fdv,
+        fdvLiqRatio: fdvLiq,
+        riskScore,
+        riskLevel: riskScore > 60 ? 'HIGH' : riskScore > 35 ? 'MEDIUM' : 'LOW',
+        honeypot: meta.isHoneypot,
+        mintable: meta.isMintable,
+        renounced: meta.renounced,
+        buyTax: meta.buyTax,
+        sellTax: meta.sellTax,
+        top10Pct: meta.top10Pct,
+        securityAvailable: !!security.available
       });
     }
-    res.json({ success: true, tokens: results });
+
+    // winner by lowest risk then highest liq
+    let winnerIdx = 0;
+    results.forEach((t, i) => {
+      const w = results[winnerIdx];
+      if (t.riskScore < w.riskScore) winnerIdx = i;
+      else if (t.riskScore === w.riskScore && t.liquidity > w.liquidity) winnerIdx = i;
+    });
+
+    const payload = {
+      success: true,
+      plan,
+      full: isPrem,
+      tokens: results,
+      winnerIndex: winnerIdx,
+      summary: isPrem
+        ? null
+        : 'Preview: risk + liquidity. Full flags & FDV detail on Premium.'
+    };
+    if (!isPrem) {
+      // mark locked fields for client blur
+      payload.lockedFields = ['fdv', 'top10Pct', 'buyTax', 'sellTax', 'renounced'];
+      payload.upsell = 'premium';
+    }
+    res.json(payload);
   } catch (e) {
+    console.error('[compare]', e.message);
     res.status(500).json({ success: false, error: 'Ошибка сравнения' });
   }
 });
+
 
 app.post('/api/telegram/link', authMiddleware, async (req, res) => {
   if (!req.user?.id) {
