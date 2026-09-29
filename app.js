@@ -148,6 +148,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('alert-create')?.addEventListener('click', createAlert);
   document.getElementById('cmp-btn')?.addEventListener('click', runCompare);
+  document.getElementById('cmp-from-history')?.addEventListener('click', cmpFromHistory);
+  document.getElementById('cmp-from-watch')?.addEventListener('click', cmpFromWatch);
+  document.getElementById('cmp-swap')?.addEventListener('click', cmpSwapAB);
+  document.querySelectorAll('#cmp-chips [data-cmp]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      fillCompareSlot(btn.getAttribute('data-cmp'));
+    });
+  });
   document.getElementById('tg-connect-btn')?.addEventListener('click', connectTelegram);
 
   document.getElementById('try-link-btn')?.addEventListener('click', () => {
@@ -390,7 +398,7 @@ async function loadTrending() {
     }
     grid.innerHTML = tokens.map(t => {
       const price = t.price == null ? '—' : '$' + Number(t.price).toPrecision(5);
-      return '<div class="trend-card" onclick="rescan(\'' + t.address + '\')">' +
+      return '<div class="trend-card" onclick="rescan(\'' + t.address + '\')\">' +
         '<div class="trend-sym">' + (t.symbol || 'TOKEN') + '</div>' +
         '<div class="trend-price">' + price + '</div>' +
         '<div class="trend-meta">' + (t.name || t.chainId || '') + '</div></div>';
@@ -821,29 +829,168 @@ async function claimOwnerAccess() {
 window.claimOwnerAccess = claimOwnerAccess;
 
 async function refreshAccountPage() {
+  const guest = document.getElementById('acc-guest');
+  const hero = document.getElementById('acc-hero');
+  const grid = document.getElementById('acc-grid');
   const emailEl = document.getElementById('acc-email');
   const planEl = document.getElementById('acc-plan');
   const scansEl = document.getElementById('acc-scans');
+  const ownerWrap = document.getElementById('claim-owner-wrap');
+
   if (!user) {
-    if (emailEl) emailEl.textContent = '—';
-    if (planEl) planEl.textContent = ((user && user.isOwner) ? 'OWNER · ' : '') + 'FREE';
-    if (scansEl) scansEl.textContent = '—';
+    if (guest) guest.style.display = 'block';
+    if (hero) hero.style.display = 'none';
+    if (grid) grid.style.display = 'none';
+    if (ownerWrap) ownerWrap.style.display = 'none';
     return;
   }
-  if (emailEl) emailEl.textContent = user.email || '—';
-  if (planEl) planEl.textContent = ((user && user.isOwner) ? 'OWNER · ' : '') + (user.plan || currentPlan || 'free').toUpperCase();
+  if (guest) guest.style.display = 'none';
+  if (hero) hero.style.display = 'block';
+  if (grid) grid.style.display = 'grid';
+
+  if (emailEl) emailEl.textContent = user.email || ('#' + (user.id || ''));
+  const planName = (user.plan || currentPlan || 'free').toUpperCase();
+  if (planEl) {
+    planEl.textContent = user.isOwner ? 'OWNER · ' + planName : planName;
+  }
+  // Show creator only for owner session or if already owner
+  if (ownerWrap) {
+    ownerWrap.style.display = user.isOwner ? 'block' : 'none';
+  }
+
   try {
-    const res = await apiFetch('/api/usage', {
-      headers: token ? { Authorization: 'Bearer ' + token } : {}
-    });
+    const res = await apiFetch('/api/usage');
     const data = await res.json();
-    if (data.success && data.usage && scansEl) {
-      const lim = data.usage.limit === 999999 ? '∞' : data.usage.limit;
-      scansEl.textContent = data.usage.used + ' / ' + lim;
+    if (data.success && data.usage) {
+      const lim = data.usage.limit === 999999 ? 999999 : Number(data.usage.limit) || 5;
+      const used = Number(data.usage.used) || 0;
+      if (scansEl) {
+        scansEl.textContent =
+          used + ' / ' + (lim >= 999999 ? '∞' : lim);
+      }
+      const scanBar = document.getElementById('acc-scan-bar');
+      if (scanBar) {
+        const pct = lim >= 999999 ? 5 : Math.min(100, Math.round((used / lim) * 100));
+        scanBar.style.width = pct + '%';
+      }
+    }
+    if (data.chat) {
+      const cl = data.chat.limit >= 9999 ? 9999 : Number(data.chat.limit) || 2;
+      const usedC = Number(data.chat.used) || 0;
+      const chatBar = document.getElementById('acc-chat-bar');
+      if (chatBar) {
+        const pct = cl >= 9999 ? 5 : Math.min(100, Math.round((usedC / cl) * 100));
+        chatBar.style.width = pct + '%';
+      }
+      const chatLab = document.getElementById('acc-chat-label');
+      if (chatLab) {
+        chatLab.textContent =
+          usedC + ' / ' + (cl >= 9999 ? '∞' : cl) + ' messages today';
+      }
+    }
+    const ac = document.getElementById('acc-alert-count');
+    const wc = document.getElementById('acc-watch-count');
+    if (ac) ac.textContent = String(data.alertCount != null ? data.alertCount : 0);
+    if (wc) wc.textContent = String(data.watchCount != null ? data.watchCount : 0);
+  } catch (e) {}
+
+  // recent history
+  try {
+    const recent = document.getElementById('acc-recent');
+    if (recent) {
+      const res = await apiFetch('/api/history');
+      const data = await res.json();
+      const list = (data.history || []).slice(0, 5);
+      if (!list.length) {
+        recent.textContent =
+          (localStorage.getItem('lang') || 'ru') === 'en'
+            ? 'No scans yet'
+            : 'Пока нет сканов';
+      } else {
+        recent.innerHTML = list
+          .map(function (h) {
+            const addr = String(h.address || '').replace(/'/g, '');
+            return (
+              '<div style="margin:0.25rem 0"><button type="button" class="text-link" onclick="rescan(\'' +
+              addr +
+              '\')">' +
+              (h.symbol || addr.slice(0, 8)) +
+              '</button> · risk ' +
+              (h.riskScore != null ? h.riskScore : '—') +
+              '</div>'
+            );
+          })
+          .join('');
+      }
     }
   } catch (e) {}
+
+  // Telegram block on account
+  await refreshAccountTelegram();
   refreshTelegramStatus();
 }
+
+async function refreshAccountTelegram() {
+  const st = document.getElementById('acc-tg-status');
+  const btn = document.getElementById('acc-tg-connect');
+  const testBtn = document.getElementById('acc-tg-test');
+  if (!st || !btn) return;
+  if (!user) {
+    st.textContent = '—';
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/telegram/status');
+    const data = await res.json();
+    if (data.linked) {
+      st.textContent =
+        (localStorage.getItem('lang') || 'ru') === 'en'
+          ? 'Connected · personal alerts via bot'
+          : 'Подключён · личные алерты в боте';
+      st.style.color = '#00f0a0';
+      btn.textContent =
+        (localStorage.getItem('lang') || 'ru') === 'en' ? 'Disconnect' : 'Отключить';
+      btn.onclick = function () {
+        if (typeof disconnectTelegram === 'function') disconnectTelegram();
+      };
+      if (testBtn) {
+        testBtn.style.display = 'inline-block';
+        testBtn.onclick = testTelegramAlert;
+      }
+    } else {
+      st.textContent =
+        (localStorage.getItem('lang') || 'ru') === 'en'
+          ? 'Not connected'
+          : 'Не подключён';
+      st.style.color = '';
+      btn.textContent = 'Connect';
+      btn.onclick = function () {
+        if (typeof connectTelegram === 'function') connectTelegram();
+        else showPage('alerts');
+      };
+      if (testBtn) testBtn.style.display = 'none';
+    }
+  } catch (e) {
+    st.textContent = '—';
+  }
+}
+
+async function testTelegramAlert() {
+  try {
+    const res = await apiFetch('/api/telegram/digest-test', { method: 'POST' });
+    const data = await res.json();
+    alert(
+      data.success
+        ? (localStorage.getItem('lang') || 'ru') === 'en'
+          ? 'Test message sent to Telegram'
+          : 'Тестовое сообщение отправлено в Telegram'
+        : data.error || 'Failed'
+    );
+  } catch (e) {
+    alert('Network error');
+  }
+}
+
 
 async function loadHomeWidgets() {
   loadHomeWatchlist();
@@ -923,7 +1070,7 @@ async function loadHomeWatchlist() {
       return;
     }
     box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
-      '<button type="button" class="home-chip" onclick="rescan(\'' + item.address + '\')"><strong>' + (item.symbol || 'TOKEN') + '</strong></button>'
+      '<button type="button" class="home-chip" onclick="rescan(\'' + item.address + '\')\"><strong>' + (item.symbol || 'TOKEN') + '</strong></button>'
     ).join('') + '</div>';
   } catch (e) {
     box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
@@ -949,7 +1096,7 @@ async function loadHomeHistory() {
     box.innerHTML = data.history.slice(0, 5).map(h =>
       '<div class="list-row"><div class="list-info"><strong>' + (h.symbol || 'TOKEN') +
       '</strong><small>Risk ' + h.riskScore + ' · ' + new Date(h.scannedAt).toLocaleString() +
-      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address + '\')">Open</button></div></div>'
+      '</small></div><div class="list-actions"><button type="button" class="btn-sm" onclick="rescan(\'' + h.address + '\')\">Open</button></div></div>'
     ).join('');
   } catch (e) {
     box.innerHTML = '<div class="empty-state-cta"><p>Error</p></div>';
@@ -2795,7 +2942,7 @@ async function loadWatchlist() {
     box.innerHTML = data.watchlist.map(item =>
       '<div class="list-row"><div class="list-info"><strong>' + item.symbol +
       '</strong><small>' + item.address + '</small></div><div class="list-actions">' +
-      '<button type="button" class="btn-sm" onclick="rescan(\'' + item.address + '\')">Scan</button>' +
+      '<button type="button" class="btn-sm" onclick="rescan(\'' + item.address + '\')\">Scan</button>' +
       '<button type="button" class="btn-sm danger" onclick="removeWatch(\'' + item.address + '\')">Remove</button></div></div>'
     ).join('');
   } catch (e) {
@@ -3032,46 +3179,215 @@ async function disconnectTelegram() {
 }
 
 async function runCompare() {
-  const a1 = document.getElementById('cmp-1').value.trim();
-  const a2 = document.getElementById('cmp-2').value.trim();
-  const a3 = document.getElementById('cmp-3').value.trim();
-  const addresses = [a1, a2, a3].filter(Boolean);
-  if (addresses.length < 2) return alert('Need 2 addresses');
+  const a1 = (document.getElementById('cmp-1') || {}).value || '';
+  const a2 = (document.getElementById('cmp-2') || {}).value || '';
+  const a3 = (document.getElementById('cmp-3') || {}).value || '';
+  const addresses = [a1.trim(), a2.trim(), a3.trim()].filter(Boolean);
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  if (addresses.length < 2) {
+    alert(en ? 'Need at least 2 addresses' : 'Нужно минимум 2 адреса');
+    return;
+  }
   const box = document.getElementById('compare-content');
-  box.innerHTML = '<div class="loading">...</div>';
+  if (!box) return;
+  box.innerHTML = '<div class="loading">' + (en ? 'Comparing…' : 'Сравниваем…') + '</div>';
   try {
     const res = await apiFetch('/api/compare', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token ? 'Bearer ' + token : ''
-      },
-      body: JSON.stringify({ addresses })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addresses: addresses })
     });
     const data = await res.json();
-    if (res.status === 403) {
-      box.innerHTML =
-        '<div class="error-card limit-upsell glass">' +
-        '<h3>Compare — Premium</h3>' +
-        '<p>' + (data.error || '') + '</p>' +
-        '<button type="button" class="upgrade-btn" onclick="openPricing(\'premium\')">Open Premium</button></div>';
-      return;
-    }
     if (!data.success) {
-      box.innerHTML = '<div class="error-card">' + (data.error || 'Error') + '</div>';
+      box.innerHTML = '<div class="error-card glass">' + (data.error || 'Error') + '</div>';
       return;
     }
-    box.innerHTML = '<div class="compare-grid">' + data.tokens.map(tok =>
-      '<div class="compare-card glass"><h3>' + tok.symbol + '</h3>' +
-      '<div class="compare-metric"><span>Price</span><span>$' + Number(tok.price).toFixed(6) + '</span></div>' +
-      '<div class="compare-metric"><span>Liquidity</span><span>' + formatNum(tok.liquidity) + '</span></div>' +
-      '<div class="compare-metric"><span>Volume</span><span>' + formatNum(tok.volume24h) + '</span></div>' +
-      '<div class="compare-metric"><span>FDV</span><span>' + formatNum(tok.fdv) + '</span></div>' +
-      '<button type="button" class="btn-sm" style="margin-top:0.8rem;" onclick="rescan(\'' + tok.address + '\')">Scan</button></div>'
-    ).join('') + '</div>';
+    const tokens = data.tokens || [];
+    const full = !!data.full;
+    const wi = data.winnerIndex != null ? data.winnerIndex : 0;
+
+    function esc(s) {
+      return String(s || '').replace(/'/g, '');
+    }
+    function flagCell(v) {
+      if (v === true) return '⚠';
+      if (v === false) return '✓';
+      return '?';
+    }
+    function betterLiq() {
+      let best = 0;
+      tokens.forEach(function (t, i) {
+        if ((t.liquidity || 0) > (tokens[best].liquidity || 0)) best = i;
+      });
+      return tokens[best] ? tokens[best].symbol : '—';
+    }
+
+    let head = '<tr><th>' + (en ? 'Metric' : 'Метрика') + '</th>';
+    tokens.forEach(function (t, i) {
+      head +=
+        '<th><button type="button" class="text-link" data-addr="' +
+        esc(t.address) +
+        '">' +
+        (t.symbol || 'TOKEN') +
+        (i === wi ? ' ✓' : '') +
+        '</button></th>';
+    });
+    head += '<th>' + (en ? 'Better' : 'Лучше') + '</th></tr>';
+
+    let body = '';
+    body += '<tr><td>Risk</td>';
+    tokens.forEach(function (t) {
+      body +=
+        '<td><span style="color:' +
+        scoreColor(t.riskScore) +
+        ';font-weight:700">' +
+        t.riskScore +
+        '</span> <span class="muted small">' +
+        (t.riskLevel || '') +
+        '</span></td>';
+    });
+    body += '<td class="muted small">' + (tokens[wi] && tokens[wi].symbol) + '</td></tr>';
+
+    body += '<tr><td>Honeypot</td>';
+    tokens.forEach(function (t) {
+      body += '<td>' + flagCell(t.honeypot) + '</td>';
+    });
+    body += '<td></td></tr>';
+
+    body += '<tr><td>Mint</td>';
+    tokens.forEach(function (t) {
+      body += '<td>' + flagCell(t.mintable) + '</td>';
+    });
+    body += '<td></td></tr>';
+
+    body += '<tr><td>Liquidity</td>';
+    tokens.forEach(function (t) {
+      body += '<td>$' + formatNum(t.liquidity) + '</td>';
+    });
+    body += '<td class="muted small">' + betterLiq() + '</td></tr>';
+
+    body += '<tr><td>FDV / liq</td>';
+    tokens.forEach(function (t) {
+      if (!full) body += '<td class="cmp-blur">···</td>';
+      else {
+        const r = t.fdvLiqRatio;
+        body +=
+          '<td>' +
+          (r != null ? r + '×' + (r > 20 ? ' ⚠' : '') : '—') +
+          '</td>';
+      }
+    });
+    body += '<td class="muted small">' + (full ? '' : 'Premium') + '</td></tr>';
+
+    body += '<tr><td>Top-10</td>';
+    tokens.forEach(function (t) {
+      if (!full) body += '<td class="cmp-blur">···</td>';
+      else body += '<td>' + (t.top10Pct != null ? t.top10Pct + '%' : '—') + '</td>';
+    });
+    body += '<td class="muted small">' + (full ? '' : 'Premium') + '</td></tr>';
+
+    let html = '<div class="compare-result glass panel">';
+    if (tokens[wi]) {
+      html +=
+        '<p class="cmp-verdict"><strong>' +
+        tokens[wi].symbol +
+        '</strong> ' +
+        (en
+          ? 'looks safer on this snapshot (lower risk / better liq context). Not financial advice.'
+          : 'спокойнее на этом снимке (ниже risk / лучше контекст liq). Не финсовет.') +
+        '</p>';
+    }
+    html +=
+      '<div class="cmp-table-wrap"><table class="cmp-table"><thead>' +
+      head +
+      '</thead><tbody>' +
+      body +
+      '</tbody></table></div>';
+    if (!full) {
+      html +=
+        '<div class="cmp-upsell"><p class="muted small">' +
+        (en
+          ? 'Free preview: risk + liquidity + basic flags. Full FDV/holders on Premium.'
+          : 'Free preview: risk + liquidity + базовые flags. Полный FDV/holders на Premium.') +
+        '</p><button type="button" class="upgrade-btn" id="cmp-upsell-btn">' +
+        (en ? 'Open Premium' : 'Открыть Premium') +
+        '</button></div>';
+    }
+    html += '<div class="btn-row" style="margin-top:0.75rem">';
+    tokens.forEach(function (t) {
+      html +=
+        '<button type="button" class="connect-btn cmp-scan-btn" data-addr="' +
+        esc(t.address) +
+        '">' +
+        (en ? 'Scan ' : 'Скан ') +
+        (t.symbol || '') +
+        '</button>';
+    });
+    html += '</div></div>';
+    box.innerHTML = html;
+    box.querySelectorAll('[data-addr]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        const a = el.getAttribute('data-addr');
+        if (a && typeof rescan === 'function') rescan(a);
+      });
+    });
+    const up = document.getElementById('cmp-upsell-btn');
+    if (up) up.addEventListener('click', function () {
+      openPricing('premium');
+    });
   } catch (e) {
-    box.innerHTML = '<div class="error-card">Compare failed</div>';
+    box.innerHTML =
+      '<div class="error-card">' + (en ? 'Compare failed' : 'Ошибка сравнения') + '</div>';
   }
+}
+
+function fillCompareSlot(address) {
+  if (!address) return;
+  const slots = ['cmp-1', 'cmp-2', 'cmp-3'];
+  for (let i = 0; i < slots.length; i++) {
+    const el = document.getElementById(slots[i]);
+    if (el && !String(el.value || '').trim()) {
+      el.value = address;
+      return;
+    }
+  }
+  const last = document.getElementById('cmp-3') || document.getElementById('cmp-2');
+  if (last) last.value = address;
+}
+
+async function cmpFromHistory() {
+  if (!user) return openAuthModal();
+  try {
+    const res = await apiFetch('/api/history');
+    const data = await res.json();
+    const list = data.history || [];
+    if (!list.length) return alert('History empty');
+    list.slice(0, 3).forEach(function (h) {
+      fillCompareSlot(h.address);
+    });
+  } catch (e) {}
+}
+
+async function cmpFromWatch() {
+  if (!user) return openAuthModal();
+  try {
+    const res = await apiFetch('/api/watchlist');
+    const data = await res.json();
+    const list = data.watchlist || [];
+    if (!list.length) return alert('Watchlist empty');
+    list.slice(0, 3).forEach(function (h) {
+      fillCompareSlot(h.address);
+    });
+  } catch (e) {}
+}
+
+function cmpSwapAB() {
+  const a = document.getElementById('cmp-1');
+  const b = document.getElementById('cmp-2');
+  if (!a || !b) return;
+  const t = a.value;
+  a.value = b.value;
+  b.value = t;
 }
 
 document.getElementById('footer-pricing')?.addEventListener('click', function (e) {
