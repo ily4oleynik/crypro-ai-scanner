@@ -2348,26 +2348,22 @@ app.get('/api/sample/premium', async (req, res) => {
   }
 });
 
-app.use((req, res, next) => {
-  if (req.method !== 'GET') return next();
+// SPA fallback (Express 5 compatible — no app.get('*'))
+app.use(function spaFallback(req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   if (req.path.startsWith('/api')) return next();
+  // let static handle real files (js/css/html); only fallback path-like routes
   if (req.path.includes('.')) return next();
-  res.sendFile(path.join(__dirname, 'index.html'));
+  const indexPath = path.join(publicDir, 'index.html');
+  const fs = require('fs');
+  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  return res.status(404).send('Not found');
 });
 
 async function start() {
   try {
     await initDb();
-    // SPA fallback — only non-API, never backend files
-app.get('*', function (req, res, next) {
-  if (req.path.startsWith('/api/')) return next();
-  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  const indexPath = path.join(publicDir, 'index.html');
-  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-  return res.status(404).send('Not found');
-});
-
-app.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`Crypto AI Scanner backend running on http://localhost:${PORT}`);
       startAlertWorker(60000);
       startTelegramPolling(tgLinkCodes);
