@@ -149,6 +149,17 @@ async function verifyPassword(user, password) {
   return ok;
 }
 
+async function setUserPassword(email, newPassword) {
+  const em = String(email || '').trim().toLowerCase();
+  if (!em || !newPassword) return { success: false, error: 'email and password required' };
+  if (String(newPassword).length < 8) return { success: false, error: 'password min 8 chars' };
+  const user = await findUserByEmail(em);
+  if (!user) return { success: false, error: 'user not found' };
+  const hash = hashPassword(newPassword);
+  await query(`UPDATE users SET password = $1 WHERE id = $2::integer`, [hash, user.id]);
+  return { success: true, email: user.email, id: user.id };
+}
+
 async function updateUserPlan(user, plan) {
   const id = uid(user);
   if (!id) return null;
@@ -680,6 +691,7 @@ module.exports = {
   createUserFromTelegram,
   verifyPassword,
   updateUserPlan,
+  setUserPassword,
   canScan,
   incrementScan,
   addHistory,
