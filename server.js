@@ -31,7 +31,12 @@ try {
 const app = express();
 app.disable('x-powered-by');
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'crypto-ai-scanner-secret-key-change-me-in-production';
+const _jwtEnv = process.env.JWT_SECRET || '';
+if (!_jwtEnv && (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT)) {
+  console.error('[FATAL] JWT_SECRET is required in production. Set it in Railway Variables.');
+  process.exit(1);
+}
+const JWT_SECRET = _jwtEnv || 'dev-only-insecure-secret-change-me';
 
 const allowedOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
@@ -55,7 +60,14 @@ app.use(function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  // CSP: allow self + TG widget + charts CDNs used by index
+  res.setHeader('X-DNS-Prefetch-Control', 'off');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload'
+    );
+  }
   res.setHeader(
     'Content-Security-Policy',
     [
@@ -73,11 +85,42 @@ app.use(function securityHeaders(req, res, next) {
   );
   next();
 });
-// Block leaking package manifests
-app.get(['/package.json', '/package-lock.json', '/.env'], function (req, res) {
-  res.status(404).end();
+
+// CRITICAL: never serve backend sources or node_modules
+app.use(function blockBackendSources(req, res, next) {
+  const p = String(req.path || '').toLowerCase();
+  const blocked =
+    p === '/server.js' ||
+    p === '/store.js' ||
+    p === '/db.js' ||
+    p === '/tgpoll.js' ||
+    p === '/telegram.js' ||
+    p === '/alertworker.js' ||
+    p === '/digestworker.js' ||
+    p === '/news.js' ||
+    p === '/routes-extras.js' ||
+    p === '/package.json' ||
+    p === '/package-lock.json' ||
+    p === '/.env' ||
+    p === '/dockerfile' ||
+    p.startsWith('/node_modules') ||
+    p.startsWith('/services/') ||
+    p.startsWith('/backend/');
+  if (blocked) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
+  next();
 });
-app.use(express.static(__dirname, { index: ['index.html'], dotfiles: 'deny' }));
+
+const fs = require('fs');
+const publicDir = path.join(__dirname, 'public');
+app.use(
+  express.static(publicDir, {
+    index: ['index.html'],
+    dotfiles: 'deny',
+    fallthrough: true
+  })
+);
 
 const tgLinkCodes = new Map();
 const rateBuckets = new Map();
@@ -554,7 +597,11 @@ app.post(
 
 
 /** Creator claim: set plan=pro for logged-in user if OWNER_SECRET matches */
-app.post('/api/admin/claim-owner', authMiddleware, async (req, res) => {
+app.post(
+  '/api/admin/claim-owner',
+  rateLimit({ windowMs: 60 * 60_000, max: 5, keyFn: (req) => 'owner:' + (typeof clientIp === 'function' ? clientIp(req) : req.ip) }),
+  authMiddleware,
+  async (req, res) => {
   const secret = process.env.OWNER_SECRET || process.env.ADMIN_SECRET || '';
   const given = String(req.body?.secret || req.headers['x-owner-secret'] || '');
   if (!secret || given !== secret) {
@@ -2311,7 +2358,16 @@ app.use((req, res, next) => {
 async function start() {
   try {
     await initDb();
-    app.listen(PORT, () => {
+    // SPA fallback — only non-API, never backend files
+app.get('*', function (req, res, next) {
+  if (req.path.startsWith('/api/')) return next();
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const indexPath = path.join(publicDir, 'index.html');
+  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  return res.status(404).send('Not found');
+});
+
+app.listen(PORT, () => {
       console.log(`Crypto AI Scanner backend running on http://localhost:${PORT}`);
       startAlertWorker(60000);
       startTelegramPolling(tgLinkCodes);
