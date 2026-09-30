@@ -100,13 +100,15 @@ async function createUserFromTelegram({ telegramId, username, firstName, lastNam
   if (existing) {
     // refresh chat id for alerts (private chats: chat_id === user id)
     try {
+      // Re-bind chat for alerts (private chat id = telegram user id)
       await query(
-        `UPDATE users
-         SET telegram_chat_id = COALESCE(telegram_chat_id, $1)
-         WHERE id = $2::integer`,
+        `UPDATE users SET telegram_chat_id = $1 WHERE id = $2::integer`,
         [tid, existing.id]
       );
-    } catch (e) {}
+      existing.telegram_chat_id = tid;
+    } catch (e) {
+      console.warn('[store] refresh tg chat_id:', e.message);
+    }
     return existing;
   }
 
@@ -502,11 +504,61 @@ async function removeAlert(user, alertId) {
 async function getTelegramChatId(user) {
   const id = uid(user);
   if (!id) return null;
-  const r = await query(
-    `SELECT telegram_chat_id FROM users WHERE id = $1::integer`,
-    [id]
-  );
-  return r.rows[0]?.telegram_chat_id || null;
+  try {
+    const r = await query(
+      `SELECT telegram_chat_id, telegram_id FROM users WHERE id = $1::integer`,
+      [id]
+    );
+    const row = r.rows[0];
+    if (!row) return null;
+    // private chat: chat_id === telegram user id
+    return row.telegram_chat_id || row.telegram_id || null;
+  } catch (e) {
+    console.error('[store] getTelegramChatId:', e.message);
+    return null;
+  }
+}
+
+
+/** Durable TG link codes (survive refresh / multi-instance) */
+async function saveTgLinkCode(code, userId, plan, expiresMs) {
+  const exp = new Date(Date.now() + (expiresMs || 600000));
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS tg_link_codes (
+        code TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        plan TEXT,
+        expires_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await query(
+      `INSERT INTO tg_link_codes (code, user_id, plan, expires_at)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (code) DO UPDATE SET user_id = $2, plan = $3, expires_at = $4`,
+      [String(code).toUpperCase(), String(userId), plan || 'free', exp.toISOString()]
+    );
+  } catch (e) {
+    console.error('[store] saveTgLinkCode:', e.message);
+  }
+}
+
+async function consumeTgLinkCode(code) {
+  try {
+    const c = String(code || '').toUpperCase();
+    const r = await query(
+      `SELECT code, user_id, plan, expires_at FROM tg_link_codes WHERE code = $1`,
+      [c]
+    );
+    if (!r.rows.length) return null;
+    const row = r.rows[0];
+    await query(`DELETE FROM tg_link_codes WHERE code = $1`, [c]);
+    if (new Date(row.expires_at).getTime() < Date.now()) return null;
+    return { userId: row.user_id, plan: row.plan };
+  } catch (e) {
+    console.error('[store] consumeTgLinkCode:', e.message);
+    return null;
+  }
 }
 
 async function linkTelegram(user, chatId) {
@@ -643,6 +695,8 @@ module.exports = {
   getTelegramChatId,
   linkTelegram,
   unlinkTelegram,
+  saveTgLinkCode,
+  consumeTgLinkCode,
   getUsersWithTelegram,
   getAllAlertUsers,
   getDigestUsers,
