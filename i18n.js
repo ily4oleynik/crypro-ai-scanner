@@ -21,6 +21,14 @@ const I18N = {
     'nav.logout': 'Выйти',
     'nav.login': 'Войти',
     'nav.portfolio': 'Портфель',
+    'alerts.title': 'Алерты',
+    'alerts.sub': 'Личные алерты в боте · дайджесты в каналах',
+    'alerts.create': 'Создать алерт',
+    'alerts.example': 'Пример сообщения в Telegram',
+    'portfolio.title': 'Портфель',
+    'portfolio.sub': 'Сводка риска по позициям (Pro)',
+    'portfolio.add': 'Добавить адрес',
+
 
     'hero.badge': 'AI · On-chain риск',
     'hero.title': 'Не влетай в скам. Проверь токен за 10 секунд',
@@ -210,6 +218,14 @@ const I18N = {
     'nav.logout': 'Logout',
     'nav.login': 'Login',
     'nav.portfolio': 'Portfolio',
+    'alerts.title': 'Alerts',
+    'alerts.sub': 'Personal alerts in the bot · digests in channels',
+    'alerts.create': 'Create alert',
+    'alerts.example': 'Example Telegram message',
+    'portfolio.title': 'Portfolio',
+    'portfolio.sub': 'Position risk summary (Pro)',
+    'portfolio.add': 'Add address',
+
 
     'hero.badge': 'AI · On-chain risk',
     'hero.title': 'Check a token in seconds — before you buy',
