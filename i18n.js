@@ -18,6 +18,9 @@ const I18N = {
     'nav.alerts': 'Алерты',
     'nav.compare': 'Сравнение',
     'nav.account': 'Кабинет',
+    'nav.logout': 'Выйти',
+    'nav.login': 'Войти',
+    'nav.portfolio': 'Портфель',
 
     'hero.badge': 'AI · On-chain риск',
     'hero.title': 'Не влетай в скам. Проверь токен за 10 секунд',
@@ -204,6 +207,9 @@ const I18N = {
     'nav.alerts': 'Alerts',
     'nav.compare': 'Compare',
     'nav.account': 'Account',
+    'nav.logout': 'Logout',
+    'nav.login': 'Login',
+    'nav.portfolio': 'Portfolio',
 
     'hero.badge': 'AI · On-chain risk',
     'hero.title': 'Check a token in seconds — before you buy',
@@ -377,13 +383,27 @@ const I18N = {
 let currentLang = localStorage.getItem('lang') || 'ru';
 if (currentLang !== 'ru' && currentLang !== 'en') currentLang = 'ru';
 
+const I18N_ALIASES = {
+  'nav.logout': 'btn.logout',
+  'nav.login': 'btn.login',
+  'btn.logout': 'btn.logout',
+  'btn.login': 'btn.login'
+};
+
 function t(key) {
+  if (I18N_ALIASES[key]) key = I18N_ALIASES[key];
+
   if (!key) return '';
   const lang = currentLang === 'en' ? 'en' : 'ru';
   const dict = I18N[lang] || I18N.ru;
   if (dict && dict[key] != null) return dict[key];
   if (I18N.en && I18N.en[key] != null) return I18N.en[key];
   if (I18N.ru && I18N.ru[key] != null) return I18N.ru[key];
+  // never show raw keys like nav.logout
+  if (typeof key === 'string' && key.indexOf('.') !== -1) {
+    const last = key.split('.').pop();
+    return last.charAt(0).toUpperCase() + last.slice(1);
+  }
   return key;
 }
 
@@ -429,6 +449,7 @@ function applyTranslations() {
   setText('#nav-alerts', 'nav.alerts');
   setText('#nav-compare', 'nav.compare');
   setText('#nav-account', 'nav.account');
+  setText('#nav-portfolio', 'nav.portfolio');
 
   const drawerMap = {
     'drawer-home': 'nav.home',
