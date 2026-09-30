@@ -520,10 +520,17 @@
         <button type="button" class="auth-tab" data-mode="register" data-i18n="auth.register">Register</button>
       </div>
       <h2 id="auth-title" data-i18n="auth.login">Login</h2>
-      <div id="tg-login-wrap" class="tg-login-wrap">
-        <p class="muted small" data-i18n="auth.quick" style="margin-bottom:0.5rem;text-align:center">Quick sign-in</p>
-        <div id="tg-login-widget" class="tg-login-widget"></div>
-        <div class="auth-or"><span data-i18n="auth.orEmail">or email</span></div>
+      <div id="tg-login-wrap" class="tg-login-wrap" style="display:block !important">
+        <p class="muted small" data-i18n="auth.quick" style="margin-bottom:0.5rem;text-align:center">Быстрый вход</p>
+        <button type="button" id="tg-login-fallback" class="tg-login-btn">
+          <span class="tg-login-ico">✈</span>
+          <span data-i18n="auth.tgLogin">Войти через Telegram</span>
+        </button>
+        <div id="tg-login-widget" class="tg-login-widget" aria-label="Telegram Login Widget"></div>
+        <p class="muted small" id="tg-login-hint" style="margin:0.35rem 0 0;text-align:center;font-size:0.75rem">
+          Если кнопки Telegram нет — укажи домен сайта в @BotFather → Domain
+        </p>
+        <div class="auth-or"><span data-i18n="auth.orEmail">или email</span></div>
       </div>
       <form id="auth-form" autocomplete="on">
         <input type="email" id="auth-email" data-i18n-placeholder="auth.email" placeholder="Email" autocomplete="email" required />
