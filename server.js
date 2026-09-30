@@ -157,22 +157,36 @@ function extractBearer(req) {
 
 function authMiddleware(req, res, next) {
   let raw = extractBearer(req);
-  if (!raw) {
-    const cookies = parseCookies(req);
-    raw = cookies.cas_token || null;
+  // Ignore bogus client headers like "Bearer null" / "Bearer undefined"
+  if (raw === 'null' || raw === 'undefined' || raw === '') raw = null;
+
+  const cookies = parseCookies(req);
+  const cookieTok = cookies.cas_token || null;
+
+  // Prefer valid JWT from header; on failure fall back to cookie
+  let user = null;
+  if (raw) {
+    try {
+      user = jwt.verify(raw, JWT_SECRET);
+    } catch (e) {
+      user = null;
+    }
   }
-  if (!raw) {
+  if (!user && cookieTok) {
+    try {
+      user = jwt.verify(cookieTok, JWT_SECRET);
+    } catch (e) {
+      user = null;
+    }
+  }
+  if (!user) {
     req.user = { plan: 'free' };
     return next();
   }
-  try {
-    req.user = jwt.verify(raw, JWT_SECRET);
-    if (req.user && isOwnerEmail(req.user.email)) {
-      req.user.plan = 'pro';
-      req.user.isOwner = true;
-    }
-  } catch (e) {
-    req.user = { plan: 'free' };
+  req.user = user;
+  if (req.user && isOwnerEmail(req.user.email)) {
+    req.user.plan = 'pro';
+    req.user.isOwner = true;
   }
   next();
 }
@@ -1326,7 +1340,7 @@ app.post('/api/telegram/link', authMiddleware, async (req, res) => {
     plan: req.user.plan,
     expires: Date.now() + 10 * 60 * 1000
   });
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'YourBotUsername';
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'aicryptoscreenerbot';
   res.json({
     success: true,
     code,
