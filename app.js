@@ -497,8 +497,11 @@ function openAuthModal(hintText) {
   if (modal) modal.style.display = 'flex';
   document.body.classList.add('modal-open');
   if (typeof applyTranslations === 'function') applyTranslations();
+  const tgWrap = document.getElementById('tg-login-wrap');
+  if (tgWrap) tgWrap.style.display = 'block';
   mountTelegramLoginWidget();
 }
+
 
 let tgBotUsername = localStorage.getItem('tg_bot_username') || 'aicryptoscreenerbot';
 
@@ -516,6 +519,9 @@ async function loadPublicConfig() {
     if (data.telegramBotUsername) {
       tgBotUsername = data.telegramBotUsername;
       localStorage.setItem('tg_bot_username', tgBotUsername);
+    }
+    if (typeof mountTelegramLoginWidget === 'function') {
+      mountTelegramLoginWidget();
     }
     window.__allowDemoPlans = !!data.allowDemoPlans;
     window.__paymentsEnabled = !!data.paymentsEnabled;
@@ -556,9 +562,25 @@ window.startCheckout = startCheckout;
 
 function mountTelegramLoginWidget() {
   const box = document.getElementById('tg-login-widget');
+  const wrap = document.getElementById('tg-login-wrap');
+  if (wrap) {
+    wrap.style.display = 'block';
+    wrap.style.visibility = 'visible';
+  }
+  const bot = String(tgBotUsername || 'aicryptoscreenerbot').replace(/^@/, '');
+  const fb = document.getElementById('tg-login-fallback');
+  if (fb) {
+    fb.style.display = 'inline-flex';
+    fb.onclick = function (e) {
+      e.preventDefault();
+      openTelegramLoginHelp(bot);
+    };
+  }
   if (!box) return;
-  box.innerHTML = '';
-  const bot = tgBotUsername || 'aicryptoscreenerbot';
+  // clear previous widget scripts/iframes only
+  box.querySelectorAll('script, iframe').forEach(function (n) {
+    n.remove();
+  });
   const s = document.createElement('script');
   s.async = true;
   s.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -567,8 +589,49 @@ function mountTelegramLoginWidget() {
   s.setAttribute('data-radius', '10');
   s.setAttribute('data-onauth', 'onTelegramAuth(user)');
   s.setAttribute('data-request-access', 'write');
+  try {
+    s.setAttribute('data-auth-url', window.location.origin + '/');
+  } catch (err) {}
+  s.onerror = function () {
+    const hint = document.getElementById('tg-login-hint');
+    if (hint) {
+      hint.textContent =
+        (localStorage.getItem('lang') || 'ru') === 'en'
+          ? 'Telegram widget blocked. Use email or set BotFather domain.'
+          : 'Виджет Telegram не загрузился. Email или Domain в BotFather.';
+    }
+  };
+  s.onload = function () {
+    setTimeout(function () {
+      if (box.querySelector('iframe') && fb) {
+        // official button visible — keep our blue button too for reliability
+        fb.style.opacity = '0.95';
+      }
+    }, 600);
+  };
   box.appendChild(s);
 }
+
+function openTelegramLoginHelp(bot) {
+  bot = String(bot || tgBotUsername || 'aicryptoscreenerbot').replace(/^@/, '');
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  const host = (window.location.hostname || '').replace(/^www\./, '');
+  const msg = en
+    ? 'Telegram Login needs your site domain in BotFather.\n\n1) Open @BotFather\n2) Bot → Domain /setdomain\n3) Paste: ' +
+      host +
+      '\n4) Reload this page and open Login again.\n\nOfficial widget appears under the blue button when domain matches.\nBot: @' +
+      bot
+    : 'Вход через Telegram: домен сайта должен быть в BotFather.\n\n1) Открой @BotFather\n2) Бот → Domain /setdomain\n3) Вставь: ' +
+      host +
+      '\n4) Обнови страницу и снова Войти.\n\nОфициальная кнопка Telegram появится под синей, когда домен совпадёт.\nБот: @' +
+      bot;
+  alert(msg);
+  // open BotFather for convenience
+  try {
+    window.open('https://t.me/BotFather', '_blank', 'noopener');
+  } catch (e) {}
+}
+window.openTelegramLoginHelp = openTelegramLoginHelp;
 
 async function onTelegramAuth(tgUser) {
   const errEl = document.getElementById('auth-error');
