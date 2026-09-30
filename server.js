@@ -886,7 +886,7 @@ app.get(
         `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
         { timeout: 10000 }
       );
-      const pair = dexResponse.data.pairs?.[0] || {};
+      const pair = pickBestDexPair(dexResponse.data.pairs || [], address);
       const base = {
         symbol: pair.baseToken?.symbol || 'TOKEN',
         name: pair.baseToken?.name || '',
@@ -1232,6 +1232,43 @@ app.delete('/api/alerts/:id', authMiddleware, async (req, res) => {
   res.json(await store.removeAlert(req.user, req.params.id));
 });
 
+
+/** Prefer major chains for well-known addresses; else highest liquidity */
+function pickBestDexPair(pairs, address) {
+  const list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
+  if (!list.length) return {};
+  const addr = String(address || '').toLowerCase();
+  // Canonical Ethereum tokens — never prefer PulseChain/etc first
+  const ETH_CANON = {
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true, // USDC
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': true, // USDT
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true, // WETH
+    '0x514910771af9ca656af840dff83e8264ecf986ca': true, // LINK
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true, // UNI
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true  // WBTC
+  };
+  const preferEth = ETH_CANON[addr];
+  const chainScore = function (p) {
+    const c = String(p.chainId || '').toLowerCase();
+    if (preferEth) {
+      if (c === 'ethereum') return 100;
+      if (c === 'eth') return 100;
+      if (c === 'arbitrum' || c === 'base' || c === 'optimism') return 40;
+      if (c === 'pulsechain' || c === 'pulse') return -50;
+      return 0;
+    }
+    if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron') return 20;
+    if (c === 'pulsechain') return -20;
+    return 0;
+  };
+  list.sort(function (a, b) {
+    const sa = chainScore(a) + Math.log10((Number(a.liquidity && a.liquidity.usd) || 1) + 1);
+    const sb = chainScore(b) + Math.log10((Number(b.liquidity && b.liquidity.usd) || 1) + 1);
+    return sb - sa;
+  });
+  return list[0] || {};
+}
+
 app.post('/api/compare', authMiddleware, async (req, res) => {
   const plan = getPlan(req.user);
   const isPrem = plan === 'premium' || plan === 'pro';
@@ -1248,7 +1285,7 @@ app.post('/api/compare', authMiddleware, async (req, res) => {
         `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(address)}`,
         { timeout: 8000 }
       );
-      const pair = dex.data.pairs?.[0] || {};
+      const pair = pickBestDexPair(dex.data.pairs || [], address);
       const liq = Number(pair.liquidity?.usd) || 0;
       const vol = Number(pair.volume?.h24) || 0;
       const fdv = Number(pair.fdv) || 0;
@@ -2039,8 +2076,28 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
   }
   const maxMsgs = plan === 'pro' ? 12 : plan === 'premium' ? 8 : 4;
   try {
+    let ctx = Object.assign({}, context || {});
+    // Ensure security snapshot is complete for chat grounding
+    const addr =
+      (ctx.token && ctx.token.address) ||
+      ctx.address ||
+      (ctx.token && ctx.token.contract);
+    const chain =
+      (ctx.token && ctx.token.chainId) || ctx.chainId || 'ethereum';
+    const secThin =
+      !ctx.security ||
+      ctx.security.available !== true ||
+      !(ctx.security.meta && Object.keys(ctx.security.meta).length);
+    if (goplus && addr && secThin) {
+      try {
+        const sec = await goplus.fetchTokenSecurity(chain, addr);
+        if (sec && sec.available) ctx.security = sec;
+      } catch (e) {
+        console.warn('[chat goplus]', e.message);
+      }
+    }
     const result = await aiService.chat(messages.slice(-maxMsgs), {
-      ...(context || {}),
+      ...ctx,
       lang,
       plan: plan === 'free' ? 'free_trial' : plan,
       whatIf: plan === 'pro',
@@ -2135,7 +2192,7 @@ app.get('/api/sample/premium', async (req, res) => {
       `https://api.dexscreener.com/latest/dex/tokens/${address}`,
       { timeout: 10000 }
     );
-    const pair = dexResponse.data.pairs?.[0] || {};
+    const pair = pickBestDexPair(dexResponse.data.pairs || [], address);
     const base = {
       symbol: pair.baseToken?.symbol || 'LINK',
       name: pair.baseToken?.name || 'Chainlink',
