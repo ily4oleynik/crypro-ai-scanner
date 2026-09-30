@@ -838,7 +838,7 @@ function updateAuthUI() {
   const planLabel = document.getElementById('user-plan');
   if (!authBtn) return;
   if (user) {
-    authBtn.textContent = typeof t === 'function' ? t('btn.logout') : 'Logout';
+    authBtn.textContent = typeof t === 'function' ? t('btn.logout') : (typeof t === 'function' ? t('nav.logout') : 'Logout');
     if (planLabel) {
       planLabel.textContent = (user.plan || currentPlan || 'free').toUpperCase();
       planLabel.style.display = 'inline-block';
@@ -2010,6 +2010,15 @@ async function enrichSecurity(data, address) {
     const body = await res.json();
     if (body.success && body.security) {
       data.security = body.security;
+      if (currentTokenContext && currentTokenContext.token) {
+        currentTokenContext.security = {
+          available: !!body.security.available,
+          source: body.security.source || 'goplus',
+          flags: Array.isArray(body.security.flags) ? body.security.flags : [],
+          meta: body.security.meta || {},
+          identityWarnings: body.security.identityWarnings || []
+        };
+      }
       if (body.security.riskBonus && data.risk) {
         data.risk.riskScore = Math.min(
           99,
@@ -2792,10 +2801,20 @@ function initAIChat(data) {
   }
   section.style.display = 'block';
   currentTokenContext = {
-    token: data.token,
-    risk: data.risk,
-    security: data.security,
-    plan: data.plan || plan
+    token: data.token || null,
+    risk: data.risk || null,
+    security: data.security
+      ? {
+          available: !!data.security.available,
+          source: data.security.source || 'goplus',
+          flags: Array.isArray(data.security.flags) ? data.security.flags : [],
+          meta: data.security.meta || {},
+          identityWarnings: data.security.identityWarnings || []
+        }
+      : null,
+    plan: data.plan || plan,
+    address: (data.token && data.token.address) || '',
+    chainId: (data.token && data.token.chainId) || ''
   };
   const msgs = document.getElementById('chat-messages');
   if (msgs) {
@@ -2886,10 +2905,7 @@ async function sendChatMessage() {
   try {
     const res = await apiFetch('/api/ai/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token ? 'Bearer ' + token : ''
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: chatHistory,
         lang: (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru',
