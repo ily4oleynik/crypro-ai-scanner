@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /server.js
+Disallow: /store.js
+Disallow: /db.js
+Disallow: /node_modules/
