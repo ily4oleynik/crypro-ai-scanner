@@ -4,8 +4,14 @@ const API_BASE = window.API_BASE || window.location.origin;
 function apiFetch(path, options) {
   options = options || {};
   const headers = Object.assign({}, options.headers || {});
-  // Prefer cookie; keep Bearer only if still in memory during transition
-  if (token && !headers.Authorization) {
+  // Cookie session is primary. Only attach real JWT, never "Bearer null".
+  if (headers.Authorization) {
+    const a = String(headers.Authorization);
+    if (a === 'Bearer null' || a === 'Bearer undefined' || a === 'Bearer ') {
+      delete headers.Authorization;
+    }
+  }
+  if (token && token !== 'null' && token !== 'undefined' && !headers.Authorization) {
     headers.Authorization = 'Bearer ' + token;
   }
   return fetch(API_BASE + path, Object.assign({}, options, {
@@ -13,6 +19,25 @@ function apiFetch(path, options) {
     headers: headers
   }));
 }
+
+/** Ensure user from cookie before gated actions */
+async function ensureSession() {
+  if (user && user.id) return true;
+  try {
+    const res = await apiFetch('/api/auth/me');
+    const data = await res.json();
+    if (data && data.success && data.user && data.user.id) {
+      user = data.user;
+      if (data.user.isOwner) user.isOwner = true;
+      currentPlan = data.user.plan || 'free';
+      token = null;
+      updateAuthUI();
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 
 let currentPlan = 'free';
 let user = null;
@@ -3132,9 +3157,7 @@ function startTgLinkPoll() {
       return;
     }
     try {
-      const res = await apiFetch('/api/telegram/status', {
-        headers: { Authorization: 'Bearer ' + token }
-      });
+      const res = await apiFetch('/api/telegram/status');
       const data = await res.json();
       if (data.linked) {
         stopTgPoll();
@@ -3156,21 +3179,22 @@ async function refreshTelegramStatus() {
   const btn = document.getElementById('tg-connect-btn');
   if (!st || !btn) return;
 
-  if (!token || !user) {
-    st.textContent = 'Login to connect Telegram';
-    st.className = 'tg-status-badge';
-    st.style.color = '';
-    btn.textContent = 'Connect Telegram';
-    btn.onclick = function () {
-      openAuthModal('Sign in to connect Telegram');
-    };
-    return;
+  if (!user || !user.id) {
+    const ok = await ensureSession();
+    if (!ok) {
+      st.textContent = 'Login to connect Telegram';
+      st.className = 'tg-status-badge';
+      st.style.color = '';
+      btn.textContent = 'Connect Telegram';
+      btn.onclick = function () {
+        openAuthModal('Sign in to connect Telegram');
+      };
+      return;
+    }
   }
 
   try {
-    const res = await apiFetch('/api/telegram/status', {
-      headers: { Authorization: 'Bearer ' + token }
-    });
+    const res = await apiFetch('/api/telegram/status');
     const data = await res.json();
     if (data.linked) {
       stopTgPoll();
@@ -3199,14 +3223,22 @@ async function refreshTelegramStatus() {
 }
 
 async function connectTelegram() {
-  if (!user) return openAuthModal('Sign in to connect Telegram');
+  if (!(await ensureSession())) {
+    return openAuthModal('Sign in to connect Telegram');
+  }
   try {
     const res = await apiFetch('/api/telegram/link', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token }
+      method: 'POST'
     });
     const data = await res.json();
-    if (!data.success) return alert(data.error || 'Error');
+    if (!data.success) {
+      if (res.status === 401) {
+        user = null;
+        updateAuthUI();
+        return openAuthModal(data.error || 'Sign in to connect Telegram');
+      }
+      return alert(data.error || 'Error');
+    }
     const area = document.getElementById('tg-link-area');
     if (area) area.style.display = 'block';
     const link = document.getElementById('tg-deep-link');
@@ -3225,8 +3257,7 @@ async function disconnectTelegram() {
   try {
     stopTgPoll();
     await apiFetch('/api/telegram/link', {
-      method: 'DELETE',
-      headers: { Authorization: 'Bearer ' + token }
+      method: 'DELETE'
     });
     const area = document.getElementById('tg-link-area');
     if (area) area.style.display = 'none';
