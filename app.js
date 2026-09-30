@@ -61,14 +61,22 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {}
     token = null;
   }
-  restoreSession();
+  restoreSession().then(function () {
+    if (typeof refreshTelegramStatus === 'function') refreshTelegramStatus();
+    if (typeof refreshAccountTelegram === 'function') refreshAccountTelegram();
+  });
   setTimeout(handleDeepLinkScan, 600);
 
   document.getElementById('nav-home')?.addEventListener('click', e => { e.preventDefault(); showPage('home'); });
   document.getElementById('nav-scanner')?.addEventListener('click', e => { e.preventDefault(); showPage('scanner'); });
   document.getElementById('nav-watchlist')?.addEventListener('click', e => { e.preventDefault(); showPage('watchlist'); loadWatchlist(); });
   document.getElementById('nav-history')?.addEventListener('click', e => { e.preventDefault(); showPage('history'); loadHistory(); });
-  document.getElementById('nav-alerts')?.addEventListener('click', e => { e.preventDefault(); showPage('alerts'); loadAlerts(); });
+  document.getElementById('nav-alerts')?.addEventListener('click', e => {
+    e.preventDefault();
+    showPage('alerts');
+    loadAlerts();
+    if (typeof refreshTelegramStatus === 'function') refreshTelegramStatus();
+  });
   document.getElementById('nav-portfolio')?.addEventListener('click', e => { e.preventDefault(); showPage('portfolio'); });
   document.getElementById('nav-compare')?.addEventListener('click', e => { e.preventDefault(); showPage('compare'); });
   document.getElementById('nav-account')?.addEventListener('click', e => { e.preventDefault(); showPage('account'); });
@@ -866,6 +874,10 @@ function showPage(page) {
   if (page === 'history') loadHistory();
   if (page === 'watchlist') typeof loadWatchlist === 'function' && loadWatchlist();
   if (page === 'scanner') typeof renderScannerEmpty === 'function' && renderScannerEmpty();
+  if (page === 'alerts') {
+    loadAlerts();
+    if (typeof refreshTelegramStatus === 'function') refreshTelegramStatus();
+  }
   if (page === 'portfolio') {
     if (typeof loadPortfolioDesk === 'function') loadPortfolioDesk();
     if (typeof loadNewPairs === 'function') loadNewPairs();
