@@ -190,8 +190,16 @@ async function handleUpdate(update, tgLinkCodes) {
       return;
     }
 
-    const entry = tgLinkCodes.get(String(code).toUpperCase());
-    if (!entry || entry.expires < Date.now()) {
+    let entry = tgLinkCodes.get(String(code).toUpperCase());
+    if (entry && entry.expires < Date.now()) {
+      tgLinkCodes.delete(String(code).toUpperCase());
+      entry = null;
+    }
+    if (!entry && store.consumeTgLinkCode) {
+      const dbEntry = await store.consumeTgLinkCode(code);
+      if (dbEntry) entry = { userId: dbEntry.userId, plan: dbEntry.plan };
+    }
+    if (!entry) {
       await sendMessage(
         chatId,
         '❌ Code invalid or expired.\nGenerate a new one: Account → Connect Telegram.'
