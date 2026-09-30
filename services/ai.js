@@ -324,7 +324,13 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
       : Array.isArray(context.reasons)
         ? context.reasons
         : [];
-    const flags = Array.isArray(sec.flags) ? sec.flags : [];
+    const flags = Array.isArray(sec.flags)
+      ? sec.flags
+      : Array.isArray(sec.items)
+        ? sec.items
+        : Array.isArray(context.flags)
+          ? context.flags
+          : [];
     const flagLine = flags
       .slice(0, 8)
       .map(function (f) {
@@ -403,6 +409,7 @@ FDV: ${td.fdv != null ? td.fdv : 'n/a'}
         '\n' +
         'Use ONLY the FACTS block. If liquidity_usd is a number, you MUST cite it — never write Liquidity n/a.\n' +
         'If honeypot is false, say sell simulation OK / not honeypot. If true, warn.\n' +
+        'If security_available is true, NEVER say security data is missing / отсутствует / n/a for honeypot/mint/holders when FACTS has values.\n' +
         'If security_available is false, say simulation limited — do not invent holders.\n' +
         'Structure:\n' +
         '1) Contract\n2) Liquidity (numbers)\n3) Holders / Ownership\n' +
