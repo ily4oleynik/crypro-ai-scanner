@@ -1404,6 +1404,35 @@ app.delete('/api/telegram/link', authMiddleware, async (req, res) => {
   res.json(await store.unlinkTelegram(req.user));
 });
 
+
+app.post('/api/telegram/alert-ack', authMiddleware, async (req, res) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ success: false, error: 'Login required' });
+  }
+  try {
+    const chatId = await store.getTelegramChatId(req.user);
+    if (!chatId) {
+      return res.json({ success: true, sent: false, reason: 'not_linked' });
+    }
+    const { sendMessage } = require('./telegram');
+    const body = req.body || {};
+    const sym = body.symbol || 'TOKEN';
+    const type = body.type || 'alert';
+    const val = body.value != null ? body.value : '';
+    const addr = body.address || '';
+    const text =
+      `✅ <b>Alert saved</b>\n` +
+      `${sym} · ${type} · ${val}\n` +
+      (addr ? `<code>${addr}</code>\n` : '') +
+      `We will notify this chat when the condition hits.`;
+    await sendMessage(chatId, text);
+    res.json({ success: true, sent: true });
+  } catch (e) {
+    console.error('[alert-ack]', e.message);
+    res.json({ success: true, sent: false, error: e.message });
+  }
+});
+
 app.post('/api/telegram/digest-test', authMiddleware, async (req, res) => {
   try {
     await runDailyDigest();
