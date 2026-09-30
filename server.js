@@ -1377,6 +1377,9 @@ app.post('/api/telegram/link', authMiddleware, async (req, res) => {
     plan: req.user.plan,
     expires: Date.now() + 10 * 60 * 1000
   });
+  if (typeof store.saveTgLinkCode === 'function') {
+    await store.saveTgLinkCode(code, req.user.id, req.user.plan, 10 * 60 * 1000);
+  }
   const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'aicryptoscreenerbot';
   res.json({
     success: true,
