@@ -602,6 +602,38 @@ app.post(
 
 
 
+
+/** One-time owner password reset — requires OWNER_SECRET, no login */
+app.post(
+  '/api/admin/reset-password',
+  rateLimit({ windowMs: 60 * 60_000, max: 5, keyFn: (req) => 'pwreset:' + clientIp(req) }),
+  async (req, res) => {
+    const secret = process.env.OWNER_SECRET || process.env.ADMIN_SECRET || '';
+    const given = String(req.body?.secret || req.headers['x-owner-secret'] || '');
+    if (!secret || given !== secret) {
+      return res.status(403).json({ success: false, error: 'Invalid owner secret' });
+    }
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || req.body?.newPassword || '');
+    if (!email || password.length < 8) {
+      return res.status(400).json({ success: false, error: 'email + password (min 8) required' });
+    }
+    if (!store.setUserPassword) {
+      return res.status(500).json({ success: false, error: 'setUserPassword not available' });
+    }
+    try {
+      const result = await store.setUserPassword(email, password);
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+      console.log('[owner] password reset for', email);
+      res.json({ success: true, message: 'Password updated. You can login now.', email: result.email });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  }
+);
+
 /** Creator claim: set plan=pro for logged-in user if OWNER_SECRET matches */
 app.post(
   '/api/admin/claim-owner',
