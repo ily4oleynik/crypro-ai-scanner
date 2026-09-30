@@ -3115,33 +3115,54 @@ async function loadAlerts() {
 }
 
 async function createAlert() {
-  if (!user) return openAuthModal('Sign in to create alerts');
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  if (!(await ensureSession())) {
+    return openAuthModal(en ? 'Sign in to create alerts' : 'Войдите, чтобы создать алерт');
+  }
   const address = document.getElementById('alert-address').value.trim();
   const symbol = document.getElementById('alert-symbol').value.trim();
   const type = document.getElementById('alert-type').value;
   const value = document.getElementById('alert-value').value;
-  if (!address || value === '') return alert('Fill address and value');
+  if (!address || value === '') {
+    return alert(en ? 'Fill address and value' : 'Укажите адрес и значение');
+  }
   const res = await apiFetch('/api/alerts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type, address, symbol, value })
   });
   const data = await res.json();
+  if (res.status === 401) {
+    user = null;
+    updateAuthUI();
+    return openAuthModal(data.error || (en ? 'Sign in' : 'Войдите'));
+  }
   if (res.status === 403) {
-    if (confirm((data.error || 'Premium required') + '\n\nOpen plans?')) openPricing(data.upsell || 'premium');
+    if (confirm((data.error || 'Premium') + '\n\n' + (en ? 'Open plans?' : 'Открыть тарифы?'))) {
+      openPricing(data.upsell || 'premium');
+    }
     return;
   }
   if (!data.success) return alert(data.error || 'Error');
   document.getElementById('alert-address').value = '';
   document.getElementById('alert-value').value = '';
   loadAlerts();
+  if (typeof showToast === 'function') {
+    showToast(en ? 'Alert created' : 'Алерт создан');
+  }
+  // Confirm in TG if linked
+  try {
+    await apiFetch('/api/telegram/alert-ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, address, symbol, value })
+    });
+  } catch (e) {}
 }
 
 async function removeAlertItem(id) {
-  await apiFetch('/api/alerts/' + id, {
-    method: 'DELETE',
-    headers: { Authorization: 'Bearer ' + token }
-  });
+  if (!(await ensureSession())) return;
+  await apiFetch('/api/alerts/' + id, { method: 'DELETE' });
   loadAlerts();
 }
 
@@ -3345,6 +3366,12 @@ async function runCompare() {
     head += '<th>' + (en ? 'Better' : 'Лучше') + '</th></tr>';
 
     let body = '';
+    body += '<tr><td>Chain</td>';
+    tokens.forEach(function (t) {
+      body += '<td class="muted small">' + (t.chainId || '—') + '</td>';
+    });
+    body += '<td></td></tr>';
+
     body += '<tr><td>Risk</td>';
     tokens.forEach(function (t) {
       body +=
@@ -3408,7 +3435,7 @@ async function runCompare() {
         '</p>';
     }
     html +=
-      '<div class="cmp-table-wrap"><table class="cmp-table"><thead>' +
+      '<div class="compare-table-wrap"><table class="compare-table"><thead>' +
       head +
       '</thead><tbody>' +
       body +
@@ -3466,7 +3493,7 @@ function fillCompareSlot(address) {
 }
 
 async function cmpFromHistory() {
-  if (!user) return openAuthModal();
+  if (!(await ensureSession())) return openAuthModal();
   try {
     const res = await apiFetch('/api/history');
     const data = await res.json();
@@ -3479,7 +3506,7 @@ async function cmpFromHistory() {
 }
 
 async function cmpFromWatch() {
-  if (!user) return openAuthModal();
+  if (!(await ensureSession())) return openAuthModal();
   try {
     const res = await apiFetch('/api/watchlist');
     const data = await res.json();
