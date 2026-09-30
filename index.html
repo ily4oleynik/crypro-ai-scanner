@@ -44,7 +44,7 @@
         <a href="#" id="nav-watchlist">Watchlist</a>
         <a href="#" id="nav-history">History</a>
         <a href="#" id="nav-alerts">Alerts</a>
-        <a href="#" id="nav-portfolio">Portfolio</a>
+        <a href="#" id="nav-portfolio" data-i18n="nav.portfolio">Портфель</a>
         <a href="#" id="nav-compare">Compare</a>
         <a href="#" id="nav-account">Account</a>
       </nav>
@@ -75,7 +75,7 @@
         <a href="#" class="drawer-link" data-page="watchlist" id="drawer-watchlist"><span class="d-ico">★</span> Watchlist</a>
         <a href="#" class="drawer-link" data-page="history" id="drawer-history"><span class="d-ico">◷</span> History</a>
         <a href="#" class="drawer-link" data-page="alerts" id="drawer-alerts"><span class="d-ico">🔔</span> Alerts</a>
-        <a href="#" class="drawer-link" data-page="portfolio">Portfolio</a>
+        <a href="#" class="drawer-link" data-page="portfolio" data-i18n="nav.portfolio">Портфель</a>
         <a href="#" class="nav-link" data-page="compare" id="drawer-compare"><span class="d-ico">⇄</span> Compare</a>
         <a href="#" class="drawer-link" data-page="account" id="drawer-account"><span class="d-ico">👤</span> Account</a>
       </nav>
@@ -280,8 +280,8 @@
     </section>
 
     <section id="page-alerts" class="page" style="display:none">
-      <h2 class="page-title">Alerts</h2>
-      <p class="muted small" style="margin:-0.4rem 0 1rem">Personal alerts in the bot · public digests in channels</p>
+      <h2 class="page-title" data-i18n="alerts.title">Алерты</h2>
+      <p class="muted small" data-i18n="alerts.sub" style="margin:-0.4rem 0 1rem">Личные алерты в боте · дайджесты в каналах</p>
 
       <div class="glass panel-block tg-connect-panel">
         <div class="tg-status-row">
@@ -318,7 +318,7 @@
       </div>
 
       <div class="glass panel-block tg-demo-panel" style="margin-top:1rem">
-        <h3 class="tg-demo-title">Example alert in Telegram</h3>
+        <h3 class="tg-demo-title" data-i18n="alerts.example">Пример сообщения в Telegram</h3>
         <div class="tg-demo-bubble">
           <div class="tg-demo-app">Crypto AI Scanner</div>
           <p><strong>⚠ LINK price alert</strong></p>
@@ -330,7 +330,7 @@
       </div>
 
       <div class="glass panel-block" style="margin-top:1rem">
-        <h3>Create alert</h3>
+        <h3 data-i18n="alerts.create">Создать алерт</h3>
         <div class="form-stack">
           <input type="text" id="alert-address" placeholder="0x address" />
           <input type="text" id="alert-symbol" placeholder="Symbol (e.g. LINK)" />
