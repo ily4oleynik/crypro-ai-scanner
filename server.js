@@ -114,9 +114,15 @@ app.use(function blockBackendSources(req, res, next) {
 
 const fs = require('fs');
 const publicDir = path.join(__dirname, 'public');
+// Prefer public/; if missing on deploy, serve allowlisted frontend from root
+// (backend files still blocked by blockBackendSources above)
+const staticRoot = fs.existsSync(path.join(publicDir, 'index.html'))
+  ? publicDir
+  : __dirname;
+console.log('[static] serving from', staticRoot === publicDir ? 'public/' : 'project root (fallback)');
 app.use(
-  express.static(publicDir, {
-    index: ['index.html'],
+  express.static(staticRoot, {
+    index: false,
     dotfiles: 'deny',
     fallthrough: true
   })
@@ -2352,11 +2358,14 @@ app.get('/api/sample/premium', async (req, res) => {
 app.use(function spaFallback(req, res, next) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   if (req.path.startsWith('/api')) return next();
-  // let static handle real files (js/css/html); only fallback path-like routes
   if (req.path.includes('.')) return next();
-  const indexPath = path.join(publicDir, 'index.html');
-  const fs = require('fs');
-  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  const candidates = [
+    path.join(publicDir, 'index.html'),
+    path.join(__dirname, 'index.html')
+  ];
+  for (const indexPath of candidates) {
+    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  }
   return res.status(404).send('Not found');
 });
 
