@@ -329,7 +329,7 @@ app.get('/api/billing/status', authMiddleware, (req, res) => {
     provider: paymentsEnabled ? 'yookassa' : null,
     plan: plan,
     canCancel: !!(req.user?.id) && plan !== 'free' && !isOwnerEmail(req.user?.email),
-    prices: { premium: '29.00', pro: '79.00', currency: 'RUB' },
+    prices: { premium: '19', pro: '39', currency: 'USD', rub: { premium: '1900.00', pro: '3900.00' } },
     message: paymentsEnabled
       ? 'Payments ready'
       : 'Payments not enabled — use waitlist'
@@ -355,9 +355,9 @@ app.post(
       return res.status(401).json({ success: false, error: 'Войдите в аккаунт' });
     }
     const plan = String(req.body.plan || '').toLowerCase();
-    const prices = { premium: 2900, pro: 7900 }; // RUB kopecks x100 -> 29.00 / 79.00 if using rubles as major - YooKassa uses minor units
+    const prices = { premium: 1900, pro: 3900 }; // display helper; actual charge via amounts
     // YooKassa amount value is string major units "29.00"
-    const amounts = { premium: '29.00', pro: '79.00' };
+    const amounts = { premium: '1900.00', pro: '3900.00' }; // RUB ≈ $19 / $39
     if (!amounts[plan]) {
       return res.status(400).json({ success: false, error: 'Неверный тариф' });
     }
@@ -374,7 +374,7 @@ app.post(
         amount: { value: amounts[plan], currency: 'RUB' },
         confirmation: { type: 'redirect', return_url: returnUrl + '?paid=1&plan=' + plan },
         capture: true,
-        description: 'Crypto AI Scanner ' + plan,
+        description: 'Crypto AI Scanner ' + plan + ' ($' + (plan === 'pro' ? '39' : '19') + '/mo)',
         metadata: { userId: String(req.user.id), plan: plan, email: req.user.email || '' }
       };
       const r = await axios.post('https://api.yookassa.ru/v3/payments', payload, {
