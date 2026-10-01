@@ -322,11 +322,14 @@ app.get('/api/billing/status', authMiddleware, (req, res) => {
   const paymentsEnabled =
     String(process.env.PAYMENTS_ENABLED || '').toLowerCase() === 'true' &&
     !!(process.env.YOOKASSA_SHOP_ID && process.env.YOOKASSA_SECRET_KEY);
+  const plan = getPlan(req.user);
   res.json({
     success: true,
     paymentsEnabled,
     provider: paymentsEnabled ? 'yookassa' : null,
-    plan: req.user?.plan || 'free',
+    plan: plan,
+    canCancel: !!(req.user?.id) && plan !== 'free' && !isOwnerEmail(req.user?.email),
+    prices: { premium: '29.00', pro: '79.00', currency: 'RUB' },
     message: paymentsEnabled
       ? 'Payments ready'
       : 'Payments not enabled — use waitlist'
@@ -399,8 +402,28 @@ app.post(
 );
 
 app.post('/api/billing/webhook', express.json(), async (req, res) => {
-  // YooKassa notification — verify in production via IP allowlist / secret
   try {
+    // Optional IP allowlist (YooKassa notify IPs — set YOOKASSA_WEBHOOK_IPS comma-separated)
+    const allowIps = String(process.env.YOOKASSA_WEBHOOK_IPS || '')
+      .split(',')
+      .map(function (x) { return x.trim(); })
+      .filter(Boolean);
+    if (allowIps.length) {
+      const ip = clientIp(req);
+      if (allowIps.indexOf(ip) === -1) {
+        console.warn('[billing webhook] rejected IP', ip);
+        return res.status(403).json({ ok: false });
+      }
+    }
+    // Optional shared secret in metadata or header (custom)
+    const hookSecret = process.env.YOOKASSA_WEBHOOK_SECRET || '';
+    if (hookSecret) {
+      const given = String(req.headers['x-webhook-secret'] || req.query.secret || '');
+      if (given !== hookSecret) {
+        console.warn('[billing webhook] bad secret');
+        return res.status(403).json({ ok: false });
+      }
+    }
     const event = req.body || {};
     const obj = event.object || {};
     if (event.event === 'payment.succeeded' && obj.metadata) {
@@ -417,6 +440,41 @@ app.post('/api/billing/webhook', express.json(), async (req, res) => {
     res.status(200).json({ ok: true });
   }
 });
+
+
+app.post(
+  '/api/billing/cancel',
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 5, keyFn: (req) => 'paycancel:' + clientIp(req) }),
+  async (req, res) => {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, error: 'Login required' });
+    }
+    try {
+      // Soft cancel: downgrade to free at end of period (we store plan only — immediate free)
+      await store.updateUserPlan(req.user, 'free');
+      const tokenJwt = jwt.sign(
+        {
+          id: req.user.id,
+          email: req.user.email || '',
+          plan: 'free',
+          isOwner: isOwnerEmail(req.user.email)
+        },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+      setAuthCookie(res, tokenJwt);
+      console.log('[billing] cancelled plan for', req.user.id);
+      res.json({
+        success: true,
+        plan: 'free',
+        message: 'Subscription cancelled. Plan set to Free.'
+      });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  }
+);
 
 /* ===================== PUBLIC ===================== */
 
