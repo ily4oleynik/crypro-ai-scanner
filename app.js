@@ -53,6 +53,33 @@ let lastPairMeta = null;
 let pendingPlan = null;
 let newsSource = 'all';
 
+(function handlePaidReturn() {
+  try {
+    const q = new URLSearchParams(window.location.search || '');
+    if (q.get('paid') === '1') {
+      const plan = q.get('plan') || '';
+      history.replaceState({}, '', window.location.pathname);
+      setTimeout(async function () {
+        try {
+          const me = await apiFetch('/api/auth/me');
+          const data = await me.json();
+          if (data.user) {
+            user = data.user;
+            currentPlan = data.user.plan || currentPlan;
+            updateAuthUI();
+            refreshAccountPage();
+            refreshUsage();
+          }
+        } catch (e) {}
+        alert(
+          (localStorage.getItem('lang') || 'ru') === 'en'
+            ? ('Payment return — plan may update after webhook. Current: ' + (currentPlan || 'free'))
+            : ('Возврат с оплаты — план обновится после webhook. Сейчас: ' + (currentPlan || 'free'))
+        );
+      }, 500);
+    }
+  } catch (e) {}
+})();
 document.addEventListener('DOMContentLoaded', () => {
   // Migrate off localStorage JWT — cookie is source of truth
   if (token) {
@@ -78,7 +105,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof refreshTelegramStatus === 'function') refreshTelegramStatus();
   });
   document.getElementById('nav-portfolio')?.addEventListener('click', e => { e.preventDefault(); showPage('portfolio'); });
-  document.getElementById('nav-compare')?.addEventListener('click', e => { e.preventDefault(); showPage('compare'); });
+  document.getElementById('nav-compare')?.addEventListener('click', e => {
+    e.preventDefault();
+    showPage('compare');
+    const box = document.getElementById('compare-content');
+    if (box && !box.innerHTML.trim()) {
+      const en = (localStorage.getItem('lang') || 'ru') === 'en';
+      box.innerHTML =
+        '<div class="glass panel cmp-empty-hint" style="padding:1.2rem">' +
+        '<p><strong>' +
+        (en ? 'Side-by-side risk' : 'Риск рядом') +
+        '</strong></p>' +
+        '<p class="muted small">' +
+        (en
+          ? 'Pick chips (LINK / USDC) or paste 2 addresses. Free shows risk + flags; Premium unlocks FDV/holders.'
+          : 'Выберите чипы (LINK / USDC) или вставьте 2 адреса. Free — risk + flags; Premium — FDV/holders.') +
+        '</p></div>';
+    }
+  });
   document.getElementById('nav-account')?.addEventListener('click', e => { e.preventDefault(); showPage('account'); });
 
   document.querySelectorAll('.plan-btn').forEach(btn => {
@@ -470,10 +514,32 @@ async function selectPlan(plan) {
   }
   if (!user) {
     closePricing();
-    openAuthModal('Sign in or create an account to activate ' + plan.toUpperCase());
+    openAuthModal(
+      (localStorage.getItem('lang') || 'ru') === 'en'
+        ? 'Sign in to activate ' + plan.toUpperCase()
+        : 'Войдите, чтобы активировать ' + plan.toUpperCase()
+    );
     return;
   }
-  await activatePlanDemo(plan);
+  // Real payments when enabled
+  if (window.__paymentsEnabled) {
+    closePricing();
+    return startCheckout(plan);
+  }
+  // Demo only if explicitly allowed
+  if (window.__allowDemoPlans) {
+    return activatePlanDemo(plan);
+  }
+  // Default: waitlist
+  const box = document.getElementById('waitlist-box');
+  if (box) box.style.display = 'block';
+  const msg = document.getElementById('waitlist-msg');
+  if (msg) {
+    msg.textContent =
+      (localStorage.getItem('lang') || 'ru') === 'en'
+        ? 'Payments coming soon — leave email in waitlist'
+        : 'Оплата скоро — оставьте email в waitlist';
+  }
 }
 
 async function activatePlanDemo(plan) {
@@ -4150,3 +4216,60 @@ window.addPortfolioPos = addPortfolioPos;
 window.removePortfolioPos = removePortfolioPos;
 window.runBatchScan = runBatchScan;
 window.loadNewPairs = loadNewPairs;
+
+
+async function cancelSubscription() {
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  if (!user) return openAuthModal();
+  if (!confirm(en ? 'Cancel paid plan and switch to Free?' : 'Отменить платный план и перейти на Free?')) return;
+  try {
+    const res = await apiFetch('/api/billing/cancel', { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.error || 'Failed');
+      return;
+    }
+    currentPlan = 'free';
+    if (user) user.plan = 'free';
+    updateAuthUI();
+    refreshAccountPage();
+    refreshUsage();
+    alert(en ? 'Plan set to Free' : 'План: Free');
+  } catch (e) {
+    alert(en ? 'Network error' : 'Ошибка сети');
+  }
+}
+window.cancelSubscription = cancelSubscription;
+
+async function refreshBillingPanel() {
+  const st = document.getElementById('acc-billing-status');
+  const cancelBtn = document.getElementById('acc-cancel-sub');
+  const payPrem = document.getElementById('acc-pay-premium');
+  const payPro = document.getElementById('acc-pay-pro');
+  if (!st) return;
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  try {
+    const res = await apiFetch('/api/billing/status');
+    const data = await res.json();
+    if (!data.success) return;
+    if (data.paymentsEnabled) {
+      st.textContent = en
+        ? ('Payments ON · current plan: ' + (data.plan || 'free').toUpperCase())
+        : ('Оплата включена · план: ' + (data.plan || 'free').toUpperCase());
+      if (payPrem) payPrem.style.display = '';
+      if (payPro) payPro.style.display = '';
+    } else {
+      st.textContent = en
+        ? 'Payments coming soon — waitlist in Pricing'
+        : 'Оплата скоро — waitlist в тарифах';
+      if (payPrem) payPrem.style.display = 'none';
+      if (payPro) payPro.style.display = 'none';
+    }
+    if (cancelBtn) {
+      cancelBtn.style.display = data.canCancel ? '' : 'none';
+      cancelBtn.onclick = cancelSubscription;
+    }
+  } catch (e) {
+    st.textContent = '—';
+  }
+}
