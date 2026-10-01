@@ -21,6 +21,12 @@ const I18N = {
     'nav.logout': 'Выйти',
     'nav.login': 'Войти',
     'nav.portfolio': 'Портфель',
+    'drawer.main': 'Основное',
+    'drawer.tools': 'Инструменты',
+    'drawer.account': 'Аккаунт',
+    'drawer.language': 'Язык',
+    'drawer.theme': 'Тема',
+
     'nav.upgrade': 'Тарифы',
     'nav.checkToken': 'Проверить токен',
     'nav.scans': 'Сканы',
@@ -242,6 +248,12 @@ const I18N = {
     'nav.logout': 'Logout',
     'nav.login': 'Login',
     'nav.portfolio': 'Portfolio',
+    'drawer.main': 'MAIN',
+    'drawer.tools': 'TOOLS',
+    'drawer.account': 'ACCOUNT',
+    'drawer.language': 'Language',
+    'drawer.theme': 'Theme',
+
     'nav.upgrade': 'Upgrade',
     'nav.checkToken': 'Check token',
     'nav.scans': 'Scans',
@@ -521,17 +533,28 @@ function applyTranslations() {
     'drawer-watchlist': 'nav.watchlist',
     'drawer-history': 'nav.history',
     'drawer-alerts': 'nav.alerts',
+    'drawer-portfolio': 'nav.portfolio',
     'drawer-compare': 'nav.compare',
     'drawer-account': 'nav.account'
   };
   Object.keys(drawerMap).forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const ico = el.querySelector('.d-ico');
+    const labelEl = el.querySelector('.d-label');
     const label = t(drawerMap[id]);
-    if (ico) el.innerHTML = ico.outerHTML + ' ' + label;
-    else el.textContent = label;
+    if (labelEl) labelEl.textContent = label;
+    else {
+      const ico = el.querySelector('.d-ico');
+      if (ico) el.innerHTML = ico.outerHTML + '<span class="d-label">' + label + '</span>';
+      else el.textContent = label;
+    }
   });
+  document.querySelectorAll('.drawer-group-label[data-i18n]').forEach(function (el) {
+    const k = el.getAttribute('data-i18n');
+    if (k) el.textContent = t(k);
+  });
+  const drawerTheme = document.getElementById('drawer-theme');
+  if (drawerTheme) drawerTheme.textContent = t('drawer.theme');
 
   setText('#nav-scan-cta', 'btn.checkToken');
   setText('#drawer-upgrade', 'btn.upgrade');
