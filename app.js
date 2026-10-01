@@ -1076,18 +1076,24 @@ async function refreshAccountTelegram() {
 }
 
 async function testTelegramAlert() {
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
   try {
-    const res = await apiFetch('/api/telegram/digest-test', { method: 'POST' });
+    if (!(await ensureSession())) {
+      return openAuthModal(en ? 'Sign in first' : 'Сначала войдите');
+    }
+    const res = await apiFetch('/api/telegram/digest-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang: en ? 'en' : 'ru' })
+    });
     const data = await res.json();
     alert(
       data.success
-        ? (localStorage.getItem('lang') || 'ru') === 'en'
-          ? 'Test message sent to Telegram'
-          : 'Тестовое сообщение отправлено в Telegram'
+        ? (en ? 'Test alert sent to Telegram — check the bot' : 'Тестовый алерт отправлен — проверьте бота')
         : data.error || 'Failed'
     );
   } catch (e) {
-    alert('Network error');
+    alert(en ? 'Network error' : 'Ошибка сети');
   }
 }
 
@@ -1416,7 +1422,7 @@ async function startScan() {
     if (typeof refreshAccountPage === 'function') refreshAccountPage();
     results.insertAdjacentHTML('beforeend',
       '<div style="text-align:center;margin-top:1rem;">' +
-      '<button type="button" class="connect-btn" id="scan-another-btn">Scan another token</button></div>');
+      '<button type="button" class="connect-btn" id="scan-another-btn">' + (((localStorage.getItem('lang')||'ru')==='en')?'Scan another token':'Сканировать другой') + '</button></div>');
     document.getElementById('scan-another-btn')?.addEventListener('click', function () {
       const input = document.getElementById('token-input');
       if (input) { input.value = ''; input.focus(); }
@@ -2960,7 +2966,7 @@ async function sendChatMessage() {
     if (note && data.limit != null) {
       note.textContent =
         (data.limitNote || '') +
-        (data.remaining != null ? ' · осталось ' + data.remaining : '');
+        (data.remaining != null ? ' · ' + ((localStorage.getItem('lang')||'ru')==='en'?'left ':'осталось ') + data.remaining : '');
     }
   } catch (err) {
     removeChatMessage(loadingId);
