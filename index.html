@@ -54,11 +54,11 @@
           <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
         </div>
         <button type="button" class="theme-toggle desktop-only" id="theme-toggle" title="Theme">☾</button>
-        <span class="usage-badge desktop-only" id="scan-usage">Scans: 0/5</span>
+        <span class="usage-badge desktop-only" id="scan-usage" data-counts='{"used":0,"limit":5}'>Сканы: 0/5</span>
         <span class="plan-badge" id="user-plan" style="display:none">FREE</span>
-        <button type="button" class="plan-btn desktop-only" data-plan="premium">Upgrade</button>
-        <button type="button" class="connect-btn" id="auth-btn">Login</button>
-        <button type="button" class="upgrade-btn nav-cta desktop-only" id="nav-scan-cta">Check token</button>
+        <button type="button" class="plan-btn desktop-only" data-plan="premium" data-i18n="nav.upgrade">Тарифы</button>
+        <button type="button" class="connect-btn" id="auth-btn" data-i18n="nav.login">Войти</button>
+        <button type="button" class="upgrade-btn nav-cta desktop-only" id="nav-scan-cta" data-i18n="nav.checkToken">Проверить токен</button>
       </div>
     </header>
 
@@ -88,8 +88,8 @@
       </div>
       <div class="nav-drawer-section">
         <button type="button" class="connect-btn full" id="drawer-theme">Toggle theme</button>
-        <button type="button" class="upgrade-btn full plan-btn" data-plan="premium" id="drawer-upgrade">Upgrade</button>
-        <button type="button" class="connect-btn full" id="drawer-auth">Login</button>
+        <button type="button" class="upgrade-btn full plan-btn" data-plan="premium" id="drawer-upgrade" data-i18n="nav.upgrade">Тарифы</button>
+        <button type="button" class="connect-btn full" id="drawer-auth" data-i18n="nav.login">Войти</button>
       </div>
       <div class="nav-drawer-foot">
         <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">TG RU</a>
