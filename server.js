@@ -1522,10 +1522,35 @@ app.post('/api/telegram/alert-ack', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/telegram/digest-test', authMiddleware, async (req, res) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ success: false, error: 'Login required' });
+  }
   try {
-    await runDailyDigest();
-    res.json({ success: true, message: 'Digest sent' });
+    const chatId = await store.getTelegramChatId(req.user);
+    if (!chatId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Telegram not connected. Connect bot first.'
+      });
+    }
+    const { sendMessage } = require('./telegram');
+    const lang = String(req.body?.lang || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
+    const text =
+      lang === 'en'
+        ? `🔔 <b>Test alert · Crypto AI Scanner</b>\n\n` +
+          `Example: LINK price went <b>below</b> $15.00\n` +
+          `Current ≈ sample · Risk 42/100\n\n` +
+          `When a real alert fires, it will look like this.\n` +
+          `Not financial advice.`
+        : `🔔 <b>Тестовый алерт · Crypto AI Scanner</b>\n\n` +
+          `Пример: LINK цена <b>ниже</b> $15.00\n` +
+          `Сейчас ≈ sample · Risk 42/100\n\n` +
+          `Когда сработает настоящий алерт, сообщение будет похожим.\n` +
+          `Не финансовый совет.`;
+    await sendMessage(chatId, text);
+    res.json({ success: true, message: lang === 'en' ? 'Test alert sent' : 'Тестовый алерт отправлен' });
   } catch (e) {
+    console.error('[digest-test]', e.message);
     res.status(500).json({ success: false, error: e.message });
   }
 });
