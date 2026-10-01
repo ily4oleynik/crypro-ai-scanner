@@ -435,6 +435,17 @@
       </div>
 
       <div class="account-grid" id="acc-grid" style="display:none">
+        <div class="glass panel-block" id="acc-billing">
+          <h3 data-i18n="account.subscription">Подписка</h3>
+          <p class="muted small" id="acc-billing-status">—</p>
+          <div class="btn-row" style="margin-top:0.5rem;flex-wrap:wrap;gap:0.4rem">
+            <button type="button" class="upgrade-btn" id="acc-pay-premium" onclick="startCheckout('premium')">Premium 29₽</button>
+            <button type="button" class="upgrade-btn" id="acc-pay-pro" onclick="startCheckout('pro')">Pro 79₽</button>
+            <button type="button" class="connect-btn" id="acc-cancel-sub" style="display:none">Cancel plan</button>
+          </div>
+          <p class="muted small" style="margin-top:0.5rem" data-i18n="account.payHint">Оплата включается после PAYMENTS_ENABLED + ЮKassa. Пока — waitlist.</p>
+        </div>
+
         <div class="glass panel-block">
           <h3 data-i18n="account.telegram">Telegram</h3>
           <p class="muted small" id="acc-tg-status">—</p>
