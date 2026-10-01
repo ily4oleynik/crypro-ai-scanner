@@ -69,25 +69,34 @@
         <div class="logo">Crypto AI Scanner</div>
         <button type="button" class="nav-drawer-close" id="nav-drawer-close" aria-label="Close">✕</button>
       </div>
-      <nav class="nav-drawer-links">
-        <a href="#" class="drawer-link" data-page="home" id="drawer-home"><span class="d-ico">⌂</span> Home</a>
-        <a href="#" class="drawer-link" data-page="scanner" id="drawer-scanner"><span class="d-ico">◎</span> Scanner</a>
-        <a href="#" class="drawer-link" data-page="watchlist" id="drawer-watchlist"><span class="d-ico">★</span> Watchlist</a>
-        <a href="#" class="drawer-link" data-page="history" id="drawer-history"><span class="d-ico">◷</span> History</a>
-        <a href="#" class="drawer-link" data-page="alerts" id="drawer-alerts"><span class="d-ico">🔔</span> Alerts</a>
-        <a href="#" class="drawer-link" data-page="portfolio" data-i18n="nav.portfolio">Портфель</a>
-        <a href="#" class="nav-link" data-page="compare" id="drawer-compare"><span class="d-ico">⇄</span> Compare</a>
-        <a href="#" class="drawer-link" data-page="account" id="drawer-account"><span class="d-ico">👤</span> Account</a>
-      </nav>
-      <div class="nav-drawer-section">
-        <div class="nav-drawer-label">Language</div>
-        <div class="lang-switch drawer-lang">
-          <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
-          <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
+            <nav class="nav-drawer-links">
+        <div class="drawer-group">
+          <div class="drawer-group-label" data-i18n="drawer.main">MAIN</div>
+        <a href="#" class="drawer-link" data-page="home" id="drawer-home" data-i18n="nav.home"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></span><span class="d-label">Home</span></a>
+        <a href="#" class="drawer-link" data-page="scanner" id="drawer-scanner" data-i18n="nav.scanner"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span><span class="d-label">Scanner</span></a>
+        <a href="#" class="drawer-link" data-page="watchlist" id="drawer-watchlist" data-i18n="nav.watchlist"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 6.5L21 10l-5 4.2L17.5 21 12 17.5 6.5 21 8 14.2 3 10l6.5-.5L12 3z"/></svg></span><span class="d-label">Watchlist</span></a>
+        <a href="#" class="drawer-link" data-page="alerts" id="drawer-alerts" data-i18n="nav.alerts"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></span><span class="d-label">Alerts</span></a>
         </div>
-      </div>
-      <div class="nav-drawer-section">
-        <button type="button" class="connect-btn full" id="drawer-theme">Toggle theme</button>
+        <div class="drawer-group">
+          <div class="drawer-group-label" data-i18n="drawer.tools">TOOLS</div>
+        <a href="#" class="drawer-link" data-page="history" id="drawer-history" data-i18n="nav.history"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="d-label">History</span></a>
+        <a href="#" class="drawer-link" data-page="portfolio" id="drawer-portfolio" data-i18n="nav.portfolio"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg></span><span class="d-label">Portfolio</span></a>
+        <a href="#" class="drawer-link" data-page="compare" id="drawer-compare" data-i18n="nav.compare"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11M7 12h11M7 17h11"/><path d="M4 7h.01M4 12h.01M4 17h.01"/></svg></span><span class="d-label">Compare</span></a>
+        </div>
+        <div class="drawer-group">
+          <div class="drawer-group-label" data-i18n="drawer.account">ACCOUNT</div>
+        <a href="#" class="drawer-link" data-page="account" id="drawer-account" data-i18n="nav.account"><span class="d-ico"><svg class="d-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 14.5-4 16 0"/></svg></span><span class="d-label">Account</span></a>
+          <div class="drawer-lang-row">
+            <span class="drawer-group-label" data-i18n="drawer.language" style="margin:0">Language</span>
+            <div class="lang-switch drawer-lang">
+              <button type="button" class="lang-btn active" data-lang="ru" onclick="setLanguage('ru')">RU</button>
+              <button type="button" class="lang-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <div class="nav-drawer-section drawer-actions">
+        <button type="button" class="connect-btn full" id="drawer-theme" data-i18n="drawer.theme">Тема</button>
         <button type="button" class="upgrade-btn full plan-btn" data-plan="premium" id="drawer-upgrade" data-i18n="nav.upgrade">Тарифы</button>
         <button type="button" class="connect-btn full" id="drawer-auth" data-i18n="nav.login">Войти</button>
       </div>
@@ -95,6 +104,7 @@
         <a href="https://t.me/Crypto_AI_Scanner" target="_blank" rel="noopener">TG RU</a>
         <a href="https://t.me/crypto_ai_scanner_en" target="_blank" rel="noopener">TG EN</a>
         <a href="/privacy.html">Privacy</a>
+        <a href="/methodology.html">Risk</a>
       </div>
     </aside>
 
