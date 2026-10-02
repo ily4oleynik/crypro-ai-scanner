@@ -445,7 +445,7 @@
             <button type="button" class="upgrade-btn" id="acc-pay-pro" onclick="startCheckout('pro')">Pro $39</button>
             <button type="button" class="connect-btn" id="acc-cancel-sub" style="display:none">Cancel plan</button>
           </div>
-          <p class="muted small" style="margin-top:0.5rem" data-i18n="account.payHint">Оплата включается после PAYMENTS_ENABLED + ЮKassa. Пока — waitlist.</p>
+          <p class="muted small" style="margin-top:0.5rem" data-i18n="account.payHint">РФ: ЮKassa (карта/СБП). Международно: бот · USDT TRC20.</p>
         </div>
 
         <div class="glass panel-block">
@@ -608,8 +608,9 @@
             <li>Свечной график · ручные сканы</li>
             <li class="muted">Не включает Portfolio Desk / batch / early feed</li>
           </ul>
-          <button type="button" class="upgrade-btn full pay-plan-btn" data-plan="premium" style="display:none" onclick="startCheckout('premium')">Pay Premium · $19</button>
-          <button type="button" class="connect-btn full waitlist-btn" data-plan="premium">Waitlist · Premium $19</button>
+          <button type="button" class="upgrade-btn full pay-plan-btn" data-plan="premium" style="display:none" onclick="startCheckout('premium')">Карта РФ / СБП · $19</button>
+          <button type="button" class="connect-btn full" onclick="payViaTelegram('premium')">Pay via Telegram · USDT</button>
+          <button type="button" class="connect-btn full waitlist-btn" data-plan="premium" style="display:none">Waitlist · Premium $19</button>
           <button type="button" class="upgrade-btn full pricing-pick demo-plan-btn" data-plan="premium" style="margin-top:0.5rem;display:none">Демо Premium</button>
         </div>
 
@@ -625,8 +626,9 @@
             <li>Batch scan до 25 адресов</li>
             <li>Risk history 30d · Bybit как источник портфеля</li>
           </ul>
-          <button type="button" class="upgrade-btn full pay-plan-btn" data-plan="pro" style="display:none" onclick="startCheckout('pro')">Pay Pro · $39</button>
-          <button type="button" class="connect-btn full waitlist-btn" data-plan="pro">Waitlist · Pro $39</button>
+          <button type="button" class="upgrade-btn full pay-plan-btn" data-plan="pro" style="display:none" onclick="startCheckout('pro')">Карта РФ / СБП · $39</button>
+          <button type="button" class="connect-btn full" onclick="payViaTelegram('pro')">Pay via Telegram · USDT</button>
+          <button type="button" class="connect-btn full waitlist-btn" data-plan="pro" style="display:none">Waitlist · Pro $39</button>
           <button type="button" class="upgrade-btn full pricing-pick demo-plan-btn" data-plan="pro" style="margin-top:0.5rem;display:none">Демо Pro</button>
         </div>
       </div>
