@@ -370,12 +370,45 @@ app.post(
         process.env.PUBLIC_URL ||
         'https://crypro-ai-scanner-production-6ecd.up.railway.app/';
       const auth = Buffer.from(shopId + ':' + secret).toString('base64');
+      const customerEmail = String(req.user.email || req.body.email || '').trim();
+      if (!customerEmail || !customerEmail.includes('@')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Для чека нужен email в аккаунте. Укажите email при регистрации или в кабинете.'
+        });
+      }
+      // 54-FZ receipt required when "Чеки от ЮKassa" is enabled
+      // vat_code 1 = без НДС (типично для УСН)
+      const itemTitle =
+        plan === 'pro'
+          ? 'Подписка Crypto AI Scanner Pro, 30 дней'
+          : 'Подписка Crypto AI Scanner Premium, 30 дней';
       const payload = {
         amount: { value: amounts[plan], currency: 'RUB' },
-        confirmation: { type: 'redirect', return_url: returnUrl + '?paid=1&plan=' + plan },
+        confirmation: {
+          type: 'redirect',
+          return_url: String(returnUrl).replace(/\/?$/, '/') + '?paid=1&plan=' + plan
+        },
         capture: true,
-        description: 'Crypto AI Scanner ' + plan + ' ($' + (plan === 'pro' ? '39' : '19') + '/mo)',
-        metadata: { userId: String(req.user.id), plan: plan, email: req.user.email || '' }
+        description: itemTitle,
+        metadata: {
+          userId: String(req.user.id),
+          plan: plan,
+          email: customerEmail
+        },
+        receipt: {
+          customer: { email: customerEmail },
+          items: [
+            {
+              description: itemTitle.slice(0, 128),
+              quantity: '1.00',
+              amount: { value: amounts[plan], currency: 'RUB' },
+              vat_code: 1,
+              payment_mode: 'full_payment',
+              payment_subject: 'service'
+            }
+          ]
+        }
       };
       const r = await axios.post('https://api.yookassa.ru/v3/payments', payload, {
         headers: {
@@ -393,9 +426,13 @@ app.post(
       });
     } catch (e) {
       console.error('[billing]', e.response?.data || e.message);
+      const yooErr =
+        e.response?.data?.description ||
+        (e.response?.data?.code ? String(e.response.data.code) : null) ||
+        e.message;
       res.status(500).json({
         success: false,
-        error: e.response?.data?.description || e.message || 'Payment error'
+        error: yooErr || 'Payment error'
       });
     }
   }
