@@ -624,6 +624,7 @@ async function loadPublicConfig() {
     }
     window.__allowDemoPlans = !!data.allowDemoPlans;
     window.__paymentsEnabled = !!data.paymentsEnabled;
+    if (data.usdtTrc20) usdtTrc20 = data.usdtTrc20;
     document.querySelectorAll('.demo-plan-btn').forEach(function (b) {
       b.style.display = window.__allowDemoPlans ? 'block' : 'none';
     });
@@ -658,6 +659,21 @@ async function startCheckout(plan) {
   }
 }
 window.startCheckout = startCheckout;
+
+let usdtTrc20 = 'TLZS82t13Qvvo9egwu7LXE8VJQgFduMFNp';
+
+function payViaTelegram(plan) {
+  plan = (plan || 'premium').toLowerCase();
+  if (plan !== 'pro') plan = 'premium';
+  const bot = (typeof tgBotUsername !== 'undefined' && tgBotUsername
+    ? tgBotUsername
+    : 'aicryptoscreenerbot'
+  ).replace(/^@/, '');
+  const startPayload = plan === 'pro' ? 'pay_pro' : 'pay_premium';
+  window.open('https://t.me/' + bot + '?start=' + startPayload, '_blank', 'noopener');
+}
+window.payViaTelegram = payViaTelegram;
+
 
 function mountTelegramLoginWidget() {
   const box = document.getElementById('tg-login-widget');
@@ -3998,7 +4014,7 @@ async function loadPortfolioDesk() {
       list.innerHTML =
         '<div class="empty-state-cta"><p>' +
         (data.error || 'Pro required') +
-        '</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Pro · $79</button></div>';
+        '</p><button type="button" class="upgrade-btn" onclick="openPricing(\'pro\')">Pro · $39</button></div>';
       summary.innerHTML = '';
       return;
     }
