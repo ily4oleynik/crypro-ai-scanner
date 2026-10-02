@@ -172,6 +172,29 @@ async function handleUpdate(update, tgLinkCodes) {
   if (text.startsWith('/start')) {
     const parts = text.split(/\s+/);
     const code = parts[1];
+    // Payment deep-link: /start pay_premium | pay_pro
+    if (code && (String(code).toLowerCase() === 'pay_premium' || String(code).toLowerCase() === 'pay_pro')) {
+      const isPro = String(code).toLowerCase() === 'pay_pro';
+      const usdt =
+        process.env.USDT_TRC20_ADDRESS ||
+        'TLZS82t13Qvvo9egwu7LXE8VJQgFduMFNp';
+      const amount = isPro ? '39' : '19';
+      const planName = isPro ? 'Pro' : 'Premium';
+      await sendMessage(
+        chatId,
+        `💳 <b>Оплата ${planName}</b>\n\n` +
+          `Сумма: <b>${amount} USDT</b>\n` +
+          `Сеть: <b>TRC20 (TRON)</b> only\n\n` +
+          `Адрес:\n<code>${usdt}</code>\n\n` +
+          `После оплаты пришлите:\n` +
+          `• email аккаунта на сайте\n` +
+          `• tx hash\n` +
+          `• тариф ${planName}\n\n` +
+          `РФ: оплата картой на сайте (ЮKassa).`
+      );
+      return;
+    }
+
     if (!code) {
       let channels = '';
       if (channelRu) channels += `\nRU: ${channelRu}`;
@@ -226,7 +249,47 @@ async function handleUpdate(update, tgLinkCodes) {
     return;
   }
 
-  if (text === '/status' || text.startsWith('/status')) {
+  
+  // ---- /pay /premium /pro — USDT TRC20 via bot only ----
+  if (
+    text === '/pay' ||
+    text.startsWith('/pay ') ||
+    text === '/premium' ||
+    text === '/pro' ||
+    text.startsWith('/premium') ||
+    text.startsWith('/pro')
+  ) {
+    const usdt =
+      process.env.USDT_TRC20_ADDRESS ||
+      'TLZS82t13Qvvo9egwu7LXE8VJQgFduMFNp';
+    let plan = 'premium';
+    const low = text.toLowerCase();
+    if (low.includes('pro')) plan = 'pro';
+    if (low.startsWith('/pay')) {
+      const p = text.split(/\s+/)[1];
+      if (p && String(p).toLowerCase().includes('pro')) plan = 'pro';
+    }
+    const amount = plan === 'pro' ? '39' : '19';
+    const planName = plan === 'pro' ? 'Pro' : 'Premium';
+    await sendMessage(
+      chatId,
+      `💳 <b>Оплата ${planName}</b>\n\n` +
+        `Сумма: <b>${amount} USDT</b>\n` +
+        `Сеть: <b>TRC20 (TRON)</b> — только эта сеть!\n\n` +
+        `Адрес:\n<code>${usdt}</code>\n\n` +
+        `После оплаты пришлите сюда одним сообщением:\n` +
+        `1) email аккаунта на сайте\n` +
+        `2) tx hash (ссылка Tronscan)\n` +
+        `3) тариф (${planName})\n\n` +
+        `Активация вручную после проверки перевода.\n` +
+        `РФ-карты / СБП — оплата на сайте через ЮKassa.\n\n` +
+        `/pay premium — 19 USDT\n` +
+        `/pay pro — 39 USDT`
+    );
+    return;
+  }
+
+if (text === '/status' || text.startsWith('/status')) {
     await sendMessage(
       chatId,
       `🤖 Bot is online\n` +
