@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('acc-logout')?.addEventListener('click', () => logout());
 
   document.getElementById('pricing-close')?.addEventListener('click', closePricing);
+  if (typeof bindPayButtons === 'function') bindPayButtons();
   document.querySelectorAll('.pricing-pick').forEach(btn => {
     btn.addEventListener('click', () => selectPlan(btn.dataset.plan));
   });
@@ -494,6 +495,10 @@ function openPricing(highlightPlan) {
   document.querySelectorAll('.price-card').forEach(card => {
     card.classList.toggle('featured', !!highlightPlan && card.dataset.plan === highlightPlan);
   });
+  document.querySelectorAll('.pay-plan-btn').forEach(function (b) {
+    b.style.display = 'block';
+  });
+  if (typeof bindPayButtons === 'function') bindPayButtons();
 }
 
 function closePricing() {
@@ -635,30 +640,71 @@ async function loadPublicConfig() {
 }
 
 async function startCheckout(plan) {
-  plan = plan || 'premium';
+  plan = (plan || 'premium').toLowerCase();
+  if (plan !== 'pro') plan = 'premium';
+  const en = (localStorage.getItem('lang') || 'ru') === 'en';
   if (!user) {
-    openAuthModal('Sign in to subscribe');
+    closePricing();
+    openAuthModal(en ? 'Sign in to pay by card' : 'Войдите, чтобы оплатить картой');
     return;
   }
+  // Visual feedback on all card buttons
+  document.querySelectorAll('.pay-plan-btn').forEach(function (b) {
+    b.disabled = true;
+    b.dataset._old = b.textContent;
+    if (b.getAttribute('data-plan') === plan) {
+      b.textContent = en ? 'Opening payment…' : 'Открываем оплату…';
+    }
+  });
   try {
     const res = await apiFetch('/api/billing/create-payment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan: plan })
     });
-    const data = await res.json();
+    const data = await res.json().catch(function () { return {}; });
     if (data.confirmationUrl) {
-      window.location.href = data.confirmationUrl;
+      // Mobile Safari: assign more reliable than href in some webviews
+      window.location.assign(data.confirmationUrl);
       return;
     }
-    alert(data.error || 'Payment unavailable — use waitlist');
-    const box = document.getElementById('waitlist-box');
-    if (box) box.style.display = 'block';
+    const err = data.error || (en ? 'Payment unavailable' : 'Оплата недоступна');
+    alert(err + (en ? '\n\nYou can pay via Telegram (USDT).' : '\n\nМожно оплатить через Telegram (USDT).'));
   } catch (e) {
-    alert('Network error');
+    alert(en ? 'Network error' : 'Ошибка сети');
+  } finally {
+    document.querySelectorAll('.pay-plan-btn').forEach(function (b) {
+      b.disabled = false;
+      if (b.dataset._old) b.textContent = b.dataset._old;
+    });
   }
 }
 window.startCheckout = startCheckout;
+
+function bindPayButtons() {
+  document.querySelectorAll('.pay-plan-btn').forEach(function (btn) {
+    if (btn.dataset.payBound) return;
+    btn.dataset.payBound = '1';
+    btn.style.display = 'block';
+    btn.style.pointerEvents = 'auto';
+    btn.style.position = 'relative';
+    btn.style.zIndex = '5';
+    var handler = function (e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      var p = btn.getAttribute('data-plan') || 'premium';
+      startCheckout(p);
+    };
+    btn.addEventListener('click', handler, { passive: false });
+    btn.addEventListener('touchend', function (e) {
+      e.preventDefault();
+      handler(e);
+    }, { passive: false });
+  });
+}
+
 
 let usdtTrc20 = 'TLZS82t13Qvvo9egwu7LXE8VJQgFduMFNp';
 
