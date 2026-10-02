@@ -486,6 +486,8 @@ app.get('/api/config/public', (req, res) => {
     success: true,
     paymentsEnabled,
     telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || 'aicryptoscreenerbot',
+    usdtTrc20: process.env.USDT_TRC20_ADDRESS || 'TLZS82t13Qvvo9egwu7LXE8VJQgFduMFNp',
+    pricesUsd: { premium: 19, pro: 39 },
     channelRu: process.env.TELEGRAM_CHANNEL_URL_RU || 'https://t.me/Crypto_AI_Scanner',
     channelEn: process.env.TELEGRAM_CHANNEL_URL_EN || 'https://t.me/crypto_ai_scanner_en',
     allowDemoPlans: String(process.env.ALLOW_DEMO_PLANS || '').toLowerCase() === 'true'
