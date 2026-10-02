@@ -1065,10 +1065,23 @@ app.get(
       }
 
       const dexResponse = await axios.get(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
-        { timeout: 10000 }
+        `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(tokenAddress)}`,
+        { timeout: 12000 }
       );
-      const pair = pickBestDexPair(dexResponse.data.pairs || [], address);
+      const pairs = dexResponse.data?.pairs || [];
+      // BUGFIX: was `address` (undefined) → ReferenceError → fake success stub
+      const pair = pickBestDexPair(pairs, tokenAddress);
+      if (!pair || !pair.pairAddress) {
+        return res.status(404).json({
+          success: false,
+          degraded: true,
+          error:
+            lang === 'en'
+              ? 'No DEX pool found for this address. Check contract / network.'
+              : 'Пул на DEX не найден. Проверьте адрес и сеть контракта.',
+          tokenAddress
+        });
+      }
       const base = {
         symbol: pair.baseToken?.symbol || 'TOKEN',
         name: pair.baseToken?.name || '',
@@ -1307,20 +1320,22 @@ app.get(
         usage: currentUsage
       });
     } catch (error) {
-      console.error(error.message);
-      res.json({
-        success: true,
-        plan,
-        token: { symbol: String(tokenAddress).slice(0, 8) + '...' },
-        risk: { riskScore: 50, riskLevel: 'MEDIUM', confidence: 40, reasons: [] },
-        ai: {
-          text: 'Не удалось загрузить данные',
-          confidence: 30,
-          verdict: 'Ошибка',
-          risks: [],
-          positives: []
-        },
-        usage: await store.canScan(req.user)
+      console.error('[scan]', error.message, error.stack?.split('\n')[1] || '');
+      let usage = { used: 0, limit: 5, allowed: true };
+      try {
+        usage = await store.canScan(req.user);
+      } catch (e2) {}
+      // Honest failure — never fake a "successful" score-50 report
+      res.status(503).json({
+        success: false,
+        degraded: true,
+        error:
+          lang === 'en'
+            ? 'Provider temporarily unavailable. Please retry in a moment.'
+            : 'Провайдер временно недоступен. Повторите через минуту.',
+        detail: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        plan: plan || 'free',
+        usage
       });
     }
   }
