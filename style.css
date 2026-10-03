@@ -2757,3 +2757,6 @@ button.home-chip.example-token:hover,
     padding-bottom: 2rem;
   }
 }
+
+.candle-chart { min-height: 280px !important; width: 100% !important; position: relative; }
+.chart-wrapper { min-height: 320px; }
