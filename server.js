@@ -1200,7 +1200,7 @@ app.get(
         });
         if (filtered.length) pairs = filtered;
       }
-      const pair = pickBestDexPair(pairs, tokenAddress);
+      const pair = pickBestDexPair(pairs, tokenAddress, preferredChain);
       if (!pair || !pair.pairAddress) {
         return res.status(404).json({
           success: false,
@@ -1592,10 +1592,12 @@ app.delete('/api/alerts/:id', authMiddleware, async (req, res) => {
 
 
 /** Prefer major chains for well-known addresses; else highest liquidity */
-function pickBestDexPair(pairs, address) {
+function pickBestDexPair(pairs, address, preferredChain) {
   let list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
   if (!list.length) return {};
   const addr = String(address || '').toLowerCase();
+  const chainHint = String(preferredChain || '').toLowerCase().trim();
+
   const ETH_CANON = {
     '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true,
     '0xdac17f958d2ee523a2206206994597c13d831ec7': true,
@@ -1604,9 +1606,36 @@ function pickBestDexPair(pairs, address) {
     '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true,
     '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true
   };
-  const preferEth = !!ETH_CANON[addr];
 
-  if (preferEth) {
+  // Quotes that usually give a sane USD price for the base token
+  const MAJOR_QUOTE = {
+    WETH: true, ETH: true, USDC: true, USDT: true, DAI: true, WBTC: true,
+    USDe: true, USD1: true, FRAX: true,
+    WBNB: true, BNB: true, BUSD: true,
+    WMATIC: true, MATIC: true, POL: true,
+    WAVAX: true, AVAX: true,
+    SOL: true, WSOL: true,
+    TRX: true, WTRX: true,
+    TON: true
+  };
+
+  const MAJOR_CHAIN = {
+    ethereum: true, eth: true, bsc: true, base: true, arbitrum: true,
+    optimism: true, polygon: true, avalanche: true, solana: true, tron: true
+  };
+
+  // 1) User-selected chain
+  if (chainHint && chainHint !== 'auto') {
+    const byChain = list.filter(function (p) {
+      const c = String(p.chainId || '').toLowerCase();
+      if (chainHint === 'ethereum' || chainHint === 'eth') return c === 'ethereum' || c === 'eth';
+      return c === chainHint || c.indexOf(chainHint) !== -1;
+    });
+    if (byChain.length) list = byChain;
+  }
+
+  // 2) Canonical ETH contracts → ethereum only
+  if (ETH_CANON[addr]) {
     const ethOnly = list.filter(function (p) {
       const c = String(p.chainId || '').toLowerCase();
       return c === 'ethereum' || c === 'eth';
@@ -1614,18 +1643,48 @@ function pickBestDexPair(pairs, address) {
     if (ethOnly.length) list = ethOnly;
   }
 
+  // 3) Drop PulseChain / low-trust when alternatives exist
   const nonPulse = list.filter(function (p) {
     const c = String(p.chainId || '').toLowerCase();
     return c !== 'pulsechain' && c !== 'pulse';
   });
   if (nonPulse.length) list = nonPulse;
 
-  // Prefer pairs where scanned token is BASE (priceUsd = token price)
+  // 4) Prefer major chains when mixed
+  const majorChain = list.filter(function (p) {
+    return MAJOR_CHAIN[String(p.chainId || '').toLowerCase()];
+  });
+  if (majorChain.length) list = majorChain;
+
+  // 5) Prefer scanned token as BASE (priceUsd ≈ token price)
   const asBase = list.filter(function (p) {
     return String((p.baseToken && p.baseToken.address) || '').toLowerCase() === addr;
   });
   if (asBase.length) list = asBase;
 
+  // 6) Prefer major quote assets (kills UNI/REN @ 8.5M style pools)
+  const withMajor = list.filter(function (p) {
+    const q = String((p.quoteToken && p.quoteToken.symbol) || '').toUpperCase();
+    return MAJOR_QUOTE[q];
+  });
+  if (withMajor.length) list = withMajor;
+
+  // 7) Price outlier filter vs median
+  const prices = list
+    .map(function (p) { return Number(p.priceUsd) || 0; })
+    .filter(function (x) { return x > 0; })
+    .sort(function (a, b) { return a - b; });
+  if (prices.length >= 3) {
+    const mid = prices[Math.floor(prices.length / 2)];
+    const filtered = list.filter(function (p) {
+      const pr = Number(p.priceUsd) || 0;
+      if (pr <= 0) return false;
+      return pr < mid * 20 && pr > mid / 20;
+    });
+    if (filtered.length) list = filtered;
+  }
+
+  // 8) Highest liquidity wins
   list.sort(function (a, b) {
     const liqA = Number(a.liquidity && a.liquidity.usd) || 0;
     const liqB = Number(b.liquidity && b.liquidity.usd) || 0;
@@ -1634,7 +1693,6 @@ function pickBestDexPair(pairs, address) {
   return list[0] || {};
 }
 
-/** Resolve symbol/name/address for the scanned contract (base or quote side) */
 function resolveScannedToken(pair, tokenAddress) {
   const addr = String(tokenAddress || '').toLowerCase();
   const b = (pair && pair.baseToken) || {};
