@@ -1457,9 +1457,21 @@ async function startScan() {
   chatHistory = [];
   try {
     const _lang = (typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru';
-    const res = await apiFetch('/api/scan/' + encodeURIComponent(address) + '?plan=' + encodeURIComponent(currentPlan || 'free') + '&lang=' + encodeURIComponent(_lang), {
-      headers: token ? { Authorization: 'Bearer ' + token } : {}
-    });
+    const _chainEl = document.getElementById('chain-select');
+    const _chain =
+      _chainEl && _chainEl.value && _chainEl.value !== 'auto' ? _chainEl.value : '';
+    const res = await apiFetch(
+      '/api/scan/' +
+        encodeURIComponent(address) +
+        '?plan=' +
+        encodeURIComponent(currentPlan || 'free') +
+        '&lang=' +
+        encodeURIComponent(_lang) +
+        (_chain ? '&chain=' + encodeURIComponent(_chain) : ''),
+      {
+        headers: token ? { Authorization: 'Bearer ' + token } : {}
+      }
+    );
     let data;
     try {
       data = await res.json();
@@ -3810,44 +3822,116 @@ function openDemoReport() {
 }
 
 
+/** Same idea as server pickBestDexPair — never let PulseChain USDT clones win */
+function pickBestPairClient(pairs, address, preferredChain) {
+  const list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
+  if (!list.length) return null;
+  const addr = String(address || '').toLowerCase();
+  const ETH_CANON = {
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true,
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': true,
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true,
+    '0x514910771af9ca656af840dff83e8264ecf986ca': true,
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true,
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true
+  };
+  const STABLES = { USDT: true, USDC: true, DAI: true };
+  const preferEth = ETH_CANON[addr];
+  const pref = String(preferredChain || '').toLowerCase();
+  const score = function (p) {
+    const c = String(p.chainId || '').toLowerCase();
+    const sym = String((p.baseToken && p.baseToken.symbol) || '').toUpperCase();
+    const liq = Number(p.liquidity && p.liquidity.usd) || 0;
+    let s = Math.log10(liq + 1);
+    if (c === 'pulsechain' || c === 'pulse') s -= 500;
+    if (pref && (c === pref || (pref === 'ethereum' && (c === 'eth' || c === 'ethereum')))) s += 300;
+    if (preferEth || STABLES[sym]) {
+      if (c === 'ethereum' || c === 'eth') s += 200;
+      else if (c === 'arbitrum' || c === 'base') s += 40;
+      else s -= 20;
+    } else if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron') {
+      s += 15;
+    }
+    return s;
+  };
+  list.sort(function (a, b) {
+    return score(b) - score(a);
+  });
+  if (preferEth || list.some(function (p) { return STABLES[String((p.baseToken && p.baseToken.symbol) || '').toUpperCase()]; })) {
+    const eth = list.find(function (p) {
+      const c = String(p.chainId || '').toLowerCase();
+      const s = String((p.baseToken && p.baseToken.symbol) || '').toUpperCase();
+      const liq = Number(p.liquidity && p.liquidity.usd) || 0;
+      return (c === 'ethereum' || c === 'eth') && (!STABLES[s] || liq > 50000);
+    });
+    if (eth) return eth;
+  }
+  return list[0];
+}
+
 async function enrichTokenMarket(data, address) {
   if (!data || !data.token) return data;
   const tok = data.token;
+  const serverChain = String(tok.chainId || '').toLowerCase();
+  const chainSelect = document.getElementById('chain-select');
+  const preferredChain =
+    (chainSelect && chainSelect.value && chainSelect.value !== 'auto' && chainSelect.value) ||
+    serverChain ||
+    '';
   try {
     const url = 'https://api.dexscreener.com/latest/dex/tokens/' + encodeURIComponent(address);
     const res = await fetch(url);
     const j = await res.json();
     const pairs = Array.isArray(j.pairs) ? j.pairs.slice() : [];
     if (pairs.length) {
-      pairs.sort(function (a, b) {
-        return (Number(b.liquidity && b.liquidity.usd) || 0) - (Number(a.liquidity && a.liquidity.usd) || 0);
-      });
-      const p = pairs[0];
-      tok.marketCap = numOr(tok.marketCap, p.marketCap, p.fdv);
-      tok.fdv = numOr(tok.fdv, p.fdv, p.marketCap);
-      tok.liquidity = numOr(tok.liquidity, p.liquidity && p.liquidity.usd);
-      tok.volume24h = numOr(tok.volume24h, p.volume && p.volume.h24);
-      tok.price = tok.price || p.priceUsd || null;
-      tok.pairAddress = tok.pairAddress || p.pairAddress || null;
-      tok.chainId = (p.chainId || tok.chainId || detectChainFromAddress(address) || 'unknown').toLowerCase();
-      tok.dexId = p.dexId || tok.dexId || null;
-      tok.pairUrl = p.url || null;
-      if (p.baseToken) {
-        tok.symbol = tok.symbol || p.baseToken.symbol;
-        tok.name = tok.name || p.baseToken.name;
+      const p = pickBestPairClient(pairs, address, preferredChain);
+      if (p) {
+        // Fill gaps only — do not stomp a good server Ethereum result with PulseChain
+        const pChain = String(p.chainId || '').toLowerCase();
+        const isPulse = pChain === 'pulsechain' || pChain === 'pulse';
+        const serverIsEth = serverChain === 'ethereum' || serverChain === 'eth';
+        if (!(serverIsEth && isPulse)) {
+          tok.marketCap = numOr(tok.marketCap, p.marketCap, p.fdv);
+          tok.fdv = numOr(tok.fdv, p.fdv, p.marketCap);
+          tok.liquidity = numOr(tok.liquidity, p.liquidity && p.liquidity.usd);
+          tok.volume24h = numOr(tok.volume24h, p.volume && p.volume.h24);
+          if (!tok.price || Number(tok.price) === 0) tok.price = p.priceUsd != null ? Number(p.priceUsd) : tok.price;
+          if (!tok.pairAddress) tok.pairAddress = p.pairAddress || null;
+          if (!serverChain || serverChain === 'unknown' || !serverIsEth) {
+            tok.chainId = pChain || serverChain || detectChainFromAddress(address) || 'unknown';
+          }
+          tok.dexId = tok.dexId || p.dexId || null;
+          tok.pairUrl = tok.pairUrl || p.url || null;
+          if (p.baseToken) {
+            tok.symbol = tok.symbol || p.baseToken.symbol;
+            tok.name = tok.name || p.baseToken.name;
+          }
+        } else {
+          // keep server eth fields; only fill missing metrics from eth pairs
+          const ethP =
+            pairs.find(function (x) {
+              const c = String(x.chainId || '').toLowerCase();
+              return c === 'ethereum' || c === 'eth';
+            }) || p;
+          if (ethP && !isPulse) {
+            tok.marketCap = numOr(tok.marketCap, ethP.marketCap, ethP.fdv);
+            tok.fdv = numOr(tok.fdv, ethP.fdv, ethP.marketCap);
+            tok.liquidity = numOr(tok.liquidity, ethP.liquidity && ethP.liquidity.usd);
+            tok.volume24h = numOr(tok.volume24h, ethP.volume && ethP.volume.h24);
+          }
+        }
       }
     } else {
-      tok.chainId = (tok.chainId || detectChainFromAddress(address) || 'unknown').toLowerCase();
+      tok.chainId = serverChain || detectChainFromAddress(address) || 'unknown';
     }
   } catch (e) {
-    tok.chainId = (tok.chainId || detectChainFromAddress(address) || 'unknown').toLowerCase();
+    tok.chainId = serverChain || detectChainFromAddress(address) || 'unknown';
   }
   data.token = tok;
   data.risk = data.risk || {};
   data.risk.reasons = mergeReasons(data.risk.reasons, buildChainRiskReasons(tok, address));
-  // bump score slightly if imposter
   const hasImposter = (data.risk.reasons || []).some(function (x) {
-    return /not native|обёртк|wrapper|imposter|не нативный|TRC20|поддел/i.test(String(x));
+    return /not native|обёртк|wrapper|imposter|не нативный|TRC20|поддел|PulseChain/i.test(String(x));
   });
   if (hasImposter && data.risk.riskScore != null) {
     data.risk.riskScore = Math.min(95, Number(data.risk.riskScore) + 15);
