@@ -1108,6 +1108,9 @@ app.get(
     const { tokenAddress } = req.params;
     const plan = (req.query.plan || getPlan(req.user) || 'free').toLowerCase();
     const lang = String(req.query.lang || req.headers['accept-language'] || 'ru').toLowerCase().startsWith('en') ? 'en' : 'ru';
+    const preferredChain = String(req.query.chain || '')
+      .toLowerCase()
+      .trim();
     if (!tokenAddress || tokenAddress.length < 8 || tokenAddress.length > 128) {
       return res.status(400).json({ success: false, error: 'Некорректный адрес' });
     }
@@ -1122,7 +1125,17 @@ app.get(
         });
       }
 
-      const pairs = await fetchDexPairs(tokenAddress);
+      let pairs = await fetchDexPairs(tokenAddress);
+      if (preferredChain && preferredChain !== 'auto') {
+        const filtered = pairs.filter(function (p) {
+          const c = String(p.chainId || '').toLowerCase();
+          if (preferredChain === 'ethereum' || preferredChain === 'eth') {
+            return c === 'ethereum' || c === 'eth';
+          }
+          return c === preferredChain || c.indexOf(preferredChain) !== -1;
+        });
+        if (filtered.length) pairs = filtered;
+      }
       const pair = pickBestDexPair(pairs, tokenAddress);
       if (!pair || !pair.pairAddress) {
         return res.status(404).json({
