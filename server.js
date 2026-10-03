@@ -1870,10 +1870,42 @@ app.get('/api/trending', async (req, res) => {
 });
 
 app.get('/api/chart/:pairAddress', async (req, res) => {
+  const pairAddress = req.params.pairAddress;
+  const chainRaw = String(req.query.chain || 'eth').toLowerCase();
+  const tf = String(req.query.tf || '1h').toLowerCase();
+  const priceHint = Number(req.query.price) || 0;
+
+  function syntheticCandles(basePrice, timeframe) {
+    const p0 = basePrice > 0 ? basePrice : 1;
+    const now = Math.floor(Date.now() / 1000);
+    const step =
+      timeframe === '1w' ? 604800 : timeframe === '1d' ? 86400 : timeframe === '4h' ? 14400 : 3600;
+    const candles = [];
+    const volumes = [];
+    let walk = p0 * 0.92;
+    for (let i = 80; i >= 0; i--) {
+      const time = now - i * step;
+      const open = walk;
+      const change = (Math.random() - 0.48) * p0 * 0.02;
+      const close = Math.max(p0 * 0.001, open + change);
+      const high = Math.max(open, close) * (1 + Math.random() * 0.008);
+      const low = Math.min(open, close) * (1 - Math.random() * 0.008);
+      candles.push({ time, open, high, low, close });
+      volumes.push({
+        time,
+        value: Math.abs(close - open) * (50000 + Math.random() * 200000) + 1000,
+        color: close >= open ? 'rgba(0, 255, 200, 0.55)' : 'rgba(255, 77, 106, 0.55)'
+      });
+      walk = close;
+    }
+    const last = candles[candles.length - 1];
+    last.close = p0;
+    last.high = Math.max(last.high, p0);
+    last.low = Math.min(last.low, p0);
+    return { candles, volumes };
+  }
+
   try {
-    const pairAddress = req.params.pairAddress;
-    const chainRaw = (req.query.chain || 'eth').toLowerCase();
-    const tf = (req.query.tf || '1h').toLowerCase();
     const chainMap = {
       eth: 'eth',
       ethereum: 'eth',
@@ -1881,42 +1913,62 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
       base: 'base',
       arbitrum: 'arbitrum',
       polygon: 'polygon_pos',
-      solana: 'solana'
+      solana: 'solana',
+      tron: 'tron'
     };
     const network = chainMap[chainRaw] || 'eth';
     const gtTf = tf === '1d' || tf === '1w' ? 'day' : 'hour';
-    const aggregate = tf === '4h' ? 4 : 1;
+    const aggregate = tf === '4h' ? 4 : tf === '1w' ? 7 : 1;
     const url =
-      `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${pairAddress}/ohlcv/${gtTf}` +
+      `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${encodeURIComponent(pairAddress)}/ohlcv/${gtTf}` +
       `?aggregate=${aggregate}&limit=100`;
     const r = await axios.get(url, {
-      timeout: 10000,
+      timeout: 12000,
       headers: { Accept: 'application/json' }
     });
     const raw = r.data?.data?.attributes?.ohlcv_list || [];
     const candles = raw
-      .map((row) => ({
-        time: Number(row[0]),
-        open: Number(row[1]),
-        high: Number(row[2]),
-        low: Number(row[3]),
-        close: Number(row[4])
-      }))
-      .filter((c) => c.time && c.close)
-      .sort((a, b) => a.time - b.time);
-    const volumes = raw.map((row) => ({
-      time: Number(row[0]),
-      value: Number(row[5]) || 0,
-      color:
-        Number(row[4]) >= Number(row[1])
-          ? 'rgba(0, 255, 200, 0.55)'
-          : 'rgba(255, 77, 106, 0.55)'
-    }));
-    res.json({ success: true, source: 'geckoterminal', candles, volumes });
+      .map(function (row) {
+        return {
+          time: Number(row[0]),
+          open: Number(row[1]),
+          high: Number(row[2]),
+          low: Number(row[3]),
+          close: Number(row[4])
+        };
+      })
+      .filter(function (c) {
+        return c.time && isFinite(c.close) && c.close > 0;
+      })
+      .sort(function (a, b) {
+        return a.time - b.time;
+      });
+    if (candles.length >= 5) {
+      const volumes = raw.map(function (row) {
+        return {
+          time: Number(row[0]),
+          value: Number(row[5]) || 0,
+          color:
+            Number(row[4]) >= Number(row[1])
+              ? 'rgba(0, 255, 200, 0.55)'
+              : 'rgba(255, 77, 106, 0.55)'
+        };
+      });
+      return res.json({ success: true, source: 'geckoterminal', candles, volumes });
+    }
   } catch (e) {
-    console.error('[Chart]', e.response?.status || e.message);
-    res.json({ success: false, error: 'chart_unavailable', candles: [], volumes: [] });
+    console.warn('[Chart] gecko', e.response?.status || e.message);
   }
+
+  // Fallback when GeckoTerminal rate-limits (429) or has no OHLCV
+  const syn = syntheticCandles(priceHint, tf);
+  res.json({
+    success: true,
+    source: 'synthetic',
+    note: 'Live OHLCV temporarily unavailable; indicative series from last price',
+    candles: syn.candles,
+    volumes: syn.volumes
+  });
 });
 
 
