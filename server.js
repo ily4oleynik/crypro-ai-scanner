@@ -1944,28 +1944,41 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
         return a.time - b.time;
       });
     if (candles.length >= 5) {
-      const volumes = raw.map(function (row) {
-        return {
-          time: Number(row[0]),
-          value: Number(row[5]) || 0,
-          color:
-            Number(row[4]) >= Number(row[1])
-              ? 'rgba(0, 255, 200, 0.55)'
-              : 'rgba(255, 77, 106, 0.55)'
-        };
-      });
-      return res.json({ success: true, source: 'geckoterminal', candles, volumes });
+      // Drop pools quoted the wrong way (UNI ~$10 shown as ~8,000,000)
+      let scaleOk = true;
+      if (priceHint > 0) {
+        const last = candles[candles.length - 1].close;
+        const mid = candles[Math.floor(candles.length / 2)].close;
+        const ref = last || mid;
+        if (ref > priceHint * 40 || ref < priceHint / 40) {
+          scaleOk = false;
+          console.warn('[Chart] scale mismatch', { ref: ref, priceHint: priceHint, pair: pairAddress });
+        }
+      }
+      if (scaleOk) {
+        const volumes = raw.map(function (row) {
+          return {
+            time: Number(row[0]),
+            value: Number(row[5]) || 0,
+            color:
+              Number(row[4]) >= Number(row[1])
+                ? 'rgba(0, 255, 200, 0.55)'
+                : 'rgba(255, 77, 106, 0.55)'
+          };
+        });
+        return res.json({ success: true, source: 'geckoterminal', candles: candles, volumes: volumes });
+      }
     }
   } catch (e) {
     console.warn('[Chart] gecko', e.response?.status || e.message);
   }
 
-  // Fallback when GeckoTerminal rate-limits (429) or has no OHLCV
+  // Fallback: 429, empty OHLCV, or absurd scale vs DexScreener USD price
   const syn = syntheticCandles(priceHint, tf);
   res.json({
     success: true,
     source: 'synthetic',
-    note: 'Live OHLCV temporarily unavailable; indicative series from last price',
+    note: 'Indicative series from last Dex USD price',
     candles: syn.candles,
     volumes: syn.volumes
   });
