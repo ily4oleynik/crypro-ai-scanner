@@ -2126,7 +2126,7 @@ app.get('/api/trending', async (req, res) => {
 });
 
 app.get('/api/chart/:pairAddress', async (req, res) => {
-  const pairAddress = req.params.pairAddress;
+  const pairAddress = String(req.params.pairAddress || '').trim();
   const chainRaw = String(req.query.chain || 'eth').toLowerCase();
   const tf = String(req.query.tf || '1h').toLowerCase();
   const priceHint = Number(req.query.price) || 0;
@@ -2135,21 +2135,27 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
     const p0 = basePrice > 0 ? basePrice : 1;
     const now = Math.floor(Date.now() / 1000);
     const step =
-      timeframe === '1w' ? 604800 : timeframe === '1d' ? 86400 : timeframe === '4h' ? 14400 : 3600;
+      timeframe === '1w'
+        ? 604800
+        : timeframe === '1d'
+          ? 86400
+          : timeframe === '4h'
+            ? 14400
+            : 3600;
     const candles = [];
     const volumes = [];
-    let walk = p0 * 0.92;
-    for (let i = 80; i >= 0; i--) {
+    let walk = p0 * 0.94;
+    for (let i = 90; i >= 0; i--) {
       const time = now - i * step;
       const open = walk;
-      const change = (Math.random() - 0.48) * p0 * 0.02;
-      const close = Math.max(p0 * 0.001, open + change);
-      const high = Math.max(open, close) * (1 + Math.random() * 0.008);
-      const low = Math.min(open, close) * (1 - Math.random() * 0.008);
-      candles.push({ time, open, high, low, close });
+      const change = (Math.random() - 0.48) * p0 * 0.015;
+      const close = Math.max(p0 * 0.0001, open + change);
+      const high = Math.max(open, close) * (1 + Math.random() * 0.006);
+      const low = Math.min(open, close) * (1 - Math.random() * 0.006);
+      candles.push({ time: time, open: open, high: high, low: low, close: close });
       volumes.push({
-        time,
-        value: Math.abs(close - open) * (50000 + Math.random() * 200000) + 1000,
+        time: time,
+        value: Math.abs(close - open) * (40000 + Math.random() * 180000) + 500,
         color: close >= open ? 'rgba(0, 255, 200, 0.55)' : 'rgba(255, 77, 106, 0.55)'
       });
       walk = close;
@@ -2158,60 +2164,84 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
     last.close = p0;
     last.high = Math.max(last.high, p0);
     last.low = Math.min(last.low, p0);
-    return { candles, volumes };
+    return { candles: candles, volumes: volumes };
   }
 
-  try {
-    const chainMap = {
-      eth: 'eth',
-      ethereum: 'eth',
-      bsc: 'bsc',
-      base: 'base',
-      arbitrum: 'arbitrum',
-      polygon: 'polygon_pos',
-      solana: 'solana',
-      tron: 'tron'
-    };
-    const network = chainMap[chainRaw] || 'eth';
-    const gtTf = tf === '1d' || tf === '1w' ? 'day' : 'hour';
-    const aggregate = tf === '4h' ? 4 : tf === '1w' ? 7 : 1;
-    const url =
-      `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${encodeURIComponent(pairAddress)}/ohlcv/${gtTf}` +
-      `?aggregate=${aggregate}&limit=100`;
-    const r = await axios.get(url, {
-      timeout: 12000,
-      headers: { Accept: 'application/json' }
-    });
-    const raw = r.data?.data?.attributes?.ohlcv_list || [];
-    const candles = raw
-      .map(function (row) {
-        return {
-          time: Number(row[0]),
-          open: Number(row[1]),
-          high: Number(row[2]),
-          low: Number(row[3]),
-          close: Number(row[4])
-        };
-      })
-      .filter(function (c) {
-        return c.time && isFinite(c.close) && c.close > 0;
-      })
-      .sort(function (a, b) {
-        return a.time - b.time;
+  function scaleOk(candles, hint) {
+    if (!(hint > 0) || !candles || !candles.length) return true;
+    const last = candles[candles.length - 1].close;
+    const mid = candles[Math.floor(candles.length / 2)].close;
+    const ref = last || mid;
+    return !(ref > hint * 40 || ref < hint / 40);
+  }
+
+  const chainMap = {
+    eth: 'eth',
+    ethereum: 'eth',
+    bsc: 'bsc',
+    base: 'base',
+    arbitrum: 'arbitrum',
+    polygon: 'polygon_pos',
+    solana: 'solana',
+    tron: 'tron'
+  };
+  const network = chainMap[chainRaw] || 'eth';
+
+  // GeckoTerminal timeframe combos to try (hour often 429; day more reliable)
+  const attempts = [];
+  if (tf === '1w') {
+    attempts.push({ path: 'day', aggregate: 7 });
+    attempts.push({ path: 'day', aggregate: 1 });
+  } else if (tf === '1d') {
+    attempts.push({ path: 'day', aggregate: 1 });
+    attempts.push({ path: 'hour', aggregate: 24 });
+  } else if (tf === '4h') {
+    attempts.push({ path: 'hour', aggregate: 4 });
+    attempts.push({ path: 'hour', aggregate: 1 });
+    attempts.push({ path: 'day', aggregate: 1 });
+  } else {
+    // 1h
+    attempts.push({ path: 'hour', aggregate: 1 });
+    attempts.push({ path: 'minute', aggregate: 15 });
+    attempts.push({ path: 'minute', aggregate: 5 });
+    attempts.push({ path: 'day', aggregate: 1 });
+  }
+
+  for (let i = 0; i < attempts.length; i++) {
+    const a = attempts[i];
+    try {
+      const url =
+        'https://api.geckoterminal.com/api/v2/networks/' +
+        network +
+        '/pools/' +
+        encodeURIComponent(pairAddress) +
+        '/ohlcv/' +
+        a.path +
+        '?aggregate=' +
+        a.aggregate +
+        '&limit=100';
+      const r = await axios.get(url, {
+        timeout: 12000,
+        headers: { Accept: 'application/json' }
       });
-    if (candles.length >= 5) {
-      // Drop pools quoted the wrong way (UNI ~$10 shown as ~8,000,000)
-      let scaleOk = true;
-      if (priceHint > 0) {
-        const last = candles[candles.length - 1].close;
-        const mid = candles[Math.floor(candles.length / 2)].close;
-        const ref = last || mid;
-        if (ref > priceHint * 40 || ref < priceHint / 40) {
-          scaleOk = false;
-          console.warn('[Chart] scale mismatch', { ref: ref, priceHint: priceHint, pair: pairAddress });
-        }
-      }
-      if (scaleOk) {
+      const raw = (r.data && r.data.data && r.data.data.attributes && r.data.data.attributes.ohlcv_list) || [];
+      const candles = raw
+        .map(function (row) {
+          return {
+            time: Number(row[0]),
+            open: Number(row[1]),
+            high: Number(row[2]),
+            low: Number(row[3]),
+            close: Number(row[4])
+          };
+        })
+        .filter(function (c) {
+          return c.time && isFinite(c.close) && c.close > 0;
+        })
+        .sort(function (a, b) {
+          return a.time - b.time;
+        });
+      if (candles.length >= 5 && scaleOk(candles, priceHint)) {
         const volumes = raw.map(function (row) {
           return {
             time: Number(row[0]),
@@ -2222,19 +2252,29 @@ app.get('/api/chart/:pairAddress', async (req, res) => {
                 : 'rgba(255, 77, 106, 0.55)'
           };
         });
-        return res.json({ success: true, source: 'geckoterminal', candles: candles, volumes: volumes });
+        return res.json({
+          success: true,
+          source: 'geckoterminal',
+          tf: tf,
+          candles: candles,
+          volumes: volumes
+        });
       }
+      if (candles.length >= 5 && !scaleOk(candles, priceHint)) {
+        console.warn('[Chart] scale mismatch', { tf: tf, pair: pairAddress, priceHint: priceHint });
+      }
+    } catch (e) {
+      console.warn('[Chart] gecko', a.path, a.aggregate, e.response && e.response.status || e.message);
     }
-  } catch (e) {
-    console.warn('[Chart] gecko', e.response?.status || e.message);
   }
 
-  // Fallback: 429, empty OHLCV, or absurd scale vs DexScreener USD price
-  const syn = syntheticCandles(priceHint, tf);
-  res.json({
+  // Always return drawable series (never empty chart on 1H/4H/1D)
+  const syn = syntheticCandles(priceHint > 0 ? priceHint : 1, tf);
+  return res.json({
     success: true,
     source: 'synthetic',
     note: 'Indicative series from last Dex USD price',
+    tf: tf,
     candles: syn.candles,
     volumes: syn.volumes
   });
