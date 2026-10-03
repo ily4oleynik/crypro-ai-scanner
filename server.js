@@ -31,6 +31,50 @@ try {
 const app = express();
 app.disable('x-powered-by');
 const PORT = process.env.PORT || 3000;
+
+/** Short cache + retry for DexScreener (avoids hard fail on 429) */
+const dexCache = new Map();
+async function fetchDexPairs(tokenAddress) {
+  const key = String(tokenAddress || '').toLowerCase();
+  const hit = dexCache.get(key);
+  if (hit && Date.now() - hit.ts < 90_000) {
+    return hit.pairs;
+  }
+  let lastErr = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      if (attempt > 0) {
+        await new Promise(function (r) {
+          setTimeout(r, 700 * attempt + Math.floor(Math.random() * 400));
+        });
+      }
+      const dexResponse = await axios.get(
+        'https://api.dexscreener.com/latest/dex/tokens/' +
+          encodeURIComponent(tokenAddress),
+        { timeout: 14000 }
+      );
+      const pairs = dexResponse.data?.pairs || [];
+      if (pairs.length) {
+        dexCache.set(key, { ts: Date.now(), pairs: pairs });
+        if (dexCache.size > 200) {
+          const first = dexCache.keys().next().value;
+          dexCache.delete(first);
+        }
+      }
+      return pairs;
+    } catch (e) {
+      lastErr = e;
+      const st = e.response?.status;
+      if (st !== 429 && st !== 503) break;
+      console.warn('[dex] retry', attempt + 1, st || e.message);
+    }
+  }
+  if (hit && hit.pairs) {
+    console.warn('[dex] using stale cache after errors');
+    return hit.pairs;
+  }
+  throw lastErr || new Error('DexScreener unavailable');
+}
 const _jwtEnv = process.env.JWT_SECRET || '';
 if (!_jwtEnv && (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT)) {
   console.error('[FATAL] JWT_SECRET is required in production. Set it in Railway Variables.');
@@ -1064,12 +1108,7 @@ app.get(
         });
       }
 
-      const dexResponse = await axios.get(
-        `https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(tokenAddress)}`,
-        { timeout: 12000 }
-      );
-      const pairs = dexResponse.data?.pairs || [];
-      // BUGFIX: was `address` (undefined) → ReferenceError → fake success stub
+      const pairs = await fetchDexPairs(tokenAddress);
       const pair = pickBestDexPair(pairs, tokenAddress);
       if (!pair || !pair.pairAddress) {
         return res.status(404).json({
@@ -1320,17 +1359,21 @@ app.get(
         usage: currentUsage
       });
     } catch (error) {
-      console.error('[scan]', error.message, error.stack?.split('\n')[1] || '');
+      const st = error.response?.status;
+      console.error('[scan]', st || error.message, error.stack?.split('\n')[1] || '');
       let usage = { used: 0, limit: 5, allowed: true };
       try {
         usage = await store.canScan(req.user);
       } catch (e2) {}
-      // Honest failure — never fake a "successful" score-50 report
-      res.status(503).json({
+      const rateLimited = st === 429 || /429/.test(String(error.message || ''));
+      res.status(rateLimited ? 429 : 503).json({
         success: false,
         degraded: true,
-        error:
-          lang === 'en'
+        error: rateLimited
+          ? lang === 'en'
+            ? 'Market data rate limit — wait 20–40 seconds and scan again.'
+            : 'Лимит запросов к рынку — подождите 20–40 сек и сканируйте снова.'
+          : lang === 'en'
             ? 'Provider temporarily unavailable. Please retry in a moment.'
             : 'Провайдер временно недоступен. Повторите через минуту.',
         detail: process.env.NODE_ENV === 'development' ? error.message : undefined,
