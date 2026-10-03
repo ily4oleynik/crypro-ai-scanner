@@ -1718,83 +1718,135 @@ function generateCandleAndVolumeData(currentPrice, timeframe) {
   return { candles, volumes };
 }
 
-async function fetchRealCandles(pairAddress, chainId, tf) {
-  if (!pairAddress) return null;
+async function fetchRealCandles(pairAddress, chainId, tf, priceHint) {
   const map = { '1H': '1h', '4H': '4h', '1D': '1d', '1W': '1w' };
+  const pair = pairAddress || 'unknown';
   try {
     const res = await apiFetch(
-      '/api/chart/' + encodeURIComponent(pairAddress) +
+      '/api/chart/' + encodeURIComponent(pair) +
       '?chain=' + encodeURIComponent(chainId || 'eth') +
-      '&tf=' + (map[tf] || '1h')
+      '&tf=' + (map[tf] || '1h') +
+      '&price=' + encodeURIComponent(priceHint || 0)
     );
     const data = await res.json();
-    if (!data.success || !data.candles?.length) return null;
+    if (!data.success || !data.candles || !data.candles.length) return null;
     return data;
   } catch (e) {
     return null;
   }
 }
 
+function resizeCandleChart() {
+  const container = document.getElementById('candle-chart');
+  if (!candleChart || !container) return;
+  const w = container.clientWidth || container.offsetWidth || 320;
+  const h = container.clientHeight || 360;
+  candleChart.applyOptions({ width: w, height: h });
+  try {
+    candleChart.timeScale().fitContent();
+  } catch (e) {}
+}
+
 async function initCandleChart(currentPrice) {
   const container = document.getElementById('candle-chart');
-  if (!container || typeof LightweightCharts === 'undefined') return;
+  if (!container) return;
+  if (typeof LightweightCharts === 'undefined') {
+    container.innerHTML =
+      '<p class="muted small" style="padding:1rem">Chart library failed to load</p>';
+    return;
+  }
   container.innerHTML = '';
+  const price = Number(currentPrice) > 0 ? Number(currentPrice) : 1;
   const bg = getComputedStyle(document.body).getPropertyValue('--bg2').trim() || '#141825';
+  const w = Math.max(container.clientWidth || 0, container.parentElement?.clientWidth || 0, 280);
+  try {
+    if (candleChart) {
+      try {
+        candleChart.remove();
+      } catch (e) {}
+      candleChart = null;
+    }
+  } catch (e) {}
   candleChart = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: 400,
+    width: w,
+    height: 360,
     layout: { background: { color: bg }, textColor: '#888' },
     grid: { vertLines: { color: '#1e2438' }, horzLines: { color: '#1e2438' } },
     rightPriceScale: { borderColor: '#1e2438' },
-    timeScale: { borderColor: '#1e2438', timeVisible: true }
+    timeScale: { borderColor: '#1e2438', timeVisible: true, secondsVisible: false }
   });
   candleSeries = candleChart.addCandlestickSeries({
-    upColor: '#00ffc8', downColor: '#ff4d6a',
-    borderUpColor: '#00ffc8', borderDownColor: '#ff4d6a',
-    wickUpColor: '#00ffc8', wickDownColor: '#ff4d6a'
+    upColor: '#00ffc8',
+    downColor: '#ff4d6a',
+    borderUpColor: '#00ffc8',
+    borderDownColor: '#ff4d6a',
+    wickUpColor: '#00ffc8',
+    wickDownColor: '#ff4d6a'
   });
   volumeSeries = candleChart.addHistogramSeries({
     priceFormat: { type: 'volume' },
     priceScaleId: 'volume',
-    scaleMargins: { top: 0.75, bottom: 0 }
+    scaleMargins: { top: 0.78, bottom: 0 }
   });
-  candleChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
+  try {
+    candleChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+  } catch (e) {}
 
-  let used = false;
+  let seriesData = null;
   if (lastPairMeta?.pairAddress) {
-    const real = await fetchRealCandles(lastPairMeta.pairAddress, lastPairMeta.chainId, currentTimeframe);
-    if (real?.candles?.length) {
-      candleSeries.setData(real.candles);
-      if (real.volumes?.length) volumeSeries.setData(real.volumes);
-      used = true;
+    seriesData = await fetchRealCandles(
+      lastPairMeta.pairAddress,
+      lastPairMeta.chainId,
+      currentTimeframe,
+      price
+    );
+  }
+  if (!seriesData || !seriesData.candles || !seriesData.candles.length) {
+    seriesData = generateCandleAndVolumeData(price, currentTimeframe);
+  }
+  try {
+    candleSeries.setData(seriesData.candles);
+    if (seriesData.volumes && seriesData.volumes.length) {
+      volumeSeries.setData(seriesData.volumes);
     }
+  } catch (e) {
+    console.warn('[chart setData]', e);
+    const fb = generateCandleAndVolumeData(price, currentTimeframe);
+    candleSeries.setData(fb.candles);
+    volumeSeries.setData(fb.volumes);
   }
-  if (!used) {
-    const data = generateCandleAndVolumeData(currentPrice || 1, currentTimeframe);
-    candleSeries.setData(data.candles);
-    volumeSeries.setData(data.volumes);
+  resizeCandleChart();
+  setTimeout(resizeCandleChart, 80);
+  setTimeout(resizeCandleChart, 300);
+  if (!window._chartResizeBound) {
+    window._chartResizeBound = true;
+    window.addEventListener('resize', resizeCandleChart);
   }
-  candleChart.timeScale().fitContent();
-  window.addEventListener('resize', () => {
-    if (candleChart && container) candleChart.applyOptions({ width: container.clientWidth });
-  });
 }
 
 async function updateCandleData(currentPrice) {
-  if (!candleSeries || !volumeSeries) return;
+  if (!candleSeries) return;
+  const price = Number(currentPrice) > 0 ? Number(currentPrice) : 1;
+  let seriesData = null;
   if (lastPairMeta?.pairAddress) {
-    const real = await fetchRealCandles(lastPairMeta.pairAddress, lastPairMeta.chainId, currentTimeframe);
-    if (real?.candles?.length) {
-      candleSeries.setData(real.candles);
-      if (real.volumes?.length) volumeSeries.setData(real.volumes);
-      candleChart.timeScale().fitContent();
-      return;
-    }
+    seriesData = await fetchRealCandles(
+      lastPairMeta.pairAddress,
+      lastPairMeta.chainId,
+      currentTimeframe,
+      price
+    );
   }
-  const data = generateCandleAndVolumeData(currentPrice || 1, currentTimeframe);
-  candleSeries.setData(data.candles);
-  volumeSeries.setData(data.volumes);
-  candleChart.timeScale().fitContent();
+  if (!seriesData || !seriesData.candles || !seriesData.candles.length) {
+    seriesData = generateCandleAndVolumeData(price, currentTimeframe);
+  }
+  try {
+    candleSeries.setData(seriesData.candles);
+    if (volumeSeries && seriesData.volumes) volumeSeries.setData(seriesData.volumes);
+  } catch (e) {
+    const fb = generateCandleAndVolumeData(price, currentTimeframe);
+    candleSeries.setData(fb.candles);
+  }
+  resizeCandleChart();
 }
 
 
@@ -2751,8 +2803,9 @@ function renderTokenPage(data) {
   const tok = data.token || {};
   const r = data.risk || {};
   const ai = data.ai || {};
-  const isPrem = data.plan === 'Premium' || data.plan === 'Pro';
-  const isPro = data.plan === 'Pro';
+  const planLabel = String(data.plan || '').toLowerCase();
+  const isPrem = planLabel === 'premium' || planLabel === 'pro';
+  const isPro = planLabel === 'pro';
   const addr = lastScannedToken?.address || '';
   const adv = data.advanced || {};
   const reasons = Array.isArray(r.reasons) ? r.reasons : [];
