@@ -3824,49 +3824,48 @@ function openDemoReport() {
 
 /** Same idea as server pickBestDexPair — never let PulseChain USDT clones win */
 function pickBestPairClient(pairs, address, preferredChain) {
-  const list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
+  let list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
   if (!list.length) return null;
   const addr = String(address || '').toLowerCase();
-  const ETH_CANON = {
-    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true,
-    '0xdac17f958d2ee523a2206206994597c13d831ec7': true,
-    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true,
-    '0x514910771af9ca656af840dff83e8264ecf986ca': true,
-    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true,
-    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true
-  };
-  const STABLES = { USDT: true, USDC: true, DAI: true };
-  const preferEth = ETH_CANON[addr];
   const pref = String(preferredChain || '').toLowerCase();
-  const score = function (p) {
-    const c = String(p.chainId || '').toLowerCase();
-    const sym = String((p.baseToken && p.baseToken.symbol) || '').toUpperCase();
-    const liq = Number(p.liquidity && p.liquidity.usd) || 0;
-    let s = Math.log10(liq + 1);
-    if (c === 'pulsechain' || c === 'pulse') s -= 500;
-    if (pref && (c === pref || (pref === 'ethereum' && (c === 'eth' || c === 'ethereum')))) s += 300;
-    if (preferEth || STABLES[sym]) {
-      if (c === 'ethereum' || c === 'eth') s += 200;
-      else if (c === 'arbitrum' || c === 'base') s += 40;
-      else s -= 20;
-    } else if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron') {
-      s += 15;
-    }
-    return s;
+  const MAJOR_QUOTE = {
+    WETH: 1, ETH: 1, USDC: 1, USDT: 1, DAI: 1, WBTC: 1,
+    WBNB: 1, BNB: 1, SOL: 1, WSOL: 1, TRX: 1
   };
-  list.sort(function (a, b) {
-    return score(b) - score(a);
-  });
-  if (preferEth || list.some(function (p) { return STABLES[String((p.baseToken && p.baseToken.symbol) || '').toUpperCase()]; })) {
-    const eth = list.find(function (p) {
+  if (pref && pref !== 'auto') {
+    const f = list.filter(function (p) {
       const c = String(p.chainId || '').toLowerCase();
-      const s = String((p.baseToken && p.baseToken.symbol) || '').toUpperCase();
-      const liq = Number(p.liquidity && p.liquidity.usd) || 0;
-      return (c === 'ethereum' || c === 'eth') && (!STABLES[s] || liq > 50000);
+      if (pref === 'ethereum' || pref === 'eth') return c === 'ethereum' || c === 'eth';
+      return c === pref || c.indexOf(pref) !== -1;
     });
-    if (eth) return eth;
+    if (f.length) list = f;
   }
-  return list[0];
+  const nonPulse = list.filter(function (p) {
+    const c = String(p.chainId || '').toLowerCase();
+    return c !== 'pulsechain' && c !== 'pulse';
+  });
+  if (nonPulse.length) list = nonPulse;
+  const asBase = list.filter(function (p) {
+    return String((p.baseToken && p.baseToken.address) || '').toLowerCase() === addr;
+  });
+  if (asBase.length) list = asBase;
+  const withMajor = list.filter(function (p) {
+    return MAJOR_QUOTE[String((p.quoteToken && p.quoteToken.symbol) || '').toUpperCase()];
+  });
+  if (withMajor.length) list = withMajor;
+  const prices = list.map(function (p) { return Number(p.priceUsd) || 0; }).filter(function (x) { return x > 0; }).sort(function (a, b) { return a - b; });
+  if (prices.length >= 3) {
+    const mid = prices[Math.floor(prices.length / 2)];
+    const f = list.filter(function (p) {
+      const pr = Number(p.priceUsd) || 0;
+      return pr > 0 && pr < mid * 20 && pr > mid / 20;
+    });
+    if (f.length) list = f;
+  }
+  list.sort(function (a, b) {
+    return (Number(b.liquidity && b.liquidity.usd) || 0) - (Number(a.liquidity && a.liquidity.usd) || 0);
+  });
+  return list[0] || null;
 }
 
 async function enrichTokenMarket(data, address) {
