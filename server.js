@@ -1212,11 +1212,27 @@ app.get(
           tokenAddress
         });
       }
+      const scanned = resolveScannedToken(pair, tokenAddress);
+      let priceUsd = pair.priceUsd != null ? Number(pair.priceUsd) : 0;
+      // When scanned token is quote side, priceUsd is the OTHER token — use ~1 for known stables
+      if (scanned.side === 'quote') {
+        const sym = String(scanned.symbol || '').toUpperCase();
+        if (sym === 'USDT' || sym === 'USDC' || sym === 'DAI') priceUsd = 1;
+        else if (priceUsd > 0) priceUsd = 1 / priceUsd; // rough invert
+      }
+      // Known blue-chip floors
+      const symU = String(scanned.symbol || '').toUpperCase();
+      if (
+        (symU === 'USDT' || symU === 'USDC') &&
+        String(pair.chainId || '').toLowerCase().indexOf('eth') === 0
+      ) {
+        if (!priceUsd || priceUsd < 0.95 || priceUsd > 1.05) priceUsd = Number(pair.priceUsd) > 0.95 && Number(pair.priceUsd) < 1.05 ? Number(pair.priceUsd) : 1;
+      }
       const base = {
-        symbol: pair.baseToken?.symbol || 'TOKEN',
-        name: pair.baseToken?.name || '',
-        address: pair.baseToken?.address || tokenAddress,
-        price: pair.priceUsd != null ? Number(pair.priceUsd) : 0,
+        symbol: scanned.symbol || 'TOKEN',
+        name: scanned.name || '',
+        address: scanned.address || tokenAddress,
+        price: priceUsd,
         liquidity: pair.liquidity?.usd != null ? Number(pair.liquidity.usd) : 0,
         volume24h: pair.volume?.h24 != null ? Number(pair.volume.h24) : 0,
         fdv: pair.fdv != null ? Number(pair.fdv) : 0,
@@ -1245,6 +1261,17 @@ app.get(
         riskScore = Math.min(95, riskScore + identity.bonus);
         if (riskScore >= 70) riskLevel = 'HIGH';
         else if (riskScore >= 40) riskLevel = 'MEDIUM';
+      }
+      // Canonical ETH blue-chips — pair heuristics must not mark USDT as risk 80+
+      const canonAddr = String(tokenAddress || '').toLowerCase();
+      if (typeof ETH_CANON_ADDR !== 'undefined' && ETH_CANON_ADDR[canonAddr] && !(identity.warnings || []).length) {
+        riskScore = Math.min(riskScore, 35);
+        if (riskScore < 40) riskLevel = 'LOW';
+        reasons.unshift(
+          lang === 'en'
+            ? 'Known Ethereum blue-chip contract (canonical address)'
+            : 'Известный blue-chip контракт Ethereum (канонический адрес)'
+        );
       }
 
       // GoPlus on-chain (best-effort, does not fail the scan)
@@ -1577,10 +1604,8 @@ function pickBestDexPair(pairs, address) {
     '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true,
     '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true
   };
-  const STABLES = { USDT: true, USDC: true, DAI: true };
   const preferEth = !!ETH_CANON[addr];
 
-  // Hard filter: known Ethereum contracts → only ethereum/eth pairs
   if (preferEth) {
     const ethOnly = list.filter(function (p) {
       const c = String(p.chainId || '').toLowerCase();
@@ -1589,48 +1614,55 @@ function pickBestDexPair(pairs, address) {
     if (ethOnly.length) list = ethOnly;
   }
 
-  // Drop PulseChain always when any non-pulse alternative exists
   const nonPulse = list.filter(function (p) {
     const c = String(p.chainId || '').toLowerCase();
     return c !== 'pulsechain' && c !== 'pulse';
   });
   if (nonPulse.length) list = nonPulse;
 
-  const hasStableSym = list.some(function (p) {
-    return STABLES[String(p.baseToken?.symbol || '').toUpperCase()];
+  // Prefer pairs where scanned token is BASE (priceUsd = token price)
+  const asBase = list.filter(function (p) {
+    return String((p.baseToken && p.baseToken.address) || '').toLowerCase() === addr;
   });
+  if (asBase.length) list = asBase;
 
-  const chainScore = function (p) {
-    const c = String(p.chainId || '').toLowerCase();
-    const sym = String(p.baseToken?.symbol || '').toUpperCase();
-    const liq = Number(p.liquidity && p.liquidity.usd) || 0;
-    if (c === 'pulsechain' || c === 'pulse') return -1000;
-    if (preferEth || (hasStableSym && STABLES[sym])) {
-      if (c === 'ethereum' || c === 'eth') return 500 + Math.log10(liq + 1);
-      if (c === 'arbitrum' || c === 'base' || c === 'optimism') return 80;
-      if (c === 'bsc') return 40;
-      return -50;
-    }
-    if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron')
-      return 30;
-    return 0;
-  };
   list.sort(function (a, b) {
-    const sa = chainScore(a) + Math.log10((Number(a.liquidity && a.liquidity.usd) || 1) + 1);
-    const sb = chainScore(b) + Math.log10((Number(b.liquidity && b.liquidity.usd) || 1) + 1);
-    return sb - sa;
+    const liqA = Number(a.liquidity && a.liquidity.usd) || 0;
+    const liqB = Number(b.liquidity && b.liquidity.usd) || 0;
+    return liqB - liqA;
   });
-  if (hasStableSym) {
-    const ethStable = list.find(function (p) {
-      const c = String(p.chainId || '').toLowerCase();
-      const s = String(p.baseToken?.symbol || '').toUpperCase();
-      const liq = Number(p.liquidity && p.liquidity.usd) || 0;
-      return (c === 'ethereum' || c === 'eth') && STABLES[s] && liq > 10000;
-    });
-    if (ethStable) return ethStable;
-  }
   return list[0] || {};
 }
+
+/** Resolve symbol/name/address for the scanned contract (base or quote side) */
+function resolveScannedToken(pair, tokenAddress) {
+  const addr = String(tokenAddress || '').toLowerCase();
+  const b = (pair && pair.baseToken) || {};
+  const q = (pair && pair.quoteToken) || {};
+  if (String(b.address || '').toLowerCase() === addr) {
+    return {
+      symbol: b.symbol || 'TOKEN',
+      name: b.name || '',
+      address: b.address || tokenAddress,
+      side: 'base'
+    };
+  }
+  if (String(q.address || '').toLowerCase() === addr) {
+    return {
+      symbol: q.symbol || 'TOKEN',
+      name: q.name || '',
+      address: q.address || tokenAddress,
+      side: 'quote'
+    };
+  }
+  return {
+    symbol: b.symbol || 'TOKEN',
+    name: b.name || '',
+    address: b.address || tokenAddress,
+    side: 'base'
+  };
+}
+
 
 app.post('/api/compare', authMiddleware, async (req, res) => {
   const plan = getPlan(req.user);
