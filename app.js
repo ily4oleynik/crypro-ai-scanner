@@ -1503,6 +1503,8 @@ async function startScan() {
     lastPairMeta = {
       pairAddress: data.token?.pairAddress || null,
       chainId: data.token?.chainId || 'ethereum'
+    ,
+      price: Number((data.token && data.token.price) || (typeof tok !== "undefined" && tok.price) || 0)
     };
     if (window._scanProgressTimer) clearInterval(window._scanProgressTimer);
     try {
@@ -1683,7 +1685,9 @@ function openDemoReport() {
       lastPairMeta = {
         pairAddress: data.token && data.token.pairAddress,
         chainId: (data.token && data.token.chainId) || 'ethereum'
-      };
+      ,
+      price: Number((data.token && data.token.price) || (typeof tok !== "undefined" && tok.price) || 0)
+    };
       window.__lastScanData = data;
       renderTokenPage(data);
       if (results) {
@@ -1838,26 +1842,41 @@ async function initCandleChart(currentPrice) {
 
 async function updateCandleData(currentPrice) {
   if (!candleSeries) return;
-  const price = Number(currentPrice) > 0 ? Number(currentPrice) : 1;
+  const price = Number(currentPrice) > 0 ? Number(currentPrice) : Number(lastPairMeta && lastPairMeta.price) || 1;
   let seriesData = null;
-  if (lastPairMeta?.pairAddress) {
-    seriesData = await fetchRealCandles(
-      lastPairMeta.pairAddress,
-      lastPairMeta.chainId,
-      currentTimeframe,
-      price
-    );
+  try {
+    if (lastPairMeta && lastPairMeta.pairAddress) {
+      seriesData = await fetchRealCandles(
+        lastPairMeta.pairAddress,
+        lastPairMeta.chainId,
+        currentTimeframe,
+        price
+      );
+    }
+  } catch (e) {
+    seriesData = null;
   }
   if (!seriesData || !seriesData.candles || !seriesData.candles.length) {
     seriesData = generateCandleAndVolumeData(price, currentTimeframe);
   }
   try {
     candleSeries.setData(seriesData.candles);
-    if (volumeSeries && seriesData.volumes) volumeSeries.setData(seriesData.volumes);
+    if (volumeSeries && seriesData.volumes && seriesData.volumes.length) {
+      volumeSeries.setData(seriesData.volumes);
+    }
+    if (candleChart) {
+      try { candleChart.timeScale().fitContent(); } catch (e2) {}
+    }
   } catch (e) {
     const fb = generateCandleAndVolumeData(price, currentTimeframe);
-    candleSeries.setData(fb.candles);
+    try {
+      candleSeries.setData(fb.candles);
+      if (volumeSeries) volumeSeries.setData(fb.volumes || []);
+    } catch (e3) {
+      console.warn('[chart]', e3);
+    }
   }
+  resizeCandleChart();
   resizeCandleChart();
 }
 
@@ -2849,7 +2868,9 @@ function renderTokenPage(data) {
   lastPairMeta = {
     pairAddress: tok.pairAddress || lastPairMeta?.pairAddress || null,
     chainId: tok.chainId || lastPairMeta?.chainId || 'ethereum'
-  };
+  ,
+      price: Number((data.token && data.token.price) || (typeof tok !== "undefined" && tok.price) || 0)
+    };
 
   document.getElementById('results').innerHTML =
     '<div class="token-header glass">' +
@@ -3804,7 +3825,9 @@ function openDemoReport() {
       lastPairMeta = {
         pairAddress: data.token && data.token.pairAddress,
         chainId: (data.token && data.token.chainId) || 'ethereum'
-      };
+      ,
+      price: Number((data.token && data.token.price) || (typeof tok !== "undefined" && tok.price) || 0)
+    };
       window.__lastScanData = data;
       renderTokenPage(data);
       if (results) {
