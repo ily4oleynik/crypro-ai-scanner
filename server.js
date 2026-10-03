@@ -32,14 +32,42 @@ const app = express();
 app.disable('x-powered-by');
 const PORT = process.env.PORT || 3000;
 
-/** Short cache + retry for DexScreener (avoids hard fail on 429) */
+/** DexScreener helpers
+ * IMPORTANT: /latest/dex/tokens/0xdac17f… returns ONLY pulsechain pairs
+ * (same address on Pulse). Real ETH USDT needs:
+ *   /token-pairs/v1/ethereum/{address}
+ */
 const dexCache = new Map();
-async function fetchDexPairs(tokenAddress) {
-  const key = String(tokenAddress || '').toLowerCase();
-  const hit = dexCache.get(key);
-  if (hit && Date.now() - hit.ts < 90_000) {
-    return hit.pairs;
+const ETH_CANON_ADDR = {
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true,
+  '0xdac17f958d2ee523a2206206994597c13d831ec7': true,
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true,
+  '0x514910771af9ca656af840dff83e8264ecf986ca': true,
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true,
+  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true
+};
+
+async function fetchDexPairs(tokenAddress, preferredChain) {
+  const addr = String(tokenAddress || '').trim();
+  const keyBase = addr.toLowerCase();
+  const chainHint = String(preferredChain || '').toLowerCase().trim();
+  const forceEth =
+    !!ETH_CANON_ADDR[keyBase] || chainHint === 'ethereum' || chainHint === 'eth';
+  const cacheKey = keyBase + '|' + (forceEth ? 'eth' : chainHint || 'any');
+  const hit = dexCache.get(cacheKey);
+  if (hit && Date.now() - hit.ts < 90_000) return hit.pairs;
+
+  async function getPairs(url) {
+    const dexResponse = await axios.get(url, {
+      timeout: 14000,
+      headers: { Accept: 'application/json' }
+    });
+    const data = dexResponse.data;
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data && data.pairs)) return data.pairs;
+    return [];
   }
+
   let lastErr = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
@@ -48,14 +76,50 @@ async function fetchDexPairs(tokenAddress) {
           setTimeout(r, 700 * attempt + Math.floor(Math.random() * 400));
         });
       }
-      const dexResponse = await axios.get(
-        'https://api.dexscreener.com/latest/dex/tokens/' +
-          encodeURIComponent(tokenAddress),
-        { timeout: 14000 }
-      );
-      const pairs = dexResponse.data?.pairs || [];
+      let pairs = [];
+
+      if (forceEth) {
+        try {
+          pairs = await getPairs(
+            'https://api.dexscreener.com/token-pairs/v1/ethereum/' +
+              encodeURIComponent(addr)
+          );
+        } catch (e1) {
+          console.warn('[dex] eth token-pairs', e1.response && e1.response.status || e1.message);
+        }
+      } else if (chainHint && chainHint !== 'auto') {
+        try {
+          pairs = await getPairs(
+            'https://api.dexscreener.com/token-pairs/v1/' +
+              encodeURIComponent(chainHint) +
+              '/' +
+              encodeURIComponent(addr)
+          );
+        } catch (e1) {
+          console.warn('[dex] chain token-pairs', e1.response && e1.response.status || e1.message);
+        }
+      }
+
+      if (!pairs.length) {
+        pairs = await getPairs(
+          'https://api.dexscreener.com/latest/dex/tokens/' + encodeURIComponent(addr)
+        );
+        if (forceEth) {
+          const ethOnly = pairs.filter(function (p) {
+            const c = String(p.chainId || '').toLowerCase();
+            return c === 'ethereum' || c === 'eth';
+          });
+          pairs = ethOnly.length
+            ? ethOnly
+            : pairs.filter(function (p) {
+                const c = String(p.chainId || '').toLowerCase();
+                return c !== 'pulsechain' && c !== 'pulse';
+              });
+        }
+      }
+
       if (pairs.length) {
-        dexCache.set(key, { ts: Date.now(), pairs: pairs });
+        dexCache.set(cacheKey, { ts: Date.now(), pairs: pairs });
         if (dexCache.size > 200) {
           const first = dexCache.keys().next().value;
           dexCache.delete(first);
@@ -64,7 +128,7 @@ async function fetchDexPairs(tokenAddress) {
       return pairs;
     } catch (e) {
       lastErr = e;
-      const st = e.response?.status;
+      const st = e.response && e.response.status;
       if (st !== 429 && st !== 503) break;
       console.warn('[dex] retry', attempt + 1, st || e.message);
     }
@@ -1125,7 +1189,7 @@ app.get(
         });
       }
 
-      let pairs = await fetchDexPairs(tokenAddress);
+      let pairs = await fetchDexPairs(tokenAddress, preferredChain);
       if (preferredChain && preferredChain !== 'auto') {
         const filtered = pairs.filter(function (p) {
           const c = String(p.chainId || '').toLowerCase();
