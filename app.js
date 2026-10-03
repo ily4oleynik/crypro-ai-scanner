@@ -2649,11 +2649,34 @@ function scamAlertBannerHtml(tok, risk, security) {
         : 'ОСТОРОЖНО — проверь флаги до входа.') +
     '</p>';
   html +=
-    '<button type="button" class="connect-btn" onclick="document.getElementById(\'security\')?.scrollIntoView({behavior:\'smooth\'})">' +
+    '<button type="button" class="connect-btn" id="scam-alert-details-btn">' +
     (en ? 'See what triggered the warning' : 'Что вызвало предупреждение') +
     '</button></div>';
   return html;
 }
+
+function openSecurityFromAlert() {
+  const tab = document.querySelector('.tab[data-tab="security"]');
+  if (tab) {
+    tab.click();
+  } else {
+    document.querySelectorAll('.tab').forEach(function (t) {
+      t.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-pane').forEach(function (p) {
+      p.classList.remove('active');
+    });
+    const secTab = document.querySelector('[data-tab="security"]');
+    const pane = document.getElementById('security');
+    if (secTab) secTab.classList.add('active');
+    if (pane) pane.classList.add('active');
+  }
+  setTimeout(function () {
+    const pane = document.getElementById('security');
+    if (pane) pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
+}
+window.openSecurityFromAlert = openSecurityFromAlert;
 
 function riskHistoryHtml(address, score) {
   const en = ((typeof currentLang !== 'undefined' && currentLang) || localStorage.getItem('lang') || 'ru') === 'en';
@@ -2961,6 +2984,13 @@ function renderTokenPage(data) {
         });
       });
     }, 100);
+  }
+  const scamBtn = document.getElementById('scam-alert-details-btn');
+  if (scamBtn) {
+    scamBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      openSecurityFromAlert();
+    });
   }
   initAIChat(data);
 }
