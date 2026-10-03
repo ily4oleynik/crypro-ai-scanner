@@ -1502,40 +1502,53 @@ app.delete('/api/alerts/:id', authMiddleware, async (req, res) => {
 
 /** Prefer major chains for well-known addresses; else highest liquidity */
 function pickBestDexPair(pairs, address) {
-  const list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
+  let list = Array.isArray(pairs) ? pairs.filter(Boolean) : [];
   if (!list.length) return {};
   const addr = String(address || '').toLowerCase();
-  // Canonical Ethereum tokens — never prefer PulseChain/etc first
   const ETH_CANON = {
-    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true, // USDC
-    '0xdac17f958d2ee523a2206206994597c13d831ec7': true, // USDT
-    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true, // WETH
-    '0x514910771af9ca656af840dff83e8264ecf986ca': true, // LINK
-    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true, // UNI
-    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true // WBTC
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': true,
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': true,
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true,
+    '0x514910771af9ca656af840dff83e8264ecf986ca': true,
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true,
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true
   };
   const STABLES = { USDT: true, USDC: true, DAI: true };
-  const preferEth = ETH_CANON[addr];
-  // Any pair labeled USDT/USDC — prefer ethereum + high liq (avoid PulseChain “USDT” clones)
+  const preferEth = !!ETH_CANON[addr];
+
+  // Hard filter: known Ethereum contracts → only ethereum/eth pairs
+  if (preferEth) {
+    const ethOnly = list.filter(function (p) {
+      const c = String(p.chainId || '').toLowerCase();
+      return c === 'ethereum' || c === 'eth';
+    });
+    if (ethOnly.length) list = ethOnly;
+  }
+
+  // Drop PulseChain always when any non-pulse alternative exists
+  const nonPulse = list.filter(function (p) {
+    const c = String(p.chainId || '').toLowerCase();
+    return c !== 'pulsechain' && c !== 'pulse';
+  });
+  if (nonPulse.length) list = nonPulse;
+
   const hasStableSym = list.some(function (p) {
-    const s = String(p.baseToken?.symbol || '').toUpperCase();
-    return STABLES[s];
+    return STABLES[String(p.baseToken?.symbol || '').toUpperCase()];
   });
 
   const chainScore = function (p) {
     const c = String(p.chainId || '').toLowerCase();
     const sym = String(p.baseToken?.symbol || '').toUpperCase();
     const liq = Number(p.liquidity && p.liquidity.usd) || 0;
-    // Always dump PulseChain / low-trust clones to the bottom
-    if (c === 'pulsechain' || c === 'pulse') return -500;
+    if (c === 'pulsechain' || c === 'pulse') return -1000;
     if (preferEth || (hasStableSym && STABLES[sym])) {
-      if (c === 'ethereum' || c === 'eth') return 200 + Math.min(50, Math.log10(liq + 1));
-      if (c === 'arbitrum' || c === 'base' || c === 'optimism') return 60;
-      if (c === 'bsc') return 30;
-      return -10;
+      if (c === 'ethereum' || c === 'eth') return 500 + Math.log10(liq + 1);
+      if (c === 'arbitrum' || c === 'base' || c === 'optimism') return 80;
+      if (c === 'bsc') return 40;
+      return -50;
     }
     if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron')
-      return 20;
+      return 30;
     return 0;
   };
   list.sort(function (a, b) {
@@ -1543,13 +1556,12 @@ function pickBestDexPair(pairs, address) {
     const sb = chainScore(b) + Math.log10((Number(b.liquidity && b.liquidity.usd) || 1) + 1);
     return sb - sa;
   });
-  // If user scanned a PulseChain “USDT” but Ethereum USDT pairs exist in the same response, force ETH
   if (hasStableSym) {
     const ethStable = list.find(function (p) {
       const c = String(p.chainId || '').toLowerCase();
       const s = String(p.baseToken?.symbol || '').toUpperCase();
       const liq = Number(p.liquidity && p.liquidity.usd) || 0;
-      return (c === 'ethereum' || c === 'eth') && STABLES[s] && liq > 100000;
+      return (c === 'ethereum' || c === 'eth') && STABLES[s] && liq > 10000;
     });
     if (ethStable) return ethStable;
   }
