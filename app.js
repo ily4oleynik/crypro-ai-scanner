@@ -3873,6 +3873,13 @@ async function enrichTokenMarket(data, address) {
   if (!data || !data.token) return data;
   const tok = data.token;
   const serverChain = String(tok.chainId || '').toLowerCase();
+  // CRITICAL: if server already resolved pair/chain/price — do not re-hit DexScreener
+  // (previously overwrote Ethereum USDT with PulseChain by pure liquidity sort)
+  if (tok.pairAddress && serverChain && serverChain !== 'unknown' && Number(tok.price) > 0) {
+    data.risk = data.risk || {};
+    data.risk.reasons = mergeReasons(data.risk.reasons, buildChainRiskReasons(tok, address));
+    return data;
+  }
   const chainSelect = document.getElementById('chain-select');
   const preferredChain =
     (chainSelect && chainSelect.value && chainSelect.value !== 'auto' && chainSelect.value) ||
@@ -3886,39 +3893,37 @@ async function enrichTokenMarket(data, address) {
     if (pairs.length) {
       const p = pickBestPairClient(pairs, address, preferredChain);
       if (p) {
-        // Fill gaps only — do not stomp a good server Ethereum result with PulseChain
         const pChain = String(p.chainId || '').toLowerCase();
-        const isPulse = pChain === 'pulsechain' || pChain === 'pulse';
-        const serverIsEth = serverChain === 'ethereum' || serverChain === 'eth';
-        if (!(serverIsEth && isPulse)) {
+        const ethP = pairs.find(function (x) {
+          const c = String(x.chainId || '').toLowerCase();
+          return c === 'ethereum' || c === 'eth';
+        });
+        if ((pChain === 'pulsechain' || pChain === 'pulse') && ethP) {
+          tok.marketCap = numOr(tok.marketCap, ethP.marketCap, ethP.fdv);
+          tok.fdv = numOr(tok.fdv, ethP.fdv, ethP.marketCap);
+          tok.liquidity = numOr(tok.liquidity, ethP.liquidity && ethP.liquidity.usd);
+          tok.volume24h = numOr(tok.volume24h, ethP.volume && ethP.volume.h24);
+          tok.price = Number(ethP.priceUsd) || tok.price;
+          tok.pairAddress = ethP.pairAddress || tok.pairAddress;
+          tok.chainId = 'ethereum';
+          tok.dexId = ethP.dexId || tok.dexId;
+          tok.pairUrl = ethP.url || tok.pairUrl;
+        } else if (pChain !== 'pulsechain' && pChain !== 'pulse') {
           tok.marketCap = numOr(tok.marketCap, p.marketCap, p.fdv);
           tok.fdv = numOr(tok.fdv, p.fdv, p.marketCap);
           tok.liquidity = numOr(tok.liquidity, p.liquidity && p.liquidity.usd);
           tok.volume24h = numOr(tok.volume24h, p.volume && p.volume.h24);
-          if (!tok.price || Number(tok.price) === 0) tok.price = p.priceUsd != null ? Number(p.priceUsd) : tok.price;
+          if (!tok.price || Number(tok.price) === 0) tok.price = Number(p.priceUsd) || tok.price;
           if (!tok.pairAddress) tok.pairAddress = p.pairAddress || null;
-          if (!serverChain || serverChain === 'unknown' || !serverIsEth) {
-            tok.chainId = pChain || serverChain || detectChainFromAddress(address) || 'unknown';
+          if (!serverChain || serverChain === 'unknown') {
+            tok.chainId = pChain || detectChainFromAddress(address) || 'unknown';
           }
           tok.dexId = tok.dexId || p.dexId || null;
           tok.pairUrl = tok.pairUrl || p.url || null;
-          if (p.baseToken) {
-            tok.symbol = tok.symbol || p.baseToken.symbol;
-            tok.name = tok.name || p.baseToken.name;
-          }
-        } else {
-          // keep server eth fields; only fill missing metrics from eth pairs
-          const ethP =
-            pairs.find(function (x) {
-              const c = String(x.chainId || '').toLowerCase();
-              return c === 'ethereum' || c === 'eth';
-            }) || p;
-          if (ethP && !isPulse) {
-            tok.marketCap = numOr(tok.marketCap, ethP.marketCap, ethP.fdv);
-            tok.fdv = numOr(tok.fdv, ethP.fdv, ethP.marketCap);
-            tok.liquidity = numOr(tok.liquidity, ethP.liquidity && ethP.liquidity.usd);
-            tok.volume24h = numOr(tok.volume24h, ethP.volume && ethP.volume.h24);
-          }
+        }
+        if (p.baseToken) {
+          tok.symbol = tok.symbol || p.baseToken.symbol;
+          tok.name = tok.name || p.baseToken.name;
         }
       }
     } else {
