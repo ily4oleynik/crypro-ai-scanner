@@ -1077,6 +1077,20 @@ function detectIdentityRisks(base, tokenAddress) {
       text: msg
     });
   }
+  const isStable = sym === 'USDT' || sym === 'USDC' || sym === 'DAI' || name.includes('tether') || name.includes('usd coin');
+  if (isStable && chain && (chain === 'pulsechain' || chain === 'pulse' || chain.includes('pulse'))) {
+    const msg =
+      '⚠ IDENTITY: «' +
+      (base.symbol || 'USDT') +
+      '» on PulseChain is NOT canonical Tether/USDC on Ethereum. Price/risk can be meaningless — verify contract.';
+    reasons.push(msg);
+    warnings.push({
+      id: 'identity_stable_pulse',
+      severity: 'high',
+      title: 'Not Ethereum USDT/USDC',
+      text: msg
+    });
+  }
   return { reasons, warnings, bonus: warnings.length ? 25 : 0 };
 }
 
@@ -1485,20 +1499,30 @@ function pickBestDexPair(pairs, address) {
     '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': true, // WETH
     '0x514910771af9ca656af840dff83e8264ecf986ca': true, // LINK
     '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': true, // UNI
-    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true  // WBTC
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': true // WBTC
   };
+  const STABLES = { USDT: true, USDC: true, DAI: true };
   const preferEth = ETH_CANON[addr];
+  // Any pair labeled USDT/USDC — prefer ethereum + high liq (avoid PulseChain “USDT” clones)
+  const hasStableSym = list.some(function (p) {
+    const s = String(p.baseToken?.symbol || '').toUpperCase();
+    return STABLES[s];
+  });
+
   const chainScore = function (p) {
     const c = String(p.chainId || '').toLowerCase();
-    if (preferEth) {
-      if (c === 'ethereum') return 100;
-      if (c === 'eth') return 100;
-      if (c === 'arbitrum' || c === 'base' || c === 'optimism') return 40;
-      if (c === 'pulsechain' || c === 'pulse') return -50;
-      return 0;
+    const sym = String(p.baseToken?.symbol || '').toUpperCase();
+    const liq = Number(p.liquidity && p.liquidity.usd) || 0;
+    // Always dump PulseChain / low-trust clones to the bottom
+    if (c === 'pulsechain' || c === 'pulse') return -500;
+    if (preferEth || (hasStableSym && STABLES[sym])) {
+      if (c === 'ethereum' || c === 'eth') return 200 + Math.min(50, Math.log10(liq + 1));
+      if (c === 'arbitrum' || c === 'base' || c === 'optimism') return 60;
+      if (c === 'bsc') return 30;
+      return -10;
     }
-    if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron') return 20;
-    if (c === 'pulsechain') return -20;
+    if (c === 'ethereum' || c === 'bsc' || c === 'base' || c === 'arbitrum' || c === 'solana' || c === 'tron')
+      return 20;
     return 0;
   };
   list.sort(function (a, b) {
@@ -1506,6 +1530,16 @@ function pickBestDexPair(pairs, address) {
     const sb = chainScore(b) + Math.log10((Number(b.liquidity && b.liquidity.usd) || 1) + 1);
     return sb - sa;
   });
+  // If user scanned a PulseChain “USDT” but Ethereum USDT pairs exist in the same response, force ETH
+  if (hasStableSym) {
+    const ethStable = list.find(function (p) {
+      const c = String(p.chainId || '').toLowerCase();
+      const s = String(p.baseToken?.symbol || '').toUpperCase();
+      const liq = Number(p.liquidity && p.liquidity.usd) || 0;
+      return (c === 'ethereum' || c === 'eth') && STABLES[s] && liq > 100000;
+    });
+    if (ethStable) return ethStable;
+  }
   return list[0] || {};
 }
 
