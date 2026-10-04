@@ -1,18 +1,50 @@
 const API_BASE = window.API_BASE || window.location.origin;
 
 /** Same-origin fetches with httpOnly cookie session */
+function isValidEmail(email) {
+  const em = String(email || '').trim().toLowerCase();
+  // require user@domain.tld — tld 2–24 letters, no consecutive dots
+  if (!em || em.length > 120) return false;
+  if (em.includes('..') || em.startsWith('.') || em.endsWith('.')) return false;
+  if (!/^[a-z0-9._%+\-]+@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}$/i.test(em)) return false;
+  const domain = em.split('@')[1] || '';
+  if (domain.length < 4 || domain.split('.').some(function (p) { return p.length < 1; })) return false;
+  return true;
+}
+
+function readStoredToken() {
+  if (token && token !== 'null' && token !== 'undefined') return token;
+  try {
+    const s = sessionStorage.getItem('cas_token');
+    if (s && s !== 'null' && s.length > 20) return s;
+  } catch (e) {}
+  return null;
+}
+
+function saveSessionToken(jwt) {
+  if (!jwt || jwt === 'null') return;
+  token = jwt;
+  try { sessionStorage.setItem('cas_token', jwt); } catch (e) {}
+}
+
+function clearSessionToken() {
+  token = null;
+  try { sessionStorage.removeItem('cas_token'); } catch (e) {}
+  try { localStorage.removeItem('token'); } catch (e) {}
+}
+
 function apiFetch(path, options) {
   options = options || {};
   const headers = Object.assign({}, options.headers || {});
-  // Cookie session is primary. Only attach real JWT, never "Bearer null".
   if (headers.Authorization) {
     const a = String(headers.Authorization);
     if (a === 'Bearer null' || a === 'Bearer undefined' || a === 'Bearer ') {
       delete headers.Authorization;
     }
   }
-  if (token && token !== 'null' && token !== 'undefined' && !headers.Authorization) {
-    headers.Authorization = 'Bearer ' + token;
+  const tok = readStoredToken();
+  if (tok && !headers.Authorization) {
+    headers.Authorization = 'Bearer ' + tok;
   }
   return fetch(API_BASE + path, Object.assign({}, options, {
     credentials: 'include',
@@ -957,10 +989,16 @@ async function handleAuth(e) {
     if (!acceptTerms) return showErr('Please accept Terms and Privacy Policy');
   }
 
+  if (!isValidEmail(email)) {
+    return showErr((localStorage.getItem('lang') || 'ru') === 'en'
+      ? 'Enter a valid email (name@domain.com)'
+      : 'Введите корректный email (имя@домен.com)');
+  }
+
   try {
     const body = isLogin
-      ? { email, password }
-      : { email, password, acceptTerms: true };
+      ? { email: email.trim().toLowerCase(), password }
+      : { email: email.trim().toLowerCase(), password, acceptTerms: true };
 
     const res = await apiFetch('/api/auth/' + (isLogin ? 'login' : 'register'), {
       method: 'POST',
@@ -970,13 +1008,16 @@ async function handleAuth(e) {
     const data = await res.json();
     if (!data.success) return showErr(data.error || 'Error');
 
-    token = null;
+    // Cookie + sessionStorage JWT (mobile password managers can break cookie-only)
+    if (data.token) saveSessionToken(data.token);
+    else clearSessionToken();
     user = data.user;
-      if (data.user && data.user.isOwner) user.isOwner = true;
+    if (data.user && data.user.isOwner) user.isOwner = true;
     currentPlan = (data.user && data.user.plan) || 'free';
-    try { localStorage.removeItem('token'); } catch (e) {}
     closeAuthModal();
     updateAuthUI();
+    // Re-confirm session from server
+    try { await restoreSession(); } catch (e) {}
     refreshUsage();
     loadHomeWidgets();
     refreshAccountPage();
@@ -1011,13 +1052,15 @@ function handleDeepLinkScan() {
 
 async function restoreSession() {
   try {
+    // warm token from sessionStorage for mobile
+    const st = readStoredToken();
+    if (st) token = st;
     const res = await apiFetch('/api/auth/me');
     const data = await res.json();
     if (data && data.success && data.user && data.user.id) {
       user = data.user;
       if (data.user && data.user.isOwner) user.isOwner = true;
       currentPlan = data.user.plan || 'free';
-      token = null; // cookie carries session
       updateAuthUI();
       refreshUsage();
       if (typeof loadHomeWidgets === 'function') loadHomeWidgets();
@@ -1025,22 +1068,20 @@ async function restoreSession() {
     } else {
       user = null;
       currentPlan = 'free';
-      token = null;
+      clearSessionToken();
       updateAuthUI();
       if (typeof loadHomeWidgets === 'function') loadHomeWidgets();
     }
   } catch (e) {
     user = null;
-    token = null;
   }
 }
 
 function logout() {
-  token = null;
   user = null;
   currentPlan = 'free';
   pendingPlan = null;
-  try { localStorage.removeItem('token'); } catch (e) {}
+  clearSessionToken();
   apiFetch('/api/auth/logout', { method: 'POST' }).catch(function () {});
   updateAuthUI();
   document.querySelectorAll('.plan-btn').forEach(b => {
@@ -1061,7 +1102,7 @@ function updateAuthUI() {
   const authBtn = document.getElementById('auth-btn');
   const planLabel = document.getElementById('user-plan');
   if (!authBtn) return;
-  if (user) {
+  if (user && user.id) {
     authBtn.textContent = typeof t === 'function' ? t('btn.logout') : (typeof t === 'function' ? t('nav.logout') : 'Logout');
     if (planLabel) {
       planLabel.textContent = (user.plan || currentPlan || 'free').toUpperCase();
