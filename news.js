@@ -65,7 +65,7 @@ async function fetchCryptoPanic() {
     return list.slice(0, 15).map((item) => ({
       title: item.title,
       source: item.source?.title || item.source?.name || 'CryptoPanic',
-      url: item.url || item.original_url || '#',
+      url: item.url || item.original_url || 'https://cryptopanic.com/',
       time: item.published_at
         ? new Date(item.published_at).toLocaleString('ru-RU', {
             day: 'numeric',
