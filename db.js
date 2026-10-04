@@ -125,6 +125,17 @@ async function initDb() {
     /* older PG or already nullable */
   }
 
+  // Lock legacy test accounts if they still exist in DB
+  try {
+    await query(
+      `UPDATE users SET password = $1, plan = 'free'
+       WHERE LOWER(email) IN ('demo@test.com','premium@test.com','pro@test.com')`,
+      ['scrypt:locked:0000000000000000000000000000000000000000000000000000000000000000']
+    );
+  } catch (e) {
+    console.warn('[DB] lock demos:', e.message);
+  }
+
   console.log('[DB] PostgreSQL ready');
 }
 
