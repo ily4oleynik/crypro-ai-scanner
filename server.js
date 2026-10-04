@@ -2036,7 +2036,7 @@ app.get('/api/news', async (req, res) => {
       news = (response.data.results || []).map((item) => ({
         title: item.title,
         source: item.source?.title || 'CryptoPanic',
-        url: item.url,
+        url: item.url || item.original_url || 'https://cryptopanic.com/',
         time: new Date(item.published_at).toLocaleString('ru-RU', {
           day: 'numeric',
           month: 'short',
@@ -2059,9 +2059,9 @@ app.get('/api/news', async (req, res) => {
       success: true,
       news: [
         {
-          title: 'News temporarily unavailable',
+          title: 'News temporarily unavailable — try CoinDesk / The Block',
           source: 'System',
-          url: '#',
+          url: 'https://www.coindesk.com/',
           time: '',
           platform: 'system'
         }
