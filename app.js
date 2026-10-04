@@ -572,10 +572,11 @@ async function selectPlan(plan) {
     );
     return;
   }
-  // Real payments when enabled
+  // NEVER auto-redirect to payment from selectPlan / scroll / card tap.
+  // User must explicitly press the pay button (bindPayButtons).
   if (window.__paymentsEnabled) {
-    closePricing();
-    return startCheckout(plan);
+    openPricing(plan);
+    return;
   }
   // Demo only if explicitly allowed
   if (window.__allowDemoPlans) {
@@ -689,6 +690,7 @@ async function startCheckout(plan) {
   plan = (plan || 'premium').toLowerCase();
   if (plan !== 'pro') plan = 'premium';
   const en = (localStorage.getItem('lang') || 'ru') === 'en';
+  if (window.__checkoutInFlight) return;
   if (!user) {
     closePricing();
     openAuthModal(en ? 'Sign in to pay by card' : 'Войдите, чтобы оплатить картой');
@@ -702,6 +704,7 @@ async function startCheckout(plan) {
       b.textContent = en ? 'Opening payment…' : 'Открываем оплату…';
     }
   });
+  window.__checkoutInFlight = true;
   try {
     const res = await apiFetch('/api/billing/create-payment', {
       method: 'POST',
@@ -725,6 +728,7 @@ async function startCheckout(plan) {
   } catch (e) {
     alert(en ? 'Network error' : 'Ошибка сети');
   } finally {
+    window.__checkoutInFlight = false;
     document.querySelectorAll('.pay-plan-btn').forEach(function (b) {
       b.disabled = false;
       if (b.dataset._old) b.textContent = b.dataset._old;
@@ -741,19 +745,48 @@ function bindPayButtons() {
     btn.style.pointerEvents = 'auto';
     btn.style.position = 'relative';
     btn.style.zIndex = '5';
-    var handler = function (e) {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
+    var startX = 0;
+    var startY = 0;
+    var moved = false;
+    btn.addEventListener(
+      'touchstart',
+      function (e) {
+        moved = false;
+        var t = e.changedTouches && e.changedTouches[0];
+        if (t) {
+          startX = t.clientX;
+          startY = t.clientY;
+        }
+      },
+      { passive: true }
+    );
+    btn.addEventListener(
+      'touchmove',
+      function (e) {
+        var t = e.changedTouches && e.changedTouches[0];
+        if (!t) return;
+        if (Math.abs(t.clientX - startX) > 14 || Math.abs(t.clientY - startY) > 14) {
+          moved = true;
+        }
+      },
+      { passive: true }
+    );
+    // Only click — do NOT bind touchend (scroll lift was triggering payment)
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (moved) {
+        moved = false;
+        return;
       }
       var p = btn.getAttribute('data-plan') || 'premium';
+      var en = (localStorage.getItem('lang') || 'ru') === 'en';
+      var msg = en
+        ? 'Open card payment for ' + String(p).toUpperCase() + '?'
+        : 'Открыть оплату картой для тарифа ' + String(p).toUpperCase() + '?';
+      if (!window.confirm(msg)) return;
       startCheckout(p);
-    };
-    btn.addEventListener('click', handler, { passive: false });
-    btn.addEventListener('touchend', function (e) {
-      e.preventDefault();
-      handler(e);
-    }, { passive: false });
+    });
   });
 }
 
