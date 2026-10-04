@@ -16,29 +16,55 @@ function hashPassword(password) {
 }
 
 function verifyPasswordHash(stored, password) {
-  if (!stored) return false;
+  if (stored == null || password == null) return false;
+  const storedStr = String(stored);
+  const passStr = String(password);
+  if (!storedStr || !passStr) return false;
 
-  if (String(stored).startsWith('scrypt:')) {
-    const parts = String(stored).split(':');
+  // Preferred: scrypt:salt:hash
+  if (storedStr.startsWith('scrypt:')) {
+    const parts = storedStr.split(':');
     if (parts.length !== 3) return false;
     const salt = parts[1];
     const hash = parts[2];
-    const test = crypto.scryptSync(String(password), salt, 64).toString('hex');
+    if (!salt || !hash || hash.length < 32) return false;
+    let test;
     try {
-      return crypto.timingSafeEqual(
-        Buffer.from(hash, 'hex'),
-        Buffer.from(test, 'hex')
-      );
+      test = crypto.scryptSync(passStr, salt, 64).toString('hex');
+    } catch (e) {
+      return false;
+    }
+    try {
+      const a = Buffer.from(hash, 'hex');
+      const b = Buffer.from(test, 'hex');
+      if (a.length !== b.length) return false;
+      return crypto.timingSafeEqual(a, b);
     } catch (e) {
       return false;
     }
   }
 
-  if (String(stored).startsWith('$2')) {
+  // bcrypt hashes not supported without bcrypt — fail closed
+  if (storedStr.startsWith('$2a$') || storedStr.startsWith('$2b$') || storedStr.startsWith('$2y$')) {
     return false;
   }
 
-  return stored === password;
+  // Legacy plaintext ONLY if explicitly allowed (dev) AND both non-empty
+  // Production must NOT rely on this.
+  if (String(process.env.ALLOW_PLAINTEXT_PASSWORDS || '').toLowerCase() === 'true') {
+    if (passStr.length < 6 || storedStr.length < 6) return false;
+    try {
+      const a = Buffer.from(storedStr);
+      const b = Buffer.from(passStr);
+      if (a.length !== b.length) return false;
+      return crypto.timingSafeEqual(a, b);
+    } catch (e) {
+      return storedStr === passStr;
+    }
+  }
+
+  // Fail closed: unknown format = invalid
+  return false;
 }
 
 /** user_id в alerts/scan_* — TEXT; users.id — integer */
@@ -56,10 +82,12 @@ async function query(text, params) {
 }
 
 async function findUserByEmail(email) {
+  const em = String(email || '').trim().toLowerCase();
+  if (!em || !em.includes('@') || em.length < 5) return null;
   const r = await query(
     `SELECT id, email, password, plan, telegram_id, telegram_chat_id
-     FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
-    [email]
+     FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+    [em]
   );
   return r.rows[0] || null;
 }
@@ -137,14 +165,24 @@ async function createUserFromTelegram({ telegramId, username, firstName, lastNam
 }
 
 async function verifyPassword(user, password) {
-  if (!user?.password) return false;
+  if (!user || user.password == null || user.password === '') return false;
+  if (password == null || String(password) === '') return false;
   const ok = verifyPasswordHash(user.password, password);
-  if (ok && user.password === password) {
-    const hash = hashPassword(password);
-    await query(`UPDATE users SET password = $1 WHERE id = $2::integer`, [
-      hash,
-      uid(user)
-    ]);
+  // If legacy plaintext matched under ALLOW_PLAINTEXT_PASSWORDS — rehash immediately
+  if (
+    ok &&
+    !String(user.password).startsWith('scrypt:') &&
+    String(process.env.ALLOW_PLAINTEXT_PASSWORDS || '').toLowerCase() === 'true'
+  ) {
+    try {
+      const hash = hashPassword(password);
+      await query(`UPDATE users SET password = $1 WHERE id = $2::integer`, [
+        hash,
+        uid(user)
+      ]);
+    } catch (e) {
+      console.warn('[store] rehash:', e.message);
+    }
   }
   return ok;
 }
