@@ -546,9 +546,41 @@ app.post(
   }
 );
 
+async function yookassaAuthHeader() {
+  const shopId = process.env.YOOKASSA_SHOP_ID;
+  const secret = process.env.YOOKASSA_SECRET_KEY;
+  if (!shopId || !secret) return null;
+  return 'Basic ' + Buffer.from(shopId + ':' + secret).toString('base64');
+}
+
+/** Fetch payment from YooKassa and activate plan if succeeded */
+async function activatePlanFromYooPayment(paymentId, expectedUserId) {
+  const auth = await yookassaAuthHeader();
+  if (!auth || !paymentId) return { ok: false, error: 'no_payment' };
+  const r = await axios.get('https://api.yookassa.ru/v3/payments/' + encodeURIComponent(paymentId), {
+    headers: { Authorization: auth },
+    timeout: 12000
+  });
+  const pay = r.data || {};
+  if (pay.status !== 'succeeded') {
+    return { ok: false, status: pay.status || 'unknown', error: 'not_succeeded' };
+  }
+  const meta = pay.metadata || {};
+  const userId = String(meta.userId || '');
+  const plan = String(meta.plan || '').toLowerCase();
+  if (expectedUserId && userId && String(expectedUserId) !== userId) {
+    return { ok: false, error: 'user_mismatch' };
+  }
+  if (!userId || (plan !== 'premium' && plan !== 'pro')) {
+    return { ok: false, error: 'bad_metadata' };
+  }
+  await store.updateUserPlan({ id: userId }, plan);
+  console.log('[billing] plan activated', userId, plan, paymentId);
+  return { ok: true, plan: plan, userId: userId, paymentId: paymentId };
+}
+
 app.post('/api/billing/webhook', express.json(), async (req, res) => {
   try {
-    // Optional IP allowlist (YooKassa notify IPs — set YOOKASSA_WEBHOOK_IPS comma-separated)
     const allowIps = String(process.env.YOOKASSA_WEBHOOK_IPS || '')
       .split(',')
       .map(function (x) { return x.trim(); })
@@ -560,7 +592,6 @@ app.post('/api/billing/webhook', express.json(), async (req, res) => {
         return res.status(403).json({ ok: false });
       }
     }
-    // Optional shared secret in metadata or header (custom)
     const hookSecret = process.env.YOOKASSA_WEBHOOK_SECRET || '';
     if (hookSecret) {
       const given = String(req.headers['x-webhook-secret'] || req.query.secret || '');
@@ -571,12 +602,26 @@ app.post('/api/billing/webhook', express.json(), async (req, res) => {
     }
     const event = req.body || {};
     const obj = event.object || {};
-    if (event.event === 'payment.succeeded' && obj.metadata) {
-      const userId = obj.metadata.userId;
-      const plan = String(obj.metadata.plan || '').toLowerCase();
-      if (userId && (plan === 'premium' || plan === 'pro')) {
-        await store.updateUserPlan({ id: userId }, plan);
-        console.log('[billing] plan updated', userId, plan);
+    const eventName = String(event.event || '');
+    // Activate on succeeded; also try if object already succeeded
+    if (
+      eventName === 'payment.succeeded' ||
+      (obj && obj.status === 'succeeded')
+    ) {
+      const paymentId = obj.id;
+      if (paymentId) {
+        try {
+          await activatePlanFromYooPayment(paymentId, null);
+        } catch (e) {
+          // Fallback: trust webhook body metadata if API re-fetch fails
+          console.warn('[billing webhook] re-fetch failed, metadata fallback', e.message);
+          const userId = obj.metadata && obj.metadata.userId;
+          const plan = String((obj.metadata && obj.metadata.plan) || '').toLowerCase();
+          if (userId && (plan === 'premium' || plan === 'pro')) {
+            await store.updateUserPlan({ id: userId }, plan);
+            console.log('[billing] plan updated (fallback)', userId, plan);
+          }
+        }
       }
     }
     res.status(200).json({ ok: true });
@@ -585,6 +630,60 @@ app.post('/api/billing/webhook', express.json(), async (req, res) => {
     res.status(200).json({ ok: true });
   }
 });
+
+/** Client return from YooKassa: confirm payment by id and set plan (webhook backup) */
+app.post(
+  '/api/billing/sync',
+  authMiddleware,
+  rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => 'paysync:' + clientIp(req) }),
+  async (req, res) => {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, error: 'Login required' });
+    }
+    const paymentId = String(req.body?.paymentId || req.query.paymentId || '').trim();
+    if (!paymentId) {
+      return res.status(400).json({ success: false, error: 'paymentId required' });
+    }
+    try {
+      const result = await activatePlanFromYooPayment(paymentId, String(req.user.id));
+      if (!result.ok) {
+        // Still allow: if payment succeeded for this user after retries
+        return res.json({
+          success: false,
+          pending: result.status === 'pending' || result.status === 'waiting_for_capture',
+          status: result.status || null,
+          error: result.error || 'not_activated',
+          plan: getPlan(req.user)
+        });
+      }
+      const plan = result.plan;
+      const tokenJwt = jwt.sign(
+        {
+          id: req.user.id,
+          email: req.user.email || '',
+          plan: plan,
+          isOwner: isOwnerEmail(req.user.email)
+        },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+      setAuthCookie(res, tokenJwt);
+      res.json({
+        success: true,
+        plan: plan,
+        paymentId: paymentId,
+        user: { id: req.user.id, email: req.user.email, plan: plan }
+      });
+    } catch (e) {
+      console.error('[billing sync]', e.response?.data || e.message);
+      res.status(500).json({
+        success: false,
+        error: e.response?.data?.description || e.message
+      });
+    }
+  }
+);
+
 
 
 app.post(
