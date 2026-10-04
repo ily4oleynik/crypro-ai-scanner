@@ -2760,3 +2760,22 @@ button.home-chip.example-token:hover,
 
 .candle-chart { min-height: 280px !important; width: 100% !important; position: relative; }
 .chart-wrapper { min-height: 320px; }
+
+
+/* Pricing mobile: scroll must not trigger pay */
+#pricing-modal .price-card {
+  touch-action: pan-y;
+}
+#pricing-modal .price-card ul,
+#pricing-modal .price-card h3,
+#pricing-modal .price-card .plan-price,
+#pricing-modal .price-card .plan-pitch {
+  pointer-events: none;
+}
+#pricing-modal .pay-plan-btn,
+#pricing-modal .connect-btn,
+#pricing-modal .pricing-pick,
+#pricing-modal a {
+  pointer-events: auto;
+  touch-action: manipulation;
+}
