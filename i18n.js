@@ -49,6 +49,7 @@ const I18N = {
     'compare.comparing': 'Сравниваем…',
     'home.trending': 'Тренды',
     'home.highRisk': 'Высокий риск',
+    'home.newsEmpty': 'Пока нет новостей',
     'home.news': 'Новости',
 
     'alerts.title': 'Алерты',
@@ -229,6 +230,7 @@ const I18N = {
     'welcome.cta': 'Понятно'
   },
   en: {
+    'home.newsEmpty': 'No news right now',
     'btn.login': 'Login',
     'btn.logout': 'Logout',
     'btn.upgrade': 'Upgrade',
