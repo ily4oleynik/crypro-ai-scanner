@@ -2047,11 +2047,23 @@ app.get('/api/news', async (req, res) => {
       }));
     }
     if (source !== 'all') {
-      news = news.filter(
-        (n) =>
-          (n.platform && n.platform === source) ||
-          (n.source && String(n.source).toLowerCase().includes(source))
-      );
+      const src = String(source).toLowerCase();
+      news = news.filter((n) => {
+        const platform = String(n.platform || '').toLowerCase();
+        const name = String(n.source || '').toLowerCase();
+        if (src === 'x' || src === 'twitter') {
+          return platform === 'x' || name.includes('twitter') || name.includes('x.com');
+        }
+        if (src === 'crypto' || src === 'cripto') {
+          return (
+            platform === 'crypto' ||
+            platform === 'rss' ||
+            platform === 'cryptopanic' ||
+            /cointelegraph|coindesk|decrypt|bitcoin|panic|block/i.test(name)
+          );
+        }
+        return platform === src || name.includes(src);
+      });
     }
     res.json({ success: true, news });
   } catch (e) {
