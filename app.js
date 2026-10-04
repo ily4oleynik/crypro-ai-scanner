@@ -1497,7 +1497,7 @@ async function loadNews(source) {
     const res = await apiFetch('/api/news?source=' + encodeURIComponent(newsSource));
     const data = await res.json();
     if (!data.success || !data.news || !data.news.length) {
-      grid.innerHTML = '<div class="error-card">' + (typeof t === 'function' ? (t('home.newsEmpty') || 'No news') : 'No news') + '</div>';
+      grid.innerHTML = '<div class="error-card">' + ((typeof t === 'function' && t('home.newsEmpty') && t('home.newsEmpty') !== 'home.newsEmpty') ? t('home.newsEmpty') : 'No news') + '</div>';
       return;
     }
     grid.innerHTML = data.news.map(function (item) {
