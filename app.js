@@ -53,13 +53,51 @@ let lastPairMeta = null;
 let pendingPlan = null;
 let newsSource = 'all';
 
+async function syncPaymentAfterReturn(paymentId) {
+  if (!paymentId) return null;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const res = await apiFetch('/api/billing/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: paymentId })
+      });
+      const data = await res.json();
+      if (data.success && data.plan) {
+        currentPlan = data.plan;
+        if (user) user.plan = data.plan;
+        if (data.user) user = data.user;
+        updateAuthUI();
+        if (typeof refreshAccountPage === 'function') refreshAccountPage();
+        if (typeof refreshUsage === 'function') refreshUsage();
+        try { localStorage.removeItem('pendingPaymentId'); } catch (e) {}
+        return data;
+      }
+      if (data.pending) {
+        await new Promise(function (r) { setTimeout(r, 1500); });
+        continue;
+      }
+      return data;
+    } catch (e) {
+      await new Promise(function (r) { setTimeout(r, 1500); });
+    }
+  }
+  return null;
+}
+
 (function handlePaidReturn() {
   try {
     const q = new URLSearchParams(window.location.search || '');
     if (q.get('paid') === '1') {
-      const plan = q.get('plan') || '';
+      const planQ = q.get('plan') || '';
       history.replaceState({}, '', window.location.pathname);
       setTimeout(async function () {
+        const paymentId = localStorage.getItem('pendingPaymentId') || '';
+        const en = (localStorage.getItem('lang') || 'ru') === 'en';
+        let synced = null;
+        if (paymentId) {
+          synced = await syncPaymentAfterReturn(paymentId);
+        }
         try {
           const me = await apiFetch('/api/auth/me');
           const data = await me.json();
@@ -67,16 +105,24 @@ let newsSource = 'all';
             user = data.user;
             currentPlan = data.user.plan || currentPlan;
             updateAuthUI();
-            refreshAccountPage();
-            refreshUsage();
+            if (typeof refreshAccountPage === 'function') refreshAccountPage();
+            if (typeof refreshUsage === 'function') refreshUsage();
           }
         } catch (e) {}
-        alert(
-          (localStorage.getItem('lang') || 'ru') === 'en'
-            ? ('Payment return — plan may update after webhook. Current: ' + (currentPlan || 'free'))
-            : ('Возврат с оплаты — план обновится после webhook. Сейчас: ' + (currentPlan || 'free'))
-        );
-      }, 500);
+        if (synced && synced.success) {
+          alert(
+            en
+              ? ('Payment OK — plan: ' + (synced.plan || currentPlan || '').toUpperCase())
+              : ('Оплата прошла — тариф: ' + (synced.plan || currentPlan || '').toUpperCase())
+          );
+        } else {
+          alert(
+            en
+              ? ('Back from payment. Current plan: ' + (currentPlan || 'free') + (paymentId ? '. If still Free, wait 1 min or open Account.' : ''))
+              : ('Возврат с оплаты. Сейчас: ' + (currentPlan || 'free') + (paymentId ? '. Если ещё Free — подожди минуту или открой Кабинет.' : ''))
+          );
+        }
+      }, 400);
     }
   } catch (e) {}
 })();
@@ -663,6 +709,12 @@ async function startCheckout(plan) {
       body: JSON.stringify({ plan: plan })
     });
     const data = await res.json().catch(function () { return {}; });
+    if (data.paymentId) {
+      try {
+        localStorage.setItem('pendingPaymentId', data.paymentId);
+        localStorage.setItem('pendingPaymentPlan', plan);
+      } catch (e) {}
+    }
     if (data.confirmationUrl) {
       // Mobile Safari: assign more reliable than href in some webviews
       window.location.assign(data.confirmationUrl);
