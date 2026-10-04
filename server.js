@@ -799,9 +799,24 @@ app.post(
   }),
   async (req, res) => {
     try {
-      const { email, password } = req.body;
+      let email = String((req.body && req.body.email) || '').trim().toLowerCase();
+      const password = String((req.body && req.body.password) || '');
+      if (!email || !password) {
+        return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
+      }
+      if (password.length < 6) {
+        return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
+      }
       const user = await store.findUserByEmail(email);
-      if (!user || !(await store.verifyPassword(user, password))) {
+      if (!user) {
+        // constant-ish delay to reduce user-enumeration timing (best-effort)
+        await new Promise((r) => setTimeout(r, 80 + Math.floor(Math.random() * 80)));
+        return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
+      }
+      if (!(await store.verifyPassword(user, password))) {
         return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
       }
       const owner = isOwnerEmail(user.email);
