@@ -1468,23 +1468,79 @@ async function loadNews(source) {
   if (source) newsSource = source;
   const grid = document.getElementById('news-grid');
   if (!grid) return;
-  grid.innerHTML = '<div class="loading">Loading...</div>';
+  grid.innerHTML = '<div class="muted small" style="padding:1rem">Loading…</div>';
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function safeNewsUrl(raw) {
+    let u = String(raw || '').trim();
+    if (!u || u === '#' || u === 'null' || u === 'undefined') return null;
+    if (u.startsWith('//')) u = 'https:' + u;
+    if (!/^https?:\/\//i.test(u)) {
+      // relative or bare domain → force https absolute
+      if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(u)) u = 'https://' + u.replace(/^\/+/, '');
+      else return null;
+    }
+    try {
+      const parsed = new URL(u);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      return parsed.href;
+    } catch (e) {
+      return null;
+    }
+  }
   try {
     const res = await apiFetch('/api/news?source=' + encodeURIComponent(newsSource));
     const data = await res.json();
-    if (!data.success || !data.news?.length) {
-      grid.innerHTML = '<div class="error-card">No news</div>';
+    if (!data.success || !data.news || !data.news.length) {
+      grid.innerHTML = '<div class="error-card">' + (typeof t === 'function' ? (t('home.newsEmpty') || 'No news') : 'No news') + '</div>';
       return;
     }
-    grid.innerHTML = data.news.map(item =>
-      '<a href="' + (item.url || '#') + '" target="_blank" rel="noopener" class="news-card glass">' +
-      '<div class="news-meta">' + (item.source || '') + (item.time ? ' · ' + item.time : '') + '</div>' +
-      '<h3 class="news-title">' + item.title + '</h3></a>'
-    ).join('');
+    grid.innerHTML = data.news.map(function (item) {
+      const url = safeNewsUrl(item.url);
+      const title = escapeHtml(item.title || 'News');
+      const meta = escapeHtml((item.source || '') + (item.time ? ' · ' + item.time : ''));
+      if (url) {
+        return (
+          '<a class="news-card glass" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" data-external-news="1">' +
+          '<div class="news-meta">' + meta + '</div>' +
+          '<h3 class="news-title">' + title + '</h3></a>'
+        );
+      }
+      return (
+        '<div class="news-card glass news-card-dead" role="article">' +
+        '<div class="news-meta">' + meta + '</div>' +
+        '<h3 class="news-title">' + title + '</h3>' +
+        '<p class="muted small">Link unavailable</p></div>'
+      );
+    }).join('');
+    // Ensure clicks never fall through to SPA routing
+    grid.querySelectorAll('a[data-external-news]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const href = a.getAttribute('href');
+        if (!href || href === '#') {
+          e.preventDefault();
+          return;
+        }
+        // Force new tab; prevent same-origin SPA navigation on bad URLs
+        if (href.indexOf('http') !== 0) {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        window.open(href, '_blank', 'noopener,noreferrer');
+      });
+    });
   } catch (e) {
     grid.innerHTML = '<div class="error-card">News error</div>';
   }
 }
+
 
 async function startScan() {
   const address = document.getElementById('token-input').value.trim();
