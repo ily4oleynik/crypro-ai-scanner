@@ -1020,11 +1020,14 @@ async function restoreSession() {
       token = null; // cookie carries session
       updateAuthUI();
       refreshUsage();
+      if (typeof loadHomeWidgets === 'function') loadHomeWidgets();
+      if (typeof refreshAccountPage === 'function') refreshAccountPage();
     } else {
       user = null;
       currentPlan = 'free';
       token = null;
       updateAuthUI();
+      if (typeof loadHomeWidgets === 'function') loadHomeWidgets();
     }
   } catch (e) {
     user = null;
@@ -1375,17 +1378,22 @@ async function loadHighRiskSignals() {
 async function loadHomeWatchlist() {
   const box = document.getElementById('home-watchlist');
   if (!box) return;
-  if (!user || !token) {
-    box.innerHTML = '<div class="empty-state-cta"><p>' + (typeof t === 'function' ? t('empty.watchlist') : 'Sign in to save favorites') + '</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">' + (typeof t === 'function' ? t('nav.login') : 'Login') + '</button></div>';
+  // Session is cookie-based; token may be null after login
+  if (!user || !user.id) {
+    const msg = (typeof t === 'function' && t('empty.watchlist') && t('empty.watchlist') !== 'empty.watchlist')
+      ? t('empty.watchlist')
+      : ((localStorage.getItem('lang') || 'ru') === 'en' ? 'Sign in to save favorites' : 'Войдите, чтобы сохранять избранное');
+    const btn = (typeof t === 'function' && t('nav.login') && t('nav.login') !== 'nav.login')
+      ? t('nav.login')
+      : ((localStorage.getItem('lang') || 'ru') === 'en' ? 'Login' : 'Войти');
+    box.innerHTML = '<div class="empty-state-cta"><p>' + msg + '</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">' + btn + '</button></div>';
     return;
   }
   try {
-    const res = await apiFetch('/api/watchlist', {
-      headers: { Authorization: 'Bearer ' + token }
-    });
+    const res = await apiFetch('/api/watchlist');
     const data = await res.json();
     if (!data.watchlist?.length) {
-      box.innerHTML = '<div class="empty-state-cta"><p>Empty</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scanner</button></div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>' + ((localStorage.getItem('lang') || 'ru') === 'en' ? 'Watchlist is empty' : 'Избранное пусто') + '</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">' + ((localStorage.getItem('lang') || 'ru') === 'en' ? 'Scanner' : 'Сканер') + '</button></div>';
       return;
     }
     box.innerHTML = '<div class="home-chip-row">' + data.watchlist.slice(0, 8).map(item =>
@@ -1399,17 +1407,18 @@ async function loadHomeWatchlist() {
 async function loadHomeHistory() {
   const box = document.getElementById('home-history');
   if (!box) return;
-  if (!user || !token) {
-    box.innerHTML = '<div class="empty-state-cta"><p>Sign in to see history</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">Login</button></div>';
+  if (!user || !user.id) {
+    const en = (localStorage.getItem('lang') || 'ru') === 'en';
+    const msg = en ? 'Sign in to see history' : 'Войдите, чтобы видеть историю';
+    const btn = en ? 'Login' : 'Войти';
+    box.innerHTML = '<div class="empty-state-cta"><p>' + msg + '</p><button type="button" class="upgrade-btn" onclick="openAuthModal()">' + btn + '</button></div>';
     return;
   }
   try {
-    const res = await apiFetch('/api/history', {
-      headers: { Authorization: 'Bearer ' + token }
-    });
+    const res = await apiFetch('/api/history');
     const data = await res.json();
     if (!data.history?.length) {
-      box.innerHTML = '<div class="empty-state-cta"><p>No scans yet</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">Scan</button></div>';
+      box.innerHTML = '<div class="empty-state-cta"><p>' + ((localStorage.getItem('lang') || 'ru') === 'en' ? 'No scans yet' : 'Пока нет сканов') + '</p><button type="button" class="upgrade-btn" onclick="showPage(\'scanner\')">' + ((localStorage.getItem('lang') || 'ru') === 'en' ? 'Scan' : 'Сканер') + '</button></div>';
       return;
     }
     box.innerHTML = data.history.slice(0, 5).map(h =>
