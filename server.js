@@ -788,6 +788,14 @@ app.post('/api/security/check', async (req, res) => {
   }
 });
 
+
+function isValidEmailServer(email) {
+  const em = String(email || '').trim().toLowerCase();
+  if (!em || em.length > 120) return false;
+  if (em.includes('..')) return false;
+  return /^[a-z0-9._%+\-]+@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}$/i.test(em);
+}
+
 /* ===================== AUTH ===================== */
 
 app.post(
@@ -804,7 +812,7 @@ app.post(
       if (!email || !password) {
         return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!isValidEmailServer(email)) {
         return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
       }
       if (password.length < 6) {
@@ -863,8 +871,8 @@ app.post(
       if (!email || !password) {
         return res.status(400).json({ success: false, error: 'Укажите email и пароль' });
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({ success: false, error: 'Некорректный email' });
+      if (!isValidEmailServer(email)) {
+        return res.status(400).json({ success: false, error: 'Некорректный email (нужен формат name@domain.com)' });
       }
       if (password.length < 8) {
         return res.status(400).json({ success: false, error: 'Пароль не короче 8 символов' });
