@@ -34,7 +34,7 @@
 <div class="container">
     <header class="top-nav">
       <div class="nav-brand">
-        <div class="logo">Crypto AI Scanner</div>
+        <button type="button" class="logo logo-home" id="logo-home" title="Home">Crypto AI Scanner</button>
         <button type="button" class="nav-burger" id="nav-burger" aria-label="Menu" title="Menu" aria-expanded="false" aria-controls="nav-drawer">☰</button>
       </div>
       <!-- Desktop links -->
@@ -66,7 +66,7 @@
     <div class="nav-drawer-overlay" id="nav-drawer-overlay" hidden></div>
     <aside class="nav-drawer" id="nav-drawer" aria-hidden="true">
       <div class="nav-drawer-head">
-        <div class="logo">Crypto AI Scanner</div>
+        <button type="button" class="logo logo-home" id="logo-drawer-home" title="Home">Crypto AI Scanner</button>
         <button type="button" class="nav-drawer-close" id="nav-drawer-close" aria-label="Close">✕</button>
       </div>
             <nav class="nav-drawer-links">
@@ -576,40 +576,40 @@
   <div class="modal-overlay" id="pricing-modal" data-delivery="digital" style="display:none">
     <div class="modal-content plans-list plans-horizontal">
       <button type="button" class="modal-close" id="pricing-close">&times;</button>
-      <h2 class="plans-title" data-i18n="plans.title">Plans</h2>
-      <p class="muted small plans-sub">Цифровой доступ к Crypto AI Scanner (онлайн). Цены фиксированные. После оплаты тариф активируется в аккаунте автоматически.</p>
+      <h2 class="plans-title" data-i18n="plans.title">Тарифы</h2>
+      <p class="muted small plans-sub" data-i18n="plans.subDigital">Цифровой доступ к Crypto AI Scanner (онлайн). Цены фиксированные. После оплаты тариф активируется в аккаунте автоматически.</p>
       <p class="muted small" style="margin-top:0.35rem"><a href="/offer.html">Публичная оферта</a> · <a href="/contacts.html">Контакты и реквизиты</a> · <a href="/terms.html">Условия</a></p>
 
       <div class="pricing-grid">
         <div class="price-card" data-plan="free">
           <h3>Free</h3>
           <p class="plan-price">$0</p>
-          <p class="plan-pitch">Попробовать first-pass</p>
+          <p class="plan-pitch" data-i18n="plans.freePitch">Попробовать first-pass</p>
           <ul>
-            <li>5 сканов / день</li>
-            <li>Risk score + разбивка</li>
-            <li>Honeypot / tax / mint / ownership / LP (если API отдаёт)</li>
-            <li>Короткий AI + 2 msg chat trial / день</li>
+            <li data-i18n="plans.free1">5 сканов / день</li>
+            <li data-i18n="plans.free2">Risk score + разбивка</li>
+            <li data-i18n="plans.free3">Honeypot / tax / mint / ownership / LP</li>
+            <li data-i18n="plans.free4">Короткий AI + 2 msg chat trial / день</li>
           </ul>
-          <button type="button" class="connect-btn full pricing-pick" data-plan="free">Остаться на Free</button>
+          <button type="button" class="connect-btn full pricing-pick" data-plan="free" data-i18n="plans.stayFree">Остаться на Free</button>
         </div>
 
         <div class="price-card recommended" data-plan="premium">
-          <span class="badge">Recommended</span>
+          <span class="badge" data-i18n="plans.recommended">Recommended</span>
           <h3>Premium</h3>
           <p class="plan-price">$19<span>/mo</span></p>
-          <p class="plan-pitch">Для активного инвестора: глубина + алерты</p>
+          <p class="plan-pitch" data-i18n="plans.premPitch">Для активного инвестора: глубина + алерты</p>
           <ul>
-            <li>50 сканов / день</li>
-            <li>Полный security + holders</li>
-            <li>AI-отчёт + chat 20 msg / день</li>
-            <li>Telegram alerts (цена + risk + liq)</li>
-            <li>History + watchlist до 30</li>
-            <li>Свечной график · ручные сканы</li>
-            <li class="muted">Не включает Portfolio Desk / batch / early feed</li>
+            <li data-i18n="plans.prem1">50 сканов / день</li>
+            <li data-i18n="plans.prem2">Полный security + holders</li>
+            <li data-i18n="plans.prem3">AI-отчёт + chat 20 msg / день</li>
+            <li data-i18n="plans.prem4">Telegram alerts (цена + risk + liq)</li>
+            <li data-i18n="plans.prem5">History + watchlist до 30</li>
+            <li data-i18n="plans.prem6">Свечной график · ручные сканы</li>
+            <li class="muted" data-i18n="plans.prem7">Не включает Portfolio Desk / batch / early feed</li>
           </ul>
-          <button type="button" type="button" class="upgrade-btn full pay-plan-btn touch-pay" data-plan="premium">Карта РФ / СБП · $19</button>
-          <button type="button" class="connect-btn full" onclick="payViaTelegram('premium')">Pay via Telegram · USDT</button>
+          <button type="button" class="upgrade-btn full pay-plan-btn touch-pay" data-plan="premium" data-i18n="plans.payCardPrem">Карта РФ / СБП · $19</button>
+          <button type="button" class="connect-btn full" onclick="payViaTelegram('premium')" data-i18n="plans.payTg">Pay via Telegram · USDT</button>
           <button type="button" class="connect-btn full waitlist-btn" data-plan="premium" style="display:none">Waitlist · Premium $19</button>
           <button type="button" class="upgrade-btn full pricing-pick demo-plan-btn" data-plan="premium" style="margin-top:0.5rem;display:none">Демо Premium</button>
         </div>
@@ -617,17 +617,17 @@
         <div class="price-card" data-plan="pro">
           <h3>Pro</h3>
           <p class="plan-price">$39<span>/mo</span></p>
-          <p class="plan-pitch">Risk desk: портфель, радар, unlimited AI</p>
+          <p class="plan-pitch" data-i18n="plans.proPitch">Risk desk: портфель, радар, unlimited AI</p>
           <ul>
-            <li><strong>Portfolio Risk Desk</strong> — score по позициям</li>
-            <li>Advanced alerts (score jump / risk / liq)</li>
-            <li>Unlimited AI + what-if / deep dive</li>
-            <li>Early / new pairs feed</li>
-            <li>Batch scan до 25 адресов</li>
-            <li>Risk history 30d · Bybit как источник портфеля</li>
+            <li data-i18n="plans.pro1"><strong>Portfolio Risk Desk</strong> — score по позициям</li>
+            <li data-i18n="plans.pro2">Advanced alerts (score jump / risk / liq)</li>
+            <li data-i18n="plans.pro3">Unlimited AI + what-if / deep dive</li>
+            <li data-i18n="plans.pro4">Early / new pairs feed</li>
+            <li data-i18n="plans.pro5">Batch scan до 25 адресов</li>
+            <li data-i18n="plans.pro6">Risk history 30d · Bybit как источник портфеля</li>
           </ul>
-          <button type="button" type="button" class="upgrade-btn full pay-plan-btn touch-pay" data-plan="pro">Карта РФ / СБП · $39</button>
-          <button type="button" class="connect-btn full" onclick="payViaTelegram('pro')">Pay via Telegram · USDT</button>
+          <button type="button" class="upgrade-btn full pay-plan-btn touch-pay" data-plan="pro" data-i18n="plans.payCardPro">Карта РФ / СБП · $39</button>
+          <button type="button" class="connect-btn full" onclick="payViaTelegram('pro')" data-i18n="plans.payTg">Pay via Telegram · USDT</button>
           <button type="button" class="connect-btn full waitlist-btn" data-plan="pro" style="display:none">Waitlist · Pro $39</button>
           <button type="button" class="upgrade-btn full pricing-pick demo-plan-btn" data-plan="pro" style="margin-top:0.5rem;display:none">Демо Pro</button>
         </div>
