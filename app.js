@@ -2306,7 +2306,7 @@ function aiOverviewHtml(ai, risk) {
     html += '</ul>';
   }
   if (f.risks.length) {
-    html += '<div class="ai-mini-label">Key risks</div><ul class="ai-verdict-points risk">';
+    html += '<div class="ai-mini-label key-risks-title">' + (typeof tt === 'function' ? tt('report.keyRisks') : 'Key risks') + '</div><ul class="ai-verdict-points risk">';
     f.risks.slice(0, 3).forEach(function (p) { html += '<li>' + safe(p) + '</li>'; });
     html += '</ul>';
   }
@@ -3344,7 +3344,7 @@ function renderTokenPage(data) {
       ? '<details class="ai-full-details"><summary>Full AI text</summary><p class="ai-full-text">' + safe(formatAiVerdict(ai, r).full) + '</p></details>'
       : '') +
     (Array.isArray(ai.risks) && ai.risks.length
-      ? '<div style="margin-top:0.8rem;"><div class="muted">Key risks</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
+      ? '<div style="margin-top:0.8rem;"><div class="muted key-risks-title">' + (typeof tt === 'function' ? tt('report.keyRisks') : 'Key risks') + '</div><ul style="margin:0.4rem 0 0 1.1rem;color:var(--muted);">' +
         ai.risks.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
       : '') +
     (Array.isArray(ai.positives) && ai.positives.length
