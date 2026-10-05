@@ -793,7 +793,18 @@ function isValidEmailServer(email) {
   const em = String(email || '').trim().toLowerCase();
   if (!em || em.length > 120) return false;
   if (em.includes('..')) return false;
-  return /^[a-z0-9._%+\-]+@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}$/i.test(em);
+  if (!/^[a-z0-9._%+\-]+@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}$/i.test(em)) return false;
+  const local = em.split('@')[0] || '';
+  const blocked = [
+    'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'pussy', 'nigger', 'nigga',
+    'хуй', 'хуе', 'хуя', 'пизд', 'ебан', 'ебал', 'бляд', 'сука', 'мудак', 'залуп',
+    'sperma', 'sperm', 'penis', 'vagina', 'porn', 'xxx'
+  ];
+  const localNorm = local.replace(/[0-9._\-]/g, '');
+  for (const w of blocked) {
+    if (local.includes(w) || localNorm.includes(w)) return false;
+  }
+  return local.length >= 2;
 }
 
 /* ===================== AUTH ===================== */
