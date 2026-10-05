@@ -1,6 +1,29 @@
 const API_BASE = window.API_BASE || window.location.origin;
 
 /** Same-origin fetches with httpOnly cookie session */
+const DISPOSABLE_EMAIL_DOMAINS = {
+  'mailinator.com':1,'guerrillamail.com':1,'guerrillamail.org':1,'sharklasers.com':1,'grr.la':1,
+  'tempmail.com':1,'temp-mail.org':1,'temp-mail.io':1,'10minutemail.com':1,'10minutemail.net':1,
+  'throwaway.email':1,'trashmail.com':1,'yopmail.com':1,'yopmail.fr':1,'getnada.com':1,
+  'emailondeck.com':1,'fakeinbox.com':1,'maildrop.cc':1,'discard.email':1,'mailnesia.com':1,
+  'mailsac.com':1,'burnermail.io':1,'tempail.com':1,'tmpmail.org':1,'tmpmail.net':1,
+  '1secmail.com':1,'1secmail.org':1,'emailfake.com':1,'mohmal.com':1,'guerrillamailblock.com':1,
+  'spam4.me':1,'pokemail.net':1,'dispostable.com':1,'mailcatch.com':1,'tempinbox.com':1,
+  'trash-mail.com':1,'wegwerfmail.de':1,'mailnull.com':1,'spamgourmet.com':1,'getairmail.com':1,
+  'tempr.email':1,'tmpeml.com':1,'inboxbear.com':1,'mytemp.email':1,'crazymailing.com':1
+};
+
+function isDisposableEmailDomain(domain) {
+  var d = String(domain || '').toLowerCase().replace(/^www\./, '');
+  if (!d) return true;
+  if (DISPOSABLE_EMAIL_DOMAINS[d]) return true;
+  var keys = Object.keys(DISPOSABLE_EMAIL_DOMAINS);
+  for (var i = 0; i < keys.length; i++) {
+    if (d.length > keys[i].length && d.slice(-(keys[i].length + 1)) === '.' + keys[i]) return true;
+  }
+  return false;
+}
+
 function isValidEmail(email) {
   const em = String(email || '').trim().toLowerCase();
   if (!em || em.length > 120) return false;
@@ -9,8 +32,11 @@ function isValidEmail(email) {
   const parts = em.split('@');
   const local = parts[0] || '';
   const domain = parts[1] || '';
-  if (domain.length < 4 || domain.split('.').some(function (p) { return !p.length; })) return false;
-  // Block obvious spam / abuse local-parts (not full moderation — just UX)
+  if (local.length < 2 || domain.length < 4) return false;
+  if (domain.split('.').some(function (p) { return !p.length; })) return false;
+  var tld = domain.split('.').pop() || '';
+  if (!/^[a-z]{2,24}$/.test(tld)) return false;
+  if (isDisposableEmailDomain(domain)) return false;
   const blocked = [
     'admin', 'root', 'test', 'null', 'undefined',
     'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'pussy',
@@ -22,8 +48,21 @@ function isValidEmail(email) {
   for (var i = 0; i < blocked.length; i++) {
     if (local.indexOf(blocked[i]) !== -1 || localNorm.indexOf(blocked[i]) !== -1) return false;
   }
-  if (local.length < 2) return false;
   return true;
+}
+
+function emailClientError(email) {
+  const em = String(email || '').trim().toLowerCase();
+  const domain = (em.split('@')[1] || '');
+  if (isDisposableEmailDomain(domain)) {
+    return (typeof t === 'function' ? t('auth.disposableEmail') : null) ||
+      'Временные почты не принимаются. Gmail, Yandex, Mail.ru и т.п.';
+  }
+  if (!isValidEmail(em)) {
+    return (typeof t === 'function' ? t('auth.badEmail') : null) ||
+      'Некорректный email';
+  }
+  return null;
 }
 
 function readStoredToken() {
@@ -236,6 +275,21 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('modal-close')?.addEventListener('click', closeAuthModal);
   document.getElementById('auth-form')?.addEventListener('submit', handleAuth);
+  document.getElementById('auth-verify-btn')?.addEventListener('click', submitVerifyCode);
+  document.getElementById('auth-resend-code')?.addEventListener('click', function (e) {
+    e.preventDefault();
+    resendVerifyCode();
+  });
+  document.getElementById('auth-verify-back')?.addEventListener('click', function (e) {
+    e.preventDefault();
+    hideVerifyPanel();
+  });
+  document.getElementById('auth-verify-code')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitVerifyCode();
+    }
+  });
   document.getElementById('acc-logout')?.addEventListener('click', () => logout());
 
   document.getElementById('pricing-close')?.addEventListener('click', closePricing);
@@ -979,6 +1033,7 @@ function closeAuthModal() {
   const modal = document.getElementById('auth-modal');
   if (modal) modal.style.display = 'none';
   document.body.classList.remove('modal-open');
+  if (typeof hideVerifyPanel === 'function') hideVerifyPanel();
   const hint = document.getElementById('auth-hint');
   if (hint) {
     hint.textContent = '';
@@ -990,6 +1045,100 @@ function closeAuthModal() {
     err.textContent = '';
     err.style.display = 'none';
   }
+}
+
+
+let pendingVerifyEmail = '';
+
+function showVerifyPanel(email, devCode) {
+  pendingVerifyEmail = email || '';
+  const form = document.getElementById('auth-form');
+  const panel = document.getElementById('auth-verify-panel');
+  const tg = document.getElementById('tg-login-wrap');
+  const tabs = document.querySelector('.auth-tabs');
+  if (form) form.style.display = 'none';
+  if (tg) tg.style.display = 'none';
+  if (tabs) tabs.style.display = 'none';
+  if (panel) panel.style.display = 'block';
+  const hint = document.getElementById('auth-verify-hint');
+  if (hint) {
+    const base = typeof t === 'function' ? t('auth.verifyHint') : 'Enter the 6-digit code';
+    hint.textContent = base + (email ? ' (' + email + ')' : '');
+    if (devCode) hint.textContent += ' · dev: ' + devCode;
+  }
+  const codeInput = document.getElementById('auth-verify-code');
+  if (codeInput) {
+    codeInput.value = devCode || '';
+    codeInput.focus();
+  }
+}
+
+function hideVerifyPanel() {
+  pendingVerifyEmail = '';
+  const form = document.getElementById('auth-form');
+  const panel = document.getElementById('auth-verify-panel');
+  const tg = document.getElementById('tg-login-wrap');
+  const tabs = document.querySelector('.auth-tabs');
+  if (form) form.style.display = '';
+  if (panel) panel.style.display = 'none';
+  if (tg) tg.style.display = 'block';
+  if (tabs) tabs.style.display = '';
+  const ve = document.getElementById('auth-verify-error');
+  if (ve) { ve.style.display = 'none'; ve.textContent = ''; }
+}
+
+async function submitVerifyCode() {
+  const code = (document.getElementById('auth-verify-code')?.value || '').trim();
+  const email = pendingVerifyEmail || (document.getElementById('auth-email')?.value || '').trim().toLowerCase();
+  const errEl = document.getElementById('auth-verify-error');
+  const showErr = function (msg) {
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    else alert(msg);
+  };
+  if (!email || code.length < 4) return showErr('Введите код из письма');
+  try {
+    const res = await apiFetch('/api/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, code: code })
+    });
+    const data = await res.json();
+    if (!data.success) return showErr(data.error || 'Код не принят');
+    if (data.token) saveSessionToken(data.token);
+    user = data.user;
+    if (data.user && data.user.isOwner) user.isOwner = true;
+    currentPlan = (data.user && data.user.plan) || 'free';
+    hideVerifyPanel();
+    closeAuthModal();
+    updateAuthUI();
+    try { await restoreSession(); } catch (e) {}
+    refreshUsage();
+    loadHomeWidgets();
+    if (typeof refreshAccountPage === 'function') refreshAccountPage();
+  } catch (e) {
+    showErr('Ошибка сети');
+  }
+}
+
+async function resendVerifyCode() {
+  const email = pendingVerifyEmail || (document.getElementById('auth-email')?.value || '').trim().toLowerCase();
+  if (!email) return;
+  try {
+    const res = await apiFetch('/api/auth/resend-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    });
+    const data = await res.json();
+    const hint = document.getElementById('auth-verify-hint');
+    if (hint) {
+      hint.textContent = (typeof t === 'function' ? t('auth.codeSent') : 'Code sent') + (data.devCode ? ' · dev: ' + data.devCode : '');
+    }
+    if (data.devCode) {
+      const inp = document.getElementById('auth-verify-code');
+      if (inp) inp.value = data.devCode;
+    }
+  } catch (e) {}
 }
 
 async function handleAuth(e) {
@@ -1017,10 +1166,9 @@ async function handleAuth(e) {
     if (!acceptTerms) return showErr('Please accept Terms and Privacy Policy');
   }
 
-  if (!isValidEmail(email)) {
-    return showErr((localStorage.getItem('lang') || 'ru') === 'en'
-      ? 'Enter a valid email (name@domain.com)'
-      : 'Введите корректный email (имя@домен.com)');
+  {
+    const emailErr = emailClientError(email);
+    if (emailErr) return showErr(emailErr);
   }
 
   try {
@@ -1034,7 +1182,17 @@ async function handleAuth(e) {
       body: JSON.stringify(body)
     });
     const data = await res.json();
-    if (!data.success) return showErr(data.error || 'Error');
+    if (!data.success) {
+      if (data.needsVerification) {
+        showVerifyPanel(data.email || email, data.devCode);
+        return;
+      }
+      return showErr(data.error || 'Error');
+    }
+    if (data.needsVerification) {
+      showVerifyPanel(data.email || email, data.devCode);
+      return;
+    }
 
     // Cookie + sessionStorage JWT (mobile password managers can break cookie-only)
     if (data.token) saveSessionToken(data.token);
@@ -1042,9 +1200,9 @@ async function handleAuth(e) {
     user = data.user;
     if (data.user && data.user.isOwner) user.isOwner = true;
     currentPlan = (data.user && data.user.plan) || 'free';
+    hideVerifyPanel();
     closeAuthModal();
     updateAuthUI();
-    // Re-confirm session from server
     try { await restoreSession(); } catch (e) {}
     refreshUsage();
     loadHomeWidgets();
