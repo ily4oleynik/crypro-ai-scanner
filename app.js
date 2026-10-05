@@ -3,12 +3,26 @@ const API_BASE = window.API_BASE || window.location.origin;
 /** Same-origin fetches with httpOnly cookie session */
 function isValidEmail(email) {
   const em = String(email || '').trim().toLowerCase();
-  // require user@domain.tld — tld 2–24 letters, no consecutive dots
   if (!em || em.length > 120) return false;
   if (em.includes('..') || em.startsWith('.') || em.endsWith('.')) return false;
   if (!/^[a-z0-9._%+\-]+@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}$/i.test(em)) return false;
-  const domain = em.split('@')[1] || '';
-  if (domain.length < 4 || domain.split('.').some(function (p) { return p.length < 1; })) return false;
+  const parts = em.split('@');
+  const local = parts[0] || '';
+  const domain = parts[1] || '';
+  if (domain.length < 4 || domain.split('.').some(function (p) { return !p.length; })) return false;
+  // Block obvious spam / abuse local-parts (not full moderation — just UX)
+  const blocked = [
+    'admin', 'root', 'test', 'null', 'undefined',
+    'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'pussy',
+    'nigger', 'nigga',
+    'хуй', 'хуе', 'хуя', 'пизд', 'ебан', 'ебал', 'бляд', 'сука', 'мудак', 'залуп',
+    'sperma', 'sperm', 'penis', 'vagina', 'porn', 'xxx'
+  ];
+  const localNorm = local.replace(/[0-9._\-]/g, '');
+  for (var i = 0; i < blocked.length; i++) {
+    if (local.indexOf(blocked[i]) !== -1 || localNorm.indexOf(blocked[i]) !== -1) return false;
+  }
+  if (local.length < 2) return false;
   return true;
 }
 
@@ -225,6 +239,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('acc-logout')?.addEventListener('click', () => logout());
 
   document.getElementById('pricing-close')?.addEventListener('click', closePricing);
+  document.querySelectorAll('.logo-home, #logo-home, #logo-drawer-home').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (typeof showPage === 'function') showPage('home');
+      if (typeof closeNavDrawer === 'function') closeNavDrawer();
+      else {
+        document.getElementById('nav-drawer')?.setAttribute('aria-hidden', 'true');
+        document.getElementById('nav-drawer-overlay')?.setAttribute('hidden', '');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
   if (typeof bindPayButtons === 'function') bindPayButtons();
   document.querySelectorAll('.pricing-pick').forEach(btn => {
     btn.addEventListener('click', () => selectPlan(btn.dataset.plan));
@@ -576,6 +603,7 @@ function openPricing(highlightPlan) {
   document.querySelectorAll('.pay-plan-btn').forEach(function (b) {
     b.style.display = 'block';
   });
+  if (typeof applyTranslations === 'function') applyTranslations();
   if (typeof bindPayButtons === 'function') bindPayButtons();
 }
 
