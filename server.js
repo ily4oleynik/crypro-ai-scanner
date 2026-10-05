@@ -5,6 +5,7 @@ const cors = require('cors');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const dns = require('dns').promises;
 const aiService = require('./services/ai.js');
 const { computeRiskFromPair } = require('./services/scoring.js');
 const { initDb } = require('./db');
@@ -947,6 +948,39 @@ function emailRejectReason(email) {
   return null;
 }
 
+
+async function domainHasMx(domain) {
+  try {
+    const d = String(domain || '').toLowerCase();
+    if (!d || d.length < 4) return false;
+    const records = await dns.resolveMx(d);
+    return Array.isArray(records) && records.length > 0;
+  } catch (e) {
+    // try resolveAny / ns — still reject if no MX
+    try {
+      const a = await dns.resolve(domain);
+      // has A but no MX — often not a real mailbox domain
+      return false;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+async function emailRejectReasonAsync(email) {
+  const sync = emailRejectReason(email);
+  if (sync) return sync;
+  const em = String(email || '').trim().toLowerCase();
+  const domain = (em.split('@')[1] || '');
+  // skip MX for telegram.local
+  if (domain.endsWith('telegram.local')) return null;
+  const ok = await domainHasMx(domain);
+  if (!ok) {
+    return 'Домен почты не принимает письма (нет MX). Укажите Gmail, Yandex, Mail.ru, Outlook и т.п.';
+  }
+  return null;
+}
+
 /* ===================== EMAIL VERIFY ===================== */
 function genVerifyCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -1079,7 +1113,7 @@ app.post(
   '/api/auth/register',
   rateLimit({
     windowMs: 60 * 60_000,
-    max: 10,
+    max: 5,
     keyFn: (req) => 'reg:' + clientIp(req)
   }),
   async (req, res) => {
@@ -1092,7 +1126,7 @@ app.post(
       if (!email || !password) {
         return res.status(400).json({ success: false, error: 'Укажите email и пароль' });
       }
-      const emailBad = emailRejectReason(email);
+      const emailBad = await emailRejectReasonAsync(email);
       if (emailBad) {
         return res.status(400).json({ success: false, error: emailBad });
       }
