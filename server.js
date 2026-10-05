@@ -789,12 +789,139 @@ app.post('/api/security/check', async (req, res) => {
 });
 
 
+
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  'mailinator.com','mailinator.net','guerrillamail.com','guerrillamail.org','guerrillamail.net',
+  'sharklasers.com','grr.la','guerrillamailblock.com','pokemail.net','spam4.me',
+  'tempmail.com','temp-mail.org','temp-mail.io','tempmailo.com','tempmailaddress.com',
+  '10minutemail.com','10minutemail.net','10minmail.com','minutemail.com',
+  'throwaway.email','throwawaymail.com','trashmail.com','trashmail.me','trashmail.net',
+  'yopmail.com','yopmail.fr','cool.fr.nf','jetable.org','nospam.ze.tc',
+  'getnada.com','emailondeck.com','fakeinbox.com','maildrop.cc','discard.email',
+  'discardmail.com','spamgourmet.com','mailnull.com','spamfree24.org',
+  'getairmail.com','mohmal.com','tempail.com','tempm.com','tmpmail.org','tmpmail.net',
+  'mailcatch.com','mailnesia.com','mailsac.com','inboxbear.com','mytemp.email',
+  'emailfake.com','fakemailgenerator.com','generator.email','crazymailing.com',
+  'burnermail.io','guerrillamail.biz','spam.la','spamspot.com','meltmail.com',
+  'mailforspam.com','trash-mail.com','wegwerfmail.de','wegwerfmail.net',
+  'tempinbox.com','dispostable.com','mailtemp.net','tempr.email','tmpeml.com',
+  '1secmail.com','1secmail.org','1secmail.net','binkmail.com','bobmail.info',
+  'spamherelots.com','spamhereplease.com','tempmail.net','mail-temp.com',
+  'easytrashmail.com','filzmail.com','getonemail.com','haltospam.com',
+  'kasmail.com','klassmaster.com','klzlk.com','spambog.com','spambog.de',
+  'spambog.ru','spamobox.com','tempomail.fr','temporarily.de','temporaryemail.net',
+  'temporaryforwarding.com','thanksnospam.info','tmail.ws','tmails.net',
+  'tmpnator.live','trashymail.com','tyldd.com','yopmail.net','zippymail.info',
+  '0-mail.com','0815.ru','0clickemail.com','10mail.org','20minutemail.com',
+  '2prong.com','30minutemail.com','3d-painting.com','4warding.com','4warding.net',
+  'amilegit.com','anonymbox.com','antichef.com','antichef.net','antispam.de',
+  'baxomale.ht.cx','beefmilk.com','binkmail.com','bio-muesli.net','bobmail.info',
+  'breakthru.com','bsnow.net','bugmenot.com','bumpymail.com','casualdx.com',
+  'centermail.com','centermail.net','chogmail.com','cool.fr.nf','correo.blogos.net',
+  'cosmorph.com','courriel.fr.nf','cubiclink.com','curryworld.de','cust.in',
+  'dacoolest.com','dandikmail.com','deadaddress.com','despammed.com','devnullmail.com',
+  'dfgh.net','digitalsanctuary.com','discardmail.de','disposeamail.com','disposableaddress.com',
+  'dispose.it','dodgeit.com','dodgit.com','donemail.ru','dontreg.com','dontsendmespam.de',
+  'dump-email.info','dumpyemail.com','e4ward.com','email60.com','emailias.com',
+  'emailinfive.com','emailmiser.com','emailsensei.com','emailtemporario.com.br',
+  'emailto.de','emailwarden.com','ephemail.net','explodemail.com','fakeinformation.com',
+  'fastacura.com','filzmail.com','fizmail.com','frapmail.com','front14.org',
+  'fuckingduh.com','fudgerub.com','garliclife.com','get1mail.com','get2mail.fr',
+  'girlsundertheinfluence.com','gishpuppy.com','great-host.in','gsrv.co.uk',
+  'h.mintemail.com','haltospam.com','hatespam.org','hidemail.de','hochsitze.com',
+  'hotpop.com','hulapla.de','ieatspam.eu','ieatspam.info','ihateyoualot.info',
+  'imails.info','inboxclean.com','inboxclean.org','incognitomail.com','incognitomail.net',
+  'ipoo.org','irish2me.com','jetable.com','jetable.fr.nf','jetable.net',
+  'junk1e.com','kasmail.com','keepmymail.com','killmail.com','killmail.net',
+  'kir.ch.tc','klassmaster.com','klzlk.com','koszmail.pl','kurzepost.de',
+  'letthemeatspam.com','lhsdv.com','lifebyfood.com','link2mail.net','litedrop.com',
+  'lol.ovpn.to','lookugly.com','lopl.co.cc','lortemail.dk','lr78.com',
+  'm4ilweb.info','maboard.com','mail.by','mail.mezimages.net','mail2rss.org',
+  'mailbidon.com','mailblocks.com','mailbucket.org','mailcatch.com','maileater.com',
+  'mailexpire.com','mailfreeonline.com','mailin8r.com','mailinater.com','mailinator2.com',
+  'mailincubator.com','mailme.lv','mailme24.com','mailmetrash.com','mailmoat.com',
+  'mailnator.com','mailnull.com','mailshell.com','mailsiphon.com','mailslite.com',
+  'mailzilla.com','makemetheking.com','manybrain.com','mbx.cc','meltmail.com',
+  'messagebeamer.de','mierdamail.com','mintemail.com','moburl.com','moncourrier.fr.nf',
+  'monemail.fr.nf','monmail.fr.nf','mt2009.com','mx0.wwwnew.eu','mycleaninbox.net',
+  'mypartyclip.de','myphantomemail.com','myspaceinc.com','myspacepimpedup.com',
+  'myspamless.com','mytrashmail.com','neomailbox.com','nervmich.net','nervtmich.net',
+  'netmails.com','netmails.net','netzidiot.de','neverbox.com','no-spam.ws','nobulk.com',
+  'noclickemail.com','nogmailspam.info','nomail.xl.cx','nomail2me.com','nomorespamemails.com',
+  'nospam.ze.tc','nospam4.us','nospamfor.us','nospamthanks.info','notmailinator.com',
+  'nowmymail.com','nurfuerspam.de','objectmail.com','obobbo.com','oneoffemail.com',
+  'onewaymail.com','oopi.org','ordinaryamerican.net','otherinbox.com','ovpn.to',
+  'owlpic.com','pancakemail.com','pimpedupmyspace.com','pjkh.com','plexolan.de',
+  'poczta.onet.pl.tmp','politikerclub.de','poofy.org','pookmail.com','privacy.net',
+  'proxymail.eu','prtnx.com','putthisinyourspamdatabase.com','qq.com.tmp','quickinbox.com',
+  'rcpt.at','recode.me','recursor.net','regbypass.com','regbypass.comsafe-mail.net',
+  'rejectmail.com','rklips.com','rmqkr.net','rppkn.com','rtrtr.com','s0ny.net',
+  'safe-mail.net','safersignup.de','safetymail.info','safetypost.de','sandelf.de',
+  'saynotospams.com','selfdestructingmail.com','sendspamhere.com','shiftmail.com',
+  'shitmail.me','shortmail.net','sibmail.com','skeefmail.com','slaskpost.se',
+  'slopsbox.com','smellfear.com','snakemail.com','sneakemail.com','sofimail.com',
+  'sofort-mail.de','sogetthis.com','soodonims.com','spam.la','spamavert.com',
+  'spambob.com','spambob.net','spambob.org','spambog.com','spambog.de','spambog.ru',
+  'spambox.info','spambox.us','spamcannon.com','spamcannon.net','spamcero.com',
+  'spamcon.org','spamcorptastic.com','spamcowboy.com','spamcowboy.net','spamcowboy.org',
+  'spamday.com','spamex.com','spamfree24.com','spamfree24.de','spamfree24.eu',
+  'spamfree24.info','spamfree24.net','spamfree24.org','spamgoes.in','spamgourmet.com',
+  'spamgourmet.net','spamgourmet.org','spamherelots.com','spamhereplease.com',
+  'spamhole.com','spamify.com','spaminator.de','spamkill.info','spaml.com','spaml.de',
+  'spammotel.com','spamobox.com','spamoff.de','spamslicer.com','spamspot.com',
+  'spamthis.co.uk','spamthisplease.com','spamtrail.com','speed.1s.fr','supergreatmail.com',
+  'supermailer.jp','suremail.info','teewars.org','teleworm.com','tempalias.com',
+  'tempe-mail.com','tempemail.biz','tempemail.com','tempinbox.co.uk','tempinbox.com',
+  'tempmail.eu','tempmail2.com','tempmaildemo.com','tempmailer.com','tempmailer.de',
+  'tempomail.fr','temporarily.de','temporaryemail.net','temporaryforwarding.com',
+  'temporaryinbox.com','thanksnospam.info','thankyou2010.com','thisisnotmyrealemail.com',
+  'throwam.com','tilien.com','tmailinator.com','tradermail.info','trash-amil.com',
+  'trash-mail.at','trash-mail.com','trash-mail.de','trash2009.com','trashemail.de',
+  'trashmail.at','trashmail.com','trashmail.de','trashmail.me','trashmail.net',
+  'trashmail.org','trashmailer.com','trashymail.com','trashymail.net','trbvm.com',
+  'turual.com','twinmail.de','tyldd.com','uggsrock.com','upliftnow.com','uplipht.com',
+  'venompen.com','veryrealemail.com','viditag.com','viewcastmedia.com','viewcastmedia.net',
+  'viewcastmedia.org','webm4il.info','wegwerfadresse.de','wegwerfemail.de','wegwerfmail.de',
+  'wegwerfmail.net','wegwerfmail.org','wetrainbayarea.com','wetrainbayarea.org','wh4f.org',
+  'whyspam.me','willselfdestruct.com','winemaven.info','wronghead.com','wuzup.net',
+  'wuzupmail.net','wwwnew.eu','xagloo.com','xemaps.com','xents.com','xmaily.com',
+  'xoxy.net','yep.it','yogamaven.com','yopmail.com','yopmail.fr','yopmail.net',
+  'ypmail.webarnak.fr.eu.org','yuurok.com','zehnminutenmail.de','zippymail.info',
+  'zoaxe.com','zoemail.org','online.ms','anonymmail.net','tmpbox.net','mailhz.me',
+  'emailna.co','tmpmail.net','tmpmail.org','tempsky.com','linshiyouxiang.net'
+].map(function (d) { return d.toLowerCase(); }));
+
+
+function isDisposableDomain(domain) {
+  const d = String(domain || '').toLowerCase().replace(/^www\./, '');
+  if (!d) return true;
+  if (DISPOSABLE_EMAIL_DOMAINS.has(d)) return true;
+  // sub.domain of known disposable
+  for (const bad of DISPOSABLE_EMAIL_DOMAINS) {
+    if (d.endsWith('.' + bad)) return true;
+  }
+  return false;
+}
+
 function isValidEmailServer(email) {
   const em = String(email || '').trim().toLowerCase();
   if (!em || em.length > 120) return false;
   if (em.includes('..')) return false;
   if (!/^[a-z0-9._%+\-]+@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,24}$/i.test(em)) return false;
-  const local = em.split('@')[0] || '';
+  const parts = em.split('@');
+  const local = parts[0] || '';
+  const domain = parts[1] || '';
+  if (local.length < 2 || local.length > 64) return false;
+  if (domain.length < 4 || domain.length > 120) return false;
+  const labels = domain.split('.');
+  if (labels.length < 2) return false;
+  if (labels.some(function (p) { return !p.length || p.length > 63; })) return false;
+  // reject numeric-only TLD / IP-like
+  const tld = labels[labels.length - 1];
+  if (!/^[a-z]{2,24}$/.test(tld)) return false;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(domain)) return false;
+  if (isDisposableDomain(domain)) return false;
+  // block obvious local spam words
   const blocked = [
     'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'pussy', 'nigger', 'nigga',
     'хуй', 'хуе', 'хуя', 'пизд', 'ебан', 'ебал', 'бляд', 'сука', 'мудак', 'залуп',
@@ -804,7 +931,66 @@ function isValidEmailServer(email) {
   for (const w of blocked) {
     if (local.includes(w) || localNorm.includes(w)) return false;
   }
-  return local.length >= 2;
+  return true;
+}
+
+function emailRejectReason(email) {
+  const em = String(email || '').trim().toLowerCase();
+  if (!em || !em.includes('@')) return 'Некорректный email';
+  const domain = em.split('@')[1] || '';
+  if (isDisposableDomain(domain)) {
+    return 'Временные (одноразовые) почты не принимаются. Используйте Gmail, Yandex, Mail.ru и т.п.';
+  }
+  if (!isValidEmailServer(em)) {
+    return 'Некорректный email (нужен формат name@domain.com, без временных доменов)';
+  }
+  return null;
+}
+
+/* ===================== EMAIL VERIFY ===================== */
+function genVerifyCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+/** Email verify only when explicitly enabled AND Resend is configured */
+function emailVerifyRequired() {
+  const flag = String(process.env.REQUIRE_EMAIL_VERIFY || '').toLowerCase();
+  if (flag === 'false' || flag === '0' || flag === 'no') return false;
+  if (flag === 'true' || flag === '1' || flag === 'yes') {
+    return !!process.env.RESEND_API_KEY;
+  }
+  // default OFF — users can register freely without domain/Resend
+  return false;
+}
+
+async function sendVerificationEmail(to, code) {
+  const from = process.env.EMAIL_FROM || 'Crypto AI Scanner <onboarding@resend.dev>';
+  const subject = 'Код подтверждения / Verification code';
+  const text =
+    'Ваш код: ' + code + '\nYour code: ' + code + '\n\nДействует 15 минут / Valid 15 minutes.\nCrypto AI Scanner';
+  const resendKey = process.env.RESEND_API_KEY || '';
+  if (resendKey) {
+    try {
+      await axios.post(
+        'https://api.resend.com/emails',
+        { from: from, to: [to], subject: subject, text: text },
+        {
+          headers: {
+            Authorization: 'Bearer ' + resendKey,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+      return { sent: true, provider: 'resend' };
+    } catch (e) {
+      console.error('[email] Resend error:', e.response?.data || e.message);
+      return { sent: false, error: e.message };
+    }
+  }
+  // No provider: log for owner (Railway logs). Never return code to client in production unless allowed.
+  console.log('[email] NO RESEND_API_KEY — code for', to, ':', code);
+  return { sent: false, provider: 'log' };
 }
 
 /* ===================== AUTH ===================== */
@@ -839,6 +1025,24 @@ app.post(
         return res.status(401).json({ success: false, error: 'Неверный email или пароль' });
       }
       const owner = isOwnerEmail(user.email);
+      const isTg =
+        String(user.email || '').endsWith('@telegram.local') || !!user.telegram_id;
+      if (emailVerifyRequired() && !user.email_verified && !owner && !isTg) {
+        try {
+          const code = genVerifyCode();
+          const exp = new Date(Date.now() + 15 * 60 * 1000);
+          await store.setEmailVerifyCode(user.id, code, exp);
+          await sendVerificationEmail(user.email, code);
+        } catch (e) {
+          console.error('[auth] resend on login:', e.message);
+        }
+        return res.status(403).json({
+          success: false,
+          needsVerification: true,
+          email: user.email,
+          error: 'Подтвердите email — мы отправили код на почту'
+        });
+      }
       if (owner) {
         try {
           await store.updateUserPlan(user, 'pro');
@@ -855,7 +1059,13 @@ app.post(
       res.json({
         success: true,
         token: tokenJwt,
-        user: { id: user.id, email: user.email, plan: plan, isOwner: owner },
+        user: {
+          id: user.id,
+          email: user.email,
+          plan: plan,
+          isOwner: owner,
+          emailVerified: true
+        },
         auth: 'cookie'
       });
     } catch (e) {
@@ -882,8 +1092,9 @@ app.post(
       if (!email || !password) {
         return res.status(400).json({ success: false, error: 'Укажите email и пароль' });
       }
-      if (!isValidEmailServer(email)) {
-        return res.status(400).json({ success: false, error: 'Некорректный email (нужен формат name@domain.com)' });
+      const emailBad = emailRejectReason(email);
+      if (emailBad) {
+        return res.status(400).json({ success: false, error: emailBad });
       }
       if (password.length < 8) {
         return res.status(400).json({ success: false, error: 'Пароль не короче 8 символов' });
@@ -908,7 +1119,100 @@ app.post(
       }
       const owner = isOwnerEmail(email);
       const startPlan = owner ? 'pro' : 'free';
-      const user = await store.createUser(email, password, startPlan);
+      const needVerify = emailVerifyRequired() && !owner;
+
+      if (!needVerify) {
+        // Free registration — immediate login (no domain / Resend required)
+        const user = await store.createUser(email, password, startPlan, {
+          emailVerified: true
+        });
+        if (owner) {
+          try {
+            await store.updateUserPlan(user, 'pro');
+          } catch (e) {}
+        }
+        const tokenJwt = signUserToken({
+          id: user.id,
+          email: user.email,
+          plan: startPlan
+        });
+        setAuthCookie(res, tokenJwt);
+        return res.json({
+          success: true,
+          token: tokenJwt,
+          user: {
+            id: user.id,
+            email: user.email,
+            plan: startPlan,
+            isOwner: owner,
+            emailVerified: true
+          },
+          auth: 'cookie'
+        });
+      }
+
+      const code = genVerifyCode();
+      const exp = new Date(Date.now() + 15 * 60 * 1000);
+      const user = await store.createUser(email, password, startPlan, {
+        emailVerified: false,
+        verifyCode: code,
+        verifyExpires: exp
+      });
+      const mail = await sendVerificationEmail(email, code);
+      const payload = {
+        success: true,
+        needsVerification: true,
+        email: email,
+        message: 'Мы отправили 6-значный код на email. Введите его для активации.'
+      };
+      if (
+        String(process.env.ALLOW_DEV_EMAIL_CODE || '').toLowerCase() === 'true' ||
+        (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== 'production')
+      ) {
+        payload.devCode = code;
+      }
+      if (!mail.sent && process.env.RESEND_API_KEY) {
+        payload.warning = 'Не удалось отправить письмо — запросите код снова';
+      }
+      res.json(payload);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ success: false, error: 'Ошибка регистрации' });
+    }
+  }
+);
+
+/** Confirm email with 6-digit code */
+app.post(
+  '/api/auth/verify-email',
+  rateLimit({
+    windowMs: 15 * 60_000,
+    max: 30,
+    keyFn: (req) => 'verify:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const code = String(req.body?.code || '').trim();
+      if (!email || !code) {
+        return res.status(400).json({ success: false, error: 'Укажите email и код' });
+      }
+      const result = await store.verifyEmailCode(email, code);
+      if (!result.success) {
+        const map = {
+          expired: 'Код истёк — запросите новый',
+          invalid_code: 'Неверный код',
+          no_code: 'Сначала зарегистрируйтесь или запросите код',
+          user_not_found: 'Аккаунт не найден'
+        };
+        return res.status(400).json({
+          success: false,
+          error: map[result.error] || 'Не удалось подтвердить'
+        });
+      }
+      const user = result.user;
+      const owner = isOwnerEmail(user.email);
+      const plan = owner ? 'pro' : String(user.plan || 'free').toLowerCase();
       if (owner) {
         try {
           await store.updateUserPlan(user, 'pro');
@@ -917,7 +1221,7 @@ app.post(
       const tokenJwt = signUserToken({
         id: user.id,
         email: user.email,
-        plan: startPlan
+        plan: plan
       });
       setAuthCookie(res, tokenJwt);
       res.json({
@@ -926,14 +1230,55 @@ app.post(
         user: {
           id: user.id,
           email: user.email,
-          plan: startPlan,
-          isOwner: owner
+          plan: plan,
+          isOwner: owner,
+          emailVerified: true
         },
         auth: 'cookie'
       });
     } catch (e) {
       console.error(e);
-      res.status(500).json({ success: false, error: 'Ошибка регистрации' });
+      res.status(500).json({ success: false, error: 'Ошибка подтверждения' });
+    }
+  }
+);
+
+/** Resend verification code */
+app.post(
+  '/api/auth/resend-code',
+  rateLimit({
+    windowMs: 15 * 60_000,
+    max: 8,
+    keyFn: (req) => 'resend:' + clientIp(req)
+  }),
+  async (req, res) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      if (!isValidEmailServer(email)) {
+        return res.status(400).json({ success: false, error: 'Некорректный email' });
+      }
+      const user = await store.findUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'Аккаунт не найден' });
+      }
+      if (user.email_verified) {
+        return res.json({ success: true, message: 'Email уже подтверждён — войдите' });
+      }
+      const code = genVerifyCode();
+      const exp = new Date(Date.now() + 15 * 60 * 1000);
+      await store.setEmailVerifyCode(user.id, code, exp);
+      await sendVerificationEmail(email, code);
+      const payload = { success: true, message: 'Код отправлен повторно' };
+      if (
+        String(process.env.ALLOW_DEV_EMAIL_CODE || '').toLowerCase() === 'true' ||
+        (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== 'production')
+      ) {
+        payload.devCode = code;
+      }
+      res.json(payload);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ success: false, error: 'Не удалось отправить код' });
     }
   }
 );
