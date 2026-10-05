@@ -1225,18 +1225,23 @@ body.theme-light .site-footer { background: #e8ebf2; }
 .nav-drawer {
   position: fixed;
   top: 0;
+  left: 0;
   right: 0;
-  width: min(320px, 88vw);
+  bottom: 0;
+  width: 100%;
+  max-width: 100%;
   height: 100%;
   height: 100dvh;
   background: var(--bg2, #12161c);
-  border-left: 1px solid var(--border);
+  border-left: none;
   z-index: 3010;
   transform: translateX(100%);
   transition: transform 0.22s ease;
   display: flex;
   flex-direction: column;
   padding: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -1698,25 +1703,33 @@ main,
 
 
 /* ===== RISK BAR + denser scanner ===== */
-.risk-bar-wrap { margin-top: 0.35rem; }
+.risk-bar-wrap {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+}
 .risk-bar-track {
-  height: 8px;
-  border-radius: 99px;
+  height: 10px;
+  border-radius: 999px;
   background: rgba(255,255,255,0.08);
   overflow: hidden;
+  position: relative;
 }
 body.theme-light .risk-bar-track { background: rgba(0,0,0,0.08); }
 .risk-bar-fill {
   height: 100%;
-  border-radius: 99px;
-  transition: width 0.4s ease;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+  min-width: 2px;
 }
 .risk-bar-labels {
   display: flex;
   justify-content: space-between;
+  margin-top: 0.35rem;
   font-size: 0.7rem;
   color: var(--muted);
-  margin-top: 0.25rem;
 }
 #page-scanner .scanner-hero {
   margin-bottom: 1rem;
@@ -2851,4 +2864,57 @@ button.logo {
   color: inherit;
   padding: 0;
   cursor: pointer;
+}
+
+#auth-verify-panel input#auth-verify-code {
+  width: 100%;
+  margin: 0.75rem 0;
+  padding: 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text);
+}
+
+
+/* report-result-align */
+#results .metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+#results .ai-card,
+#results .glass.panel {
+  text-align: left;
+}
+#results .ai-card .verdict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+#results .key-risks-title {
+  margin-top: 0.85rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+#results .tabs {
+  gap: 0.35rem;
+  margin: 0.85rem 0 1rem;
+}
+#results .tab {
+  flex: 0 0 auto;
+}
+.nav-drawer-links {
+  flex: 1;
+  padding: 0.5rem 1.1rem 1.5rem;
+}
+.nav-drawer-foot {
+  margin-top: auto;
+  padding: 1rem 1.1rem 1.5rem;
+  border-top: 1px solid var(--border);
 }
