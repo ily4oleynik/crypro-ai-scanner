@@ -708,13 +708,38 @@ body.theme-light .hero h1 {
 
 .metrics-grid, .advanced-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 0.65rem;
   margin: 1rem 0;
+  overflow: visible;
 }
-.metric-card { padding: 0.9rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg2); }
-.metric-label { color: var(--muted); font-size: 0.75rem; }
-.metric-value { font-size: 1.05rem; font-weight: 700; margin-top: 0.2rem; }
+.metric-card {
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  overflow: visible;
+  min-width: 0;
+}
+.metric-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+  word-break: normal;
+  hyphens: none;
+  letter-spacing: 0;
+  padding: 0;
+  margin: 0;
+}
+.metric-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 0.35rem;
+  overflow: visible;
+  word-break: break-word;
+}
 .token-header {
   display: flex;
   justify-content: space-between;
@@ -1969,8 +1994,9 @@ button.home-chip.example-token:hover,
 
 /* denser result */
 .token-header { padding: 1rem 1.15rem !important; margin-bottom: 0.85rem !important; }
-.metrics-grid { gap: 0.65rem !important; margin-bottom: 0.85rem !important; }
-.metric-card { padding: 0.75rem 0.85rem !important; }
+.metrics-grid { gap: 0.65rem !important; margin-bottom: 0.85rem !important; overflow: visible !important; }
+.metric-card { padding: 0.85rem 0.95rem !important; overflow: visible !important; }
+.metric-label { overflow: visible !important; white-space: normal !important; text-overflow: clip !important; }
 .risk-factors-panel { margin-bottom: 0.85rem; padding: 0.85rem 1rem; }
 .risk-factors-list { margin: 0.4rem 0 0 1.05rem; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
 
@@ -2463,10 +2489,16 @@ button.home-chip.example-token:hover,
   .token-header { gap: 0.75rem; }
   .metrics-grid {
     grid-template-columns: 1fr 1fr !important;
-    gap: 0.5rem;
+    gap: 0.55rem;
+    overflow: visible !important;
   }
   .metric-card, .metrics-grid .glass {
-    padding: 0.75rem !important;
+    padding: 0.85rem 0.9rem !important;
+    overflow: visible !important;
+  }
+  .metric-label {
+    font-size: 0.7rem !important;
+    line-height: 1.3 !important;
   }
   .security-flags, .sec-grid {
     grid-template-columns: 1fr 1fr !important;
@@ -2778,4 +2810,45 @@ button.home-chip.example-token:hover,
 #pricing-modal a {
   pointer-events: auto;
   touch-action: manipulation;
+}
+
+
+/* ===== Report layout fixes (mobile clip) ===== */
+#results .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 1rem;
+  position: relative;
+  z-index: 2;
+}
+#results .tab-pane {
+  clear: both;
+  margin-top: 0.25rem;
+  overflow: visible;
+}
+#results .risk-bar-wrap {
+  margin: 0.5rem 0 0.75rem;
+  overflow: visible;
+}
+#results .risk-scale-legend {
+  line-height: 1.4;
+  word-break: break-word;
+  overflow: visible;
+  margin-top: 0.4rem;
+}
+.logo, .nav-brand .logo {
+  cursor: pointer;
+  user-select: none;
+}
+.logo:hover { opacity: 0.9; }
+
+button.logo {
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
 }
